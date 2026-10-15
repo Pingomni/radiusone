@@ -29,23 +29,29 @@ Status: **done** = controller + page + HTTP feature test; **todo** = not started
 
 ## Workers (`bin/*` → artisan)
 
+All legacy scripts are artisan commands (`app/Console/Commands`, `php artisan list frweb`) with the same
+exit codes (75 = another run holds the job lock). The schedule is in `routes/console.php`.
+
 | Legacy script | Artisan command | Status |
 | --- | --- | --- |
-| generate-billing.php | `frweb:generate-billing` | todo |
-| sync-expired-services.php | `frweb:sync-expired` | todo |
-| process-notifications.php | `frweb:process-notifications` | todo |
-| process-customer-notifications.php | `frweb:process-customer-notifications` | todo |
-| process-network-operations.php | `frweb:process-network-operations` | todo |
-| poll-snmp.php | `frweb:poll-snmp` | todo |
-| backup.php / restore.php | `frweb:backup` / `frweb:restore` | todo |
-| migrate.php / check-schema.php | `frweb:migrate` / `frweb:check-schema` | todo |
-| encrypt-secrets.php | `frweb:encrypt-secrets` | todo |
-| bootstrap-operator.php | `frweb:bootstrap-operator` | todo |
-| job-status.php, mark-nas-applied.php, document-inventory.php, seed.php | matching `frweb:*` | todo |
+| generate-billing.php | `frweb:generate-billing` (scheduled 02:15 UTC) | done |
+| sync-expired-services.php | `frweb:sync-expired` (scheduled only with `FRWEB_SCHEDULE_EXPIRY_SYNC=true`; paused in cron) | done |
+| process-notifications.php | `frweb:process-notifications` (scheduled only with `FRWEB_SCHEDULE_EXPIRY_NOTIFICATIONS=true`; paused in cron) | done |
+| process-customer-notifications.php | `frweb:process-customer-notifications` (every minute) | done |
+| process-network-operations.php | `frweb:process-network-operations` (manual; `NETWORK_WORKER_ENABLED`) | done |
+| poll-snmp.php | `frweb:poll-snmp` (every minute) | done |
+| backup.php / restore.php | `frweb:backup` / `frweb:restore` (root cron, `FRWEB_OPERATOR_ENV_FILE=/etc/freeradius-web/backup.env`) | done |
+| migrate.php / check-schema.php | `frweb:migrate` (`FRWEB_OPERATOR_ENV_FILE=/etc/freeradius-web/migration.env`) / `frweb:check-schema` | done |
+| encrypt-secrets.php | `frweb:encrypt-secrets` | done |
+| bootstrap-operator.php | `frweb:bootstrap-operator` | done |
+| job-status.php, mark-nas-applied.php, document-inventory.php, seed.php | `frweb:job-status`, `frweb:mark-nas-applied`, `frweb:document-inventory`, `frweb:seed` | done |
 
 ## Cutover checklist
 
-- [ ] Every row above **done**, `tests/run.sh` green, `npm run build` clean
+- [x] Every row above **done**, `tests/run.sh` green, `npm run build` clean
 - [ ] Side-by-side check on 127.0.0.1:8081 against the live database
-- [ ] Cron/systemd timers switched from `bin/*` to `php artisan schedule:run`
+- [ ] Cron switched from `bin/*` to the scheduler, in one step so no job runs twice:
+  - remove the www-data lines in `/etc/cron.d/freeradius-web-{customer-notifications,lifecycle,notifications,snmp}`
+  - add `* * * * * www-data cd /opt/freeradius-web-laravel && /usr/bin/php artisan schedule:run >>/var/log/freeradius-web/scheduler.log 2>&1`
+  - change root's backup line in `/etc/cron.d/freeradius-web` to `php artisan frweb:backup` (same env file)
 - [ ] nginx `portal.example.com` root → `/opt/freeradius-web-laravel/public`

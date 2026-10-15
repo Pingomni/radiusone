@@ -68,6 +68,10 @@ return [
     // Redirect plain-HTTP GETs to APP_URL and refuse other plain-HTTP requests (behind a TLS proxy).
     'force_https' => (bool) filter_var(env('FORCE_HTTPS', env('APP_ENV', 'production') === 'production'), FILTER_VALIDATE_BOOL),
 
+    // Scheduled jobs that are paused in production until explicitly enabled (routes/console.php).
+    'schedule_expiry_sync' => (bool) filter_var(env('FRWEB_SCHEDULE_EXPIRY_SYNC', false), FILTER_VALIDATE_BOOL),
+    'schedule_expiry_notifications' => (bool) filter_var(env('FRWEB_SCHEDULE_EXPIRY_NOTIFICATIONS', false), FILTER_VALIDATE_BOOL),
+
     'timezone' => env('APP_TIMEZONE', 'UTC'),
 
     /*
