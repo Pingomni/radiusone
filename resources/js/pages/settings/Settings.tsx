@@ -8,6 +8,7 @@ import { Badge, Check, Empty, Field, Select, Tag, TextArea, type TagData } from 
 import AppLayout, { BrandLogo } from '@/layouts/AppLayout';
 import { useCan } from '@/lib/auth';
 import { bind } from '@/lib/form';
+import { bytes } from '@/lib/format';
 
 type Overview = { engine: TagData; rows: [string, string][] };
 type Operator = { id: number; name: string; email: string; username: string; role: string; enabled: boolean; twoFactor: TagData; lastLogin: string; self: boolean };
@@ -42,6 +43,21 @@ type Notifications = {
     history?: { before: number; older: number | null; rows: HistoryRow[] };
 };
 
+type BackupDestination = {
+    id: string; type: 'gdrive' | 's3' | 'sftp'; name: string; enabled: boolean; keep: number; connected: boolean;
+    client_id?: string; folder?: string; client_secret_saved?: boolean; refresh_token_saved?: boolean; connected_at?: string;
+    region?: string; bucket?: string; prefix?: string; access_key?: string; secret_key_saved?: boolean;
+    host?: string; port?: string; user?: string; path?: string; public_key?: string; fingerprint?: string;
+};
+type BackupRun = {
+    at: string; ok: boolean; error?: string; database?: { file: string; size: number }; documents?: { file: string; size: number };
+    destinations: Record<string, { name: string; type: string; ok: boolean; message: string; removed: number }>; local_removed?: number;
+};
+type Backups = {
+    passphraseSet: boolean; localDays: number; localDaysOptions: Record<string, string>; destinations: BackupDestination[];
+    types: Record<string, string>; keepOptions: Record<string, string>; status: BackupRun | null;
+    local: { name: string; size: number; at: string }[]; localCount: number; googleRedirect: string;
+};
 type RetentionRun = { sessions: number; logins: number; finished: boolean; at: string };
 type Retention = {
     periods: { sessions: number; logins: number };
@@ -70,6 +86,7 @@ function OverviewTab({ overview, usersSummary, branding }: { overview: Overview;
                 <Destination title="Users & access" description="Manage operators, roles, and two-factor authentication." href="/settings?tab=users" icon="clients" status={<Badge tone="success">{usersSummary.enabled} enabled</Badge>} />
                 <Destination title="Notifications" description="Connect a gateway, customize templates and send customer updates." href="/settings?tab=notifications" icon="mail" status={<Badge>Email + SMS</Badge>} />
                 <Destination title="Branding" description="Give your workspace and invoices a familiar identity." href="/settings?tab=branding" icon="image" status={<Badge>{branding.custom ? 'Custom logo' : 'Default logo'}</Badge>} />
+                <Destination title="Backups" description="Encrypted copies to Google Drive, Amazon S3 or your own server." href="/settings?tab=backups" icon="server" status={<Badge>Remote copies</Badge>} />
                 <Destination title="Data retention" description="Choose how long session and login records are kept." href="/settings?tab=retention" icon="logs" status={<Badge>Session and login history</Badge>} />
             </div>
             <Sheet title="System information" description="Environment, operator access, and backup locations for this workspace." icon="server" meta={<Tag tag={overview.engine} />}>
@@ -239,6 +256,181 @@ function BrandingTab({ branding }: { branding: Branding }) {
                 </div>
             </div>
         </Sheet>
+    );
+}
+
+function BackupStatus({ b }: { b: Backups }) {
+    const run = b.status;
+    return (
+        <Sheet
+            title="Last backup"
+            description="Every night at 02:15 UTC the database and customer documents are backed up, encrypted and uploaded to each enabled destination."
+            icon="server"
+            meta={run ? <Badge tone={run.ok ? 'success' : 'danger'}>{run.ok ? 'completed' : 'needs attention'}</Badge> : <Badge>not run yet</Badge>}
+        >
+            {run ? (
+                <>
+                    <SettingsRows rows={[
+                        ['Finished', `${run.at} UTC`],
+                        ['Database', run.database ? `${run.database.file} · ${bytes(run.database.size)}` : '—'],
+                        ['Documents', run.documents ? `${run.documents.file} · ${bytes(run.documents.size)}` : '—'],
+                        ['Local copies', `${b.localCount} files${run.local_removed ? ` · ${run.local_removed} old copies removed` : ''}`],
+                    ]} />
+                    {run.error && <p className="field-error">{run.error}</p>}
+                    {Object.entries(run.destinations).map(([id, d]) => (
+                        <p key={id} className={d.ok ? 'hint' : 'field-error'}>{d.name}: {d.message}{d.removed ? ` ${d.removed} old copies removed.` : ''}</p>
+                    ))}
+                    {Object.keys(run.destinations).length === 0 && !run.error && <p className="hint">No remote destination was enabled, so this backup exists only on this server.</p>}
+                </>
+            ) : (
+                <p className="hint">No backup has run with remote copies yet. To run one now on the server: sudo FRWEB_OPERATOR_ENV_FILE=/etc/freeradius-web/backup.env php /opt/freeradius-web-laravel/artisan frweb:backup</p>
+            )}
+        </Sheet>
+    );
+}
+
+function BackupPassphrase({ set }: { set: boolean }) {
+    const form = useForm({ passphrase: '', passphrase_confirmation: '' });
+    return (
+        <Sheet
+            title="Encryption"
+            description="Backups are encrypted on this server before they are uploaded. Only someone with the passphrase can open them."
+            icon="lock"
+            meta={<Badge tone={set ? 'success' : 'warning'}>{set ? 'passphrase set' : 'no passphrase'}</Badge>}
+        >
+            <form className="form-grid" onSubmit={(e) => { e.preventDefault(); form.post('/settings/backups/passphrase', { preserveScroll: true, onFinish: () => form.reset() }); }}>
+                <p className="span2 hint">
+                    Write the passphrase down and keep it somewhere safe outside this server. If this server is lost, you need it to restore a remote backup
+                    (artisan frweb:backup-decrypt). Changing it only affects new backups; older copies still need the old passphrase.
+                </p>
+                <Field label={set ? 'New passphrase' : 'Passphrase'} type="password" autoComplete="new-password" minLength={12} required error={form.errors.passphrase} hint="At least 12 characters; a few random words work well." value={form.data.passphrase} onChange={(e) => form.setData('passphrase', e.target.value)} />
+                <Field label="Repeat passphrase" type="password" autoComplete="new-password" required value={form.data.passphrase_confirmation} onChange={(e) => form.setData('passphrase_confirmation', e.target.value)} />
+                <div className="span2 form-actions"><button className="primary" disabled={form.processing}>{set ? 'Change passphrase' : 'Save passphrase'}</button></div>
+            </form>
+        </Sheet>
+    );
+}
+
+function DestinationForm({ d, b, onDone }: { d: BackupDestination | null; b: Backups; onDone: () => void }) {
+    const form = useForm({
+        id: d?.id ?? '', type: d?.type ?? 'gdrive', name: d?.name ?? '', enabled: d?.enabled ?? true, keep: String(d?.keep ?? 14),
+        client_id: d?.client_id ?? '', client_secret: '', folder: d?.folder ?? 'FreeRADIUS Web backups',
+        region: d?.region ?? 'eu-central-1', bucket: d?.bucket ?? '', prefix: d?.prefix ?? 'freeradius-web', access_key: d?.access_key ?? '', secret_key: '',
+        host: d?.host ?? '', port: d?.port ?? '22', user: d?.user ?? '', path: d?.path ?? 'backups/freeradius-web', rescan_host_key: false,
+    });
+    const type = form.data.type;
+    return (
+        <form className="form-grid" onSubmit={(e) => { e.preventDefault(); form.post('/settings/backups/destinations', { preserveScroll: true, onSuccess: onDone, onFinish: () => form.setData((v) => ({ ...v, client_secret: '', secret_key: '' })) }); }}>
+            {!d && <Select label="Type" options={b.types} {...bind(form, 'type')} />}
+            <Field label="Name" required placeholder={type === 'gdrive' ? 'Office Google Drive' : type === 's3' ? 'AWS Frankfurt' : 'Backup server'} {...bind(form, 'name')} />
+            {type === 'gdrive' && (
+                <>
+                    <p className="span2 hint">
+                        In Google Cloud Console: enable the Google Drive API, create an OAuth client of type “Web application”, and add this authorised redirect URI: <code>{b.googleRedirect}</code>.
+                        After saving, use Connect to sign in. The app only sees the folder it creates.
+                    </p>
+                    <Field label="OAuth client ID" placeholder="…apps.googleusercontent.com" {...bind(form, 'client_id')} />
+                    <SecretField label="OAuth client secret" name="client_secret" saved={Boolean(d?.client_secret_saved)} value={form.data.client_secret} error={form.errors.client_secret} onChange={(v) => form.setData('client_secret', v)} />
+                    <Field label="Drive folder name" hint="Created in the connected Drive when you connect." {...bind(form, 'folder')} />
+                </>
+            )}
+            {type === 's3' && (
+                <>
+                    <p className="span2 hint">Use an IAM user that can only s3:PutObject, s3:ListBucket and s3:DeleteObject on this bucket and folder.</p>
+                    <Field label="Region" placeholder="eu-central-1" {...bind(form, 'region')} />
+                    <Field label="Bucket" {...bind(form, 'bucket')} />
+                    <Field label="Folder in the bucket" hint="Optional." {...bind(form, 'prefix')} />
+                    <Field label="Access key ID" {...bind(form, 'access_key')} />
+                    <SecretField label="Secret access key" name="secret_key" saved={Boolean(d?.secret_key_saved)} value={form.data.secret_key} error={form.errors.secret_key} onChange={(v) => form.setData('secret_key', v)} />
+                </>
+            )}
+            {type === 'sftp' && (
+                <>
+                    <p className="span2 hint">A key pair is generated when you save; add its public key to the server user’s ~/.ssh/authorized_keys. The server’s host key is recorded and checked on every upload.</p>
+                    <Field label="Host" {...bind(form, 'host')} />
+                    <Field label="Port" type="number" min={1} max={65535} {...bind(form, 'port')} />
+                    <Field label="User" {...bind(form, 'user')} />
+                    <Field label="Folder" hint="Relative to the user’s home, or an absolute path." {...bind(form, 'path')} />
+                    {d && <Check label="Re-check the server’s host key (only after you changed it on purpose)" checked={form.data.rescan_host_key} onChange={(e) => form.setData('rescan_host_key', e.target.checked)} />}
+                </>
+            )}
+            <Select label="Copies to keep" options={b.keepOptions} {...bind(form, 'keep')} />
+            <Check label="Enabled" checked={form.data.enabled} onChange={(e) => form.setData('enabled', e.target.checked)} />
+            <div className="span2 form-actions">
+                <button className="primary" disabled={form.processing}>{d ? 'Save destination' : 'Add destination'}</button>
+                <button type="button" onClick={onDone}>Cancel</button>
+            </div>
+        </form>
+    );
+}
+
+function DestinationRow({ d, b, open, onToggle }: { d: BackupDestination; b: Backups; open: boolean; onToggle: () => void }) {
+    const detail = d.type === 'gdrive' ? `Folder “${d.folder}”` : d.type === 's3' ? `${d.bucket}${d.prefix ? '/' + d.prefix : ''} · ${d.region}` : `${d.user}@${d.host}:${d.port} · ${d.path}`;
+    return (
+        <article className="backup-destination">
+            <div className="backup-destination-head">
+                <div>
+                    <h3>{d.name}</h3>
+                    <p className="hint">{b.types[d.type]} · {detail} · keeps {d.keep} copies</p>
+                </div>
+                <span className="toolbar-actions">
+                    <Badge tone={d.enabled && d.connected ? 'success' : 'warning'}>{!d.connected ? 'not connected' : d.enabled ? 'enabled' : 'disabled'}</Badge>
+                    {d.type === 'gdrive' && <a className="button" href={`/settings/backups/destinations/${d.id}/google`}>{d.connected ? 'Reconnect' : 'Connect Google Drive'}</a>}
+                    {d.connected && <PostButton action={`/settings/backups/destinations/${d.id}/test`} label="Test" className="button" />}
+                    <button type="button" onClick={onToggle}>{open ? 'Close' : 'Edit'}</button>
+                    <DeleteButton action={`/settings/backups/destinations/${d.id}/delete`} label="Remove" message={`Stop sending backups to ${d.name}? Backups already stored there are kept.`} />
+                </span>
+            </div>
+            {d.type === 'sftp' && d.public_key && (
+                <div className="backup-sftp-key">
+                    <TextArea label="Public key for ~/.ssh/authorized_keys" readOnly rows={2} value={d.public_key} />
+                    <button type="button" onClick={() => void navigator.clipboard?.writeText(d.public_key ?? '')}>Copy public key</button>
+                    <p className="hint">Server host key: {d.fingerprint}. Compare it with the server (ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub).</p>
+                </div>
+            )}
+            {open && <DestinationForm d={d} b={b} onDone={onToggle} />}
+        </article>
+    );
+}
+
+function BackupDestinationsSheet({ b }: { b: Backups }) {
+    const initial = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('destination') : null;
+    const [open, setOpen] = useState<string | null>(initial);
+    return (
+        <Sheet title="Remote destinations" description="Where encrypted copies are sent. Use more than one for extra safety." icon="server" meta={<Badge>{b.destinations.length} configured</Badge>}>
+            {!b.passphraseSet && b.destinations.length > 0 && <p className="field-error">Set a passphrase first: nothing is uploaded unencrypted.</p>}
+            {b.destinations.map((d) => <DestinationRow key={d.id} d={d} b={b} open={open === d.id} onToggle={() => setOpen(open === d.id ? null : d.id)} />)}
+            {b.destinations.length === 0 && open !== 'new' && <Empty>No remote destination yet. Backups exist only on this server.</Empty>}
+            {open === 'new' ? <DestinationForm d={null} b={b} onDone={() => setOpen(null)} /> : <div className="form-actions"><button className="primary" type="button" onClick={() => setOpen('new')}>Add destination</button></div>}
+        </Sheet>
+    );
+}
+
+function BackupLocal({ b }: { b: Backups }) {
+    const form = useForm({ days: String(b.localDays) });
+    return (
+        <Sheet title="Local copies" description="Backups also stay on this server; older ones are removed (the newest three of each kind are always kept)." icon="logs">
+            <form className="form-grid" onSubmit={(e) => { e.preventDefault(); form.post('/settings/backups/local', { preserveScroll: true }); }}>
+                <Select label="Keep local copies for" options={b.localDaysOptions} {...bind(form, 'days')} />
+                <div className="form-actions"><button disabled={form.processing}>Save</button></div>
+            </form>
+            <DataTable rows={b.local} rowKey={(f) => f.name} columns={[
+                { header: 'File', cell: (f) => f.name },
+                { header: 'Size', cell: (f) => bytes(f.size) },
+                { header: 'Created (UTC)', cell: (f) => f.at },
+            ]} />
+        </Sheet>
+    );
+}
+
+function BackupsTab({ b }: { b: Backups }) {
+    return (
+        <>
+            <BackupStatus b={b} />
+            <BackupPassphrase set={b.passphraseSet} />
+            <BackupDestinationsSheet b={b} />
+            <BackupLocal b={b} />
+        </>
     );
 }
 
@@ -753,8 +945,8 @@ function NotificationsTab({ n }: { n: Notifications }) {
     );
 }
 
-export default function Settings({ tab, overview, users, usersSummary, roleDescriptions, branding, notifications, retention }: {
-    tab: 'overview' | 'users' | 'notifications' | 'branding' | 'retention';
+export default function Settings({ tab, overview, users, usersSummary, roleDescriptions, branding, notifications, retention, backups }: {
+    tab: 'overview' | 'users' | 'notifications' | 'branding' | 'retention' | 'backups';
     overview: Overview;
     users: Operator[] | null;
     usersSummary: { enabled: number; total: number };
@@ -762,6 +954,7 @@ export default function Settings({ tab, overview, users, usersSummary, roleDescr
     branding: Branding;
     notifications: Notifications | null;
     retention: Retention | null;
+    backups: Backups | null;
 }) {
     return (
         <AppLayout title="Settings">
@@ -773,6 +966,7 @@ export default function Settings({ tab, overview, users, usersSummary, roleDescr
                     {tab === 'notifications' && notifications && <NotificationsTab n={notifications} />}
                     {tab === 'branding' && <BrandingTab branding={branding} />}
                     {tab === 'retention' && retention && <RetentionTab r={retention} />}
+                    {tab === 'backups' && backups && <BackupsTab b={backups} />}
                 </div>
             </div>
         </AppLayout>

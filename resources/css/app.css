@@ -1856,3 +1856,13 @@ td .list-menu > summary:hover { border-color: var(--line); background: var(--sur
 .monitor-job-state { justify-items: start; }
 .monitor-jobs > .hint { margin: var(--sp-2) 0 0; }
 @media (max-width: 760px) { .monitor-job { grid-template-columns: minmax(0, 1fr); } }
+
+/* Settings → Backups: one block per remote destination. */
+.backup-destination { display: grid; gap: var(--sp-3); padding: var(--sp-3); border: 1px solid var(--line); border-radius: var(--radius); margin-bottom: var(--sp-3); }
+.backup-destination-head { display: flex; flex-wrap: wrap; gap: var(--sp-3); align-items: flex-start; justify-content: space-between; }
+.backup-destination-head h3 { margin: 0; }
+.backup-destination-head .toolbar-actions { display: flex; flex-wrap: wrap; gap: var(--sp-2); align-items: center; }
+.backup-sftp-key { display: grid; gap: var(--sp-2); }
+.backup-sftp-key textarea { font-family: var(--font-mono, monospace); font-size: 12px; }
+.gateway-test { display: flex; flex-wrap: wrap; gap: var(--sp-2); align-items: flex-end; margin-top: var(--sp-3); }
+@media (max-width: 640px) { .backup-destination-head .toolbar-actions { width: 100%; } }

@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\BackupSettingsController;
 use App\Http\Controllers\BillingController;
 use App\Http\Controllers\BrandingAssetController;
 use App\Http\Controllers\ClientController;
@@ -61,6 +62,8 @@ Route::middleware('frweb.auth')->group(function () {
         Route::post('/settings/notifications/bulk-preview', [SettingsController::class, 'notificationBulkPreview']);
         Route::post('/settings/notifications/bulk-confirm', [SettingsController::class, 'notificationBulkConfirm']);
         Route::post('/settings/notifications/{channel}-test', [SettingsController::class, 'testGateway'])->whereIn('channel', ['email', 'sms']);
+        Route::post('/settings/backups/destinations/{id}/test', [BackupSettingsController::class, 'test'])->where('id', '[0-9a-f]{12}');
+        Route::get('/settings/backups/google/callback', [BackupSettingsController::class, 'googleCallback']);
         foreach (['general', 'sms-template', 'email-template', 'send-sms'] as $legacy) {
             Route::post('/settings/notifications/' . $legacy, [SettingsController::class, 'notificationLegacy']);
         }
@@ -68,6 +71,11 @@ Route::middleware('frweb.auth')->group(function () {
             Route::post('/settings/notifications/sms-gateway', [SettingsController::class, 'saveSmsGateway']);
             Route::post('/settings/notifications/email-gateway', [SettingsController::class, 'saveEmailGateway']);
             Route::post('/settings/retention', [SettingsController::class, 'saveRetention']);
+            Route::post('/settings/backups/passphrase', [BackupSettingsController::class, 'passphrase']);
+            Route::post('/settings/backups/local', [BackupSettingsController::class, 'local']);
+            Route::post('/settings/backups/destinations', [BackupSettingsController::class, 'save']);
+            Route::post('/settings/backups/destinations/{id}/delete', [BackupSettingsController::class, 'delete'])->where('id', '[0-9a-f]{12}');
+            Route::get('/settings/backups/destinations/{id}/google', [BackupSettingsController::class, 'googleStart'])->where('id', '[0-9a-f]{12}');
         });
 
         foreach (['/settings/users', '/portal-users'] as $base) {
