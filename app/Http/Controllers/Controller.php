@@ -80,13 +80,17 @@ abstract class Controller
 
     public static function operatorErrorMessage(Throwable $error): ?string
     {
-        if ($error instanceof RuntimeException || $error instanceof InvalidArgumentException) {
-            return $error->getMessage();
-        }
-        if ($error instanceof PDOException && (string) $error->getCode() === '23000') {
+        // PDOException extends RuntimeException, so it is checked first: other database errors are not operator messages.
+        if ($error instanceof PDOException) {
+            if ((string) $error->getCode() !== '23000') {
+                return null;
+            }
             return preg_match("/Duplicate entry '([^']*)'/", $error->getMessage(), $match)
                 ? 'The value "' . $match[1] . '" is already in use. Choose a different one.'
                 : 'This change conflicts with an existing record.';
+        }
+        if ($error instanceof RuntimeException || $error instanceof InvalidArgumentException) {
+            return $error->getMessage();
         }
         return null;
     }
