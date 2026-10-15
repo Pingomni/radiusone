@@ -2,7 +2,7 @@
 # Side-by-side smoke check against the live database: signs in as the first enabled superadmin with a
 # throw-away session (minted as www-data, destroyed on exit) and GETs each path on the local Laravel
 # listener. Read-only: only GET requests are sent.
-# Usage: tests/smoke.sh /clients '/clients/alice/edit' ...
+# Usage: tests/smoke.sh [/path ...]   (no paths = every main page)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 base=${SMOKE_BASE:-http://127.0.0.1:8081}
@@ -32,6 +32,11 @@ $value = app('encrypter')->encrypt(Illuminate\Cookie\CookieValuePrefix::create($
 echo $session->getId(), "\t", $name, '=', rawurlencode($value), "\n";
 PHP
 }
+
+if [[ $# -eq 0 ]]; then
+  set -- /dashboard /clients /clients/create /billing /billing/invoices/create /services /services/ip-pools /nas /nas/health \
+    /monitoring /monitoring/server /operations /reports /logs /settings /settings/users /profile
+fi
 
 IFS=$'\t' read -r sid cookie < <(mint create)
 trap 'mint destroy "$sid"' EXIT
