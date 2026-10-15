@@ -13,6 +13,7 @@ use App\Support\Branding;
 use App\Support\CustomerNotifications;
 use App\Support\Db;
 use App\Support\NotificationService;
+use App\Support\Retention;
 use App\Support\SchemaCompatibility;
 use App\Support\Settings;
 use App\Support\Security;
@@ -33,7 +34,7 @@ final class SettingsController extends Controller
     {
         $tab = (string) $request->query('tab', 'overview');
         $tab = $tab === 'custom' ? 'branding' : $tab;
-        $tab = in_array($tab, ['overview', 'users', 'notifications', 'branding'], true) ? $tab : 'overview';
+        $tab = in_array($tab, ['overview', 'users', 'notifications', 'branding', 'retention'], true) ? $tab : 'overview';
 
         $userCount = (int) Db::value('SELECT COUNT(*) FROM portal_users');
         $enabledUsers = (int) Db::value('SELECT COUNT(*) FROM portal_users WHERE enabled = 1');
@@ -55,6 +56,11 @@ final class SettingsController extends Controller
             ],
             // Only the active tab's notification data is built: it may query many customers.
             'notifications' => $tab === 'notifications' ? $this->notifications($request) : null,
+            'retention' => $tab === 'retention' ? [
+                'periods' => Retention::settings(),
+                'stats' => Retention::stats(),
+                'options' => ['sessions' => Retention::SESSIONS, 'logins' => Retention::LOGINS],
+            ] : null,
         ]);
     }
 
@@ -310,6 +316,18 @@ final class SettingsController extends Controller
     public function notificationLegacy(): RedirectResponse
     {
         return $this->fail('Notifications have moved. Use Templates for automatic messages or Send bulk message to review a send.', self::NOTICES);
+    }
+
+    public function saveRetention(Request $request): RedirectResponse
+    {
+        $before = Retention::settings();
+        try {
+            Retention::save((int) $request->input('sessions', -1), (int) $request->input('logins', -1));
+        } catch (RuntimeException $e) {
+            return $this->failKeepingInput($e, '/settings?tab=retention');
+        }
+        Audit::log('update', 'setting', 'retention', $before, Retention::settings());
+        return $this->ok('/settings?tab=retention', 'Retention saved. Older records are deleted in the nightly cleanup at 03:45 UTC.');
     }
 
     public function saveSmsGateway(Request $request): RedirectResponse

@@ -66,6 +66,7 @@ Route::middleware('frweb.auth')->group(function () {
         Route::middleware('recent-auth')->group(function () {
             Route::post('/settings/notifications/sms-gateway', [SettingsController::class, 'saveSmsGateway']);
             Route::post('/settings/notifications/email-gateway', [SettingsController::class, 'saveEmailGateway']);
+            Route::post('/settings/retention', [SettingsController::class, 'saveRetention']);
         });
 
         foreach (['/settings/users', '/portal-users'] as $base) {

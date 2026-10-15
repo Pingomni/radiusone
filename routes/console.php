@@ -15,6 +15,9 @@ Schedule::command('frweb:poll-snmp')->everyMinute()->runInBackground()->appendOu
 Schedule::command('frweb:generate-billing')->dailyAt('02:15')->appendOutputTo($log('billing'));
 // Needs DELETE on job_runs (docs/operations/job-runs-retention-grants.sql).
 Schedule::command('frweb:prune-job-runs')->dailyAt('03:30')->appendOutputTo($log('maintenance'));
+// Deletes only when a period is chosen under Settings → Data retention (default: keep forever).
+// Needs DELETE on radacct/radpostauth (docs/operations/radius-retention-grants.sql).
+Schedule::command('frweb:prune-radius')->dailyAt('03:45')->appendOutputTo($log('maintenance'));
 
 // Paused in the legacy cron (migration 018 rollout; notification delivery); enable explicitly.
 Schedule::command('frweb:sync-expired')->everyMinute()->runInBackground()->appendOutputTo($log('expiry'))

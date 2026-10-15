@@ -1,6 +1,6 @@
 import { Link, router, useForm } from '@inertiajs/react';
 import { useEffect, useState, type ReactNode } from 'react';
-import { DeleteButton, PostButton } from '@/components/confirm';
+import { DeleteButton, PostButton, useConfirm } from '@/components/confirm';
 import Icon from '@/components/Icon';
 import { RoleGrid, Sheet, SettingsLinkNav, SettingsRows } from '@/components/settings';
 import { DataTable } from '@/components/table';
@@ -31,6 +31,13 @@ type Notifications = {
     history?: { before: number; older: number | null; rows: HistoryRow[] };
 };
 
+type RetentionRun = { sessions: number; logins: number; finished: boolean; at: string };
+type Retention = {
+    periods: { sessions: number; logins: number };
+    stats: { sessions: { rows: number; oldest: string }; logins: { rows: number; oldest: string }; lastRun: RetentionRun | null };
+    options: { sessions: Record<string, string>; logins: Record<string, string> };
+};
+
 const NOTICES = '/settings?tab=notifications';
 
 function Destination({ title, description, href, icon, status }: { title: string; description: string; href: string; icon: string; status: ReactNode }) {
@@ -52,6 +59,7 @@ function OverviewTab({ overview, usersSummary, branding }: { overview: Overview;
                 <Destination title="Users & access" description="Manage operators, roles, and two-factor authentication." href="/settings?tab=users" icon="clients" status={<Badge tone="success">{usersSummary.enabled} enabled</Badge>} />
                 <Destination title="Notifications" description="Connect a gateway, customize templates and send customer updates." href="/settings?tab=notifications" icon="mail" status={<Badge>Email + SMS</Badge>} />
                 <Destination title="Branding" description="Give your workspace and invoices a familiar identity." href="/settings?tab=branding" icon="image" status={<Badge>{branding.custom ? 'Custom logo' : 'Default logo'}</Badge>} />
+                <Destination title="Data retention" description="Choose how long session and login records are kept." href="/settings?tab=retention" icon="logs" status={<Badge>Session and login history</Badge>} />
             </div>
             <Sheet title="System information" description="Environment, operator access, and backup locations for this workspace." icon="server" meta={<Tag tag={overview.engine} />}>
                 <SettingsRows rows={overview.rows} />
@@ -219,6 +227,73 @@ function BrandingTab({ branding }: { branding: Branding }) {
                     </section>
                 </div>
             </div>
+        </Sheet>
+    );
+}
+
+/** Days of history a period keeps; "Keep forever" (0) keeps everything. */
+const keeps = (days: number) => (days === 0 ? Infinity : days);
+
+function RetentionTab({ r }: { r: Retention }) {
+    const form = useForm({ sessions: String(r.periods.sessions), logins: String(r.periods.logins) });
+    const ask = useConfirm();
+    const label = (kind: 'sessions' | 'logins', days: string) => r.options[kind][days] ?? days;
+    const stat = (s: { rows: number; oldest: string }) => `About ${s.rows.toLocaleString()} records${s.oldest ? `, oldest from ${s.oldest.slice(0, 10)}` : ''}.`;
+    const last = r.stats.lastRun;
+
+    return (
+        <Sheet
+            title="Data retention"
+            description="How long RADIUS connection history is kept. Records older than the chosen period are deleted in a nightly cleanup."
+            icon="logs"
+            meta={<Badge tone={r.periods.sessions === 0 && r.periods.logins === 0 ? '' : 'warning'}>{r.periods.sessions === 0 && r.periods.logins === 0 ? 'Keeping everything' : 'Cleanup active'}</Badge>}
+        >
+            <form
+                className="form-grid"
+                onSubmit={async (event) => {
+                    event.preventDefault();
+                    const shorter = (['sessions', 'logins'] as const).filter((kind) => keeps(Number(form.data[kind])) < keeps(r.periods[kind]));
+                    if (shorter.length) {
+                        const what = shorter.map((kind) => `${kind === 'sessions' ? 'session' : 'login'} records older than ${label(kind, form.data[kind]).toLowerCase()}`).join(' and ');
+                        const ok = await ask({
+                            title: 'Delete older records?',
+                            message: `The nightly cleanup will permanently delete ${what}. They can only be recovered from a database backup.`,
+                            confirmLabel: 'Save and delete',
+                        });
+                        if (!ok) return;
+                    }
+                    form.post('/settings/retention', { preserveScroll: true });
+                }}
+            >
+                <Select
+                    label="Session records (radacct)"
+                    hint={`Who was connected, when, from which IP address and how much traffic. ${stat(r.stats.sessions)} Live sessions are never deleted.`}
+                    options={r.options.sessions}
+                    name="sessions"
+                    value={form.data.sessions}
+                    error={form.errors.sessions}
+                    onChange={(e) => form.setData('sessions', e.target.value)}
+                />
+                <Select
+                    label="Login records (radpostauth)"
+                    hint={`Every accepted and rejected sign-in attempt. ${stat(r.stats.logins)}`}
+                    options={r.options.logins}
+                    name="logins"
+                    value={form.data.logins}
+                    error={form.errors.logins}
+                    onChange={(e) => form.setData('logins', e.target.value)}
+                />
+                <p className="span2 hint">
+                    Check how long you are legally required to keep connection records (who had which IP address and when) before choosing a period.
+                    Traffic totals on client profiles and reports only cover the records that are kept.
+                </p>
+                <p className="span2 hint">
+                    {last
+                        ? `Last cleanup ${last.at} UTC: ${last.sessions.toLocaleString()} session and ${last.logins.toLocaleString()} login records deleted${last.finished ? '.' : '; more remain and are deleted the next night.'}`
+                        : 'The cleanup runs every night at 03:45 UTC; it has not deleted anything yet.'}
+                </p>
+                <div className="span2 form-actions"><button className="primary" disabled={form.processing}>Save retention</button></div>
+            </form>
         </Sheet>
     );
 }
@@ -560,14 +635,15 @@ function NotificationsTab({ n }: { n: Notifications }) {
     );
 }
 
-export default function Settings({ tab, overview, users, usersSummary, roleDescriptions, branding, notifications }: {
-    tab: 'overview' | 'users' | 'notifications' | 'branding';
+export default function Settings({ tab, overview, users, usersSummary, roleDescriptions, branding, notifications, retention }: {
+    tab: 'overview' | 'users' | 'notifications' | 'branding' | 'retention';
     overview: Overview;
     users: Operator[] | null;
     usersSummary: { enabled: number; total: number };
     roleDescriptions: { role: string; description: string }[];
     branding: Branding;
     notifications: Notifications | null;
+    retention: Retention | null;
 }) {
     return (
         <AppLayout title="Settings">
@@ -578,6 +654,7 @@ export default function Settings({ tab, overview, users, usersSummary, roleDescr
                     {tab === 'users' && <UsersTab users={users} usersSummary={usersSummary} roleDescriptions={roleDescriptions} />}
                     {tab === 'notifications' && notifications && <NotificationsTab n={notifications} />}
                     {tab === 'branding' && <BrandingTab branding={branding} />}
+                    {tab === 'retention' && retention && <RetentionTab r={retention} />}
                 </div>
             </div>
         </AppLayout>
