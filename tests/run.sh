@@ -19,4 +19,4 @@ done
 [[ -S "$dir/db.sock" ]] || { cat "$dir/server.log"; exit 1; }
 export DB_SOCKET="$dir/db.sock"
 export FRWEB_TEST_DIR="$dir"
-php artisan test "$@"
+vendor/bin/phpunit "$@"

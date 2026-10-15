@@ -319,7 +319,7 @@ final class Auth
     {
         $all = ['dashboard.view', 'clients.view', 'clients.manage', 'clients.disconnect', 'clients.suspend', 'operations.view', 'operations.manage',
             'services.view', 'services.manage', 'nas.view', 'nas.manage', 'billing.view', 'billing.manage', 'reports.view', 'logs.view',
-            'documents.manage', 'documents.view', 'security.manage', 'settings.manage'];
+            'documents.manage', 'documents.view', 'security.manage', 'settings.manage', 'portal_users.manage', 'danger.delete'];
         return array_values(array_filter($all, static fn (string $p) => self::can($p)));
     }
 }

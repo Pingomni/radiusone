@@ -19,7 +19,7 @@ Status: **done** = controller + page + HTTP feature test; **todo** = not started
 | Profile | `/profile`, `/profile/save`, `/profile/language`, `/profile/password`, `/profile/2fa/*` | done |
 | Portal users | `/settings/users*`, `/portal-users*` | done |
 | Settings | `/settings`, `/settings/branding/*`, `/settings/notifications/*` | done |
-| Services | `/services*`, `/services/ip-pools*` | todo |
+| Services | `/services*`, `/services/ip-pools*` | done |
 | Network operations | `/operations`, `/operations/{id}/retry` | todo |
 | Reports / Logs | `/reports`, `/logs` | todo |
 | NAS | `/nas*`, `/nas/{id}/access`, `/nas/access/save`, `/nas/{id}/snmp` | todo |
