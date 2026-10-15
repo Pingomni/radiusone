@@ -22,7 +22,7 @@ Status: **done** = controller + page + HTTP feature test; **todo** = not started
 | Services | `/services*`, `/services/ip-pools*` | done |
 | Network operations | `/operations`, `/operations/{id}/retry` | done |
 | Reports / Logs | `/reports`, `/logs` | done |
-| NAS | `/nas*`, `/nas/{id}/access`, `/nas/access/save`, `/nas/{id}/snmp` | todo |
+| NAS | `/nas*`, `/nas/{id}/access`, `/nas/access/save`, `/nas/{id}/snmp` | done |
 | Monitoring | `/monitoring*`, `/nas/{id}/monitor*` | todo |
 | Clients | `/clients*`, `/documents/*` | todo |
 | Billing | `/billing*` | todo |

@@ -124,7 +124,7 @@ Route::middleware('frweb.auth')->group(function () {
         Route::get('/nas/create', [NasController::class, 'form']);
         Route::get('/nas/{id}/edit', [NasController::class, 'form'])->whereNumber('id');
         Route::get('/nas/{id}/access', [NasController::class, 'accessProfiles'])->whereNumber('id');
-        Route::post('/nas/access/save', [NasController::class, 'accessProfileSave']);
+        Route::post('/nas/access/save', [NasController::class, 'accessProfileSave'])->middleware('recent-auth');
         Route::post('/nas/{id}/snmp', [NasController::class, 'snmpSave'])->whereNumber('id');
         Route::middleware('recent-auth')->group(function () {
             Route::post('/nas/save', [NasController::class, 'save']);
