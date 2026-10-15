@@ -65,7 +65,10 @@ return [
     |
     */
 
-    'timezone' => 'UTC',
+    // Redirect plain-HTTP GETs to APP_URL and refuse other plain-HTTP requests (behind a TLS proxy).
+    'force_https' => (bool) filter_var(env('FORCE_HTTPS', env('APP_ENV', 'production') === 'production'), FILTER_VALIDATE_BOOL),
+
+    'timezone' => env('APP_TIMEZONE', 'UTC'),
 
     /*
     |--------------------------------------------------------------------------

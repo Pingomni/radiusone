@@ -1,0 +1,9 @@
+-- SNMPv3 (USM) credentials for NAS monitoring. Passwords are write-only in the UI.
+ALTER TABLE nas_snmp
+ MODIFY version ENUM('1','2c','3') NOT NULL DEFAULT '2c',
+ ADD COLUMN IF NOT EXISTS v3_user VARCHAR(64) NULL,
+ ADD COLUMN IF NOT EXISTS v3_auth_protocol VARCHAR(16) NOT NULL DEFAULT 'none',
+ ADD COLUMN IF NOT EXISTS v3_auth_password VARCHAR(255) NULL,
+ ADD COLUMN IF NOT EXISTS v3_priv_protocol VARCHAR(16) NOT NULL DEFAULT 'none',
+ ADD COLUMN IF NOT EXISTS v3_priv_password VARCHAR(255) NULL,
+ ADD COLUMN IF NOT EXISTS v3_context VARCHAR(64) NULL;

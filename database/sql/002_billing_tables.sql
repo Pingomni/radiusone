@@ -1,0 +1,60 @@
+CREATE TABLE IF NOT EXISTS billing_invoices (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  invoice_number VARCHAR(40) NOT NULL UNIQUE,
+  username VARCHAR(64) NOT NULL,
+  service_group VARCHAR(64) NULL,
+  period_start DATE NULL,
+  period_end DATE NULL,
+  issue_date DATE NOT NULL,
+  due_date DATE NOT NULL,
+  subtotal DECIMAL(12,2) NOT NULL DEFAULT 0,
+  discount_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+  tax_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+  total_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+  amount_paid DECIMAL(12,2) NOT NULL DEFAULT 0,
+  balance_due DECIMAL(12,2) NOT NULL DEFAULT 0,
+  currency CHAR(3) NOT NULL DEFAULT 'USD',
+  status ENUM('draft','open','partial','paid','void','overdue') NOT NULL DEFAULT 'open',
+  notes TEXT NULL,
+  created_by BIGINT UNSIGNED NULL,
+  created_at DATETIME NOT NULL,
+  updated_at DATETIME NOT NULL,
+  INDEX idx_billing_invoice_customer (username),
+  INDEX idx_billing_invoice_status_due (status, due_date),
+  INDEX idx_billing_invoice_period (period_start, period_end),
+  CONSTRAINT fk_billing_invoice_customer FOREIGN KEY (username) REFERENCES customer_profiles(username) ON DELETE CASCADE,
+  CONSTRAINT fk_billing_invoice_creator FOREIGN KEY (created_by) REFERENCES portal_users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS billing_invoice_items (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  invoice_id BIGINT UNSIGNED NOT NULL,
+  description VARCHAR(255) NOT NULL,
+  quantity DECIMAL(10,2) NOT NULL DEFAULT 1,
+  unit_price DECIMAL(12,2) NOT NULL DEFAULT 0,
+  line_total DECIMAL(12,2) NOT NULL DEFAULT 0,
+  service_group VARCHAR(64) NULL,
+  created_at DATETIME NOT NULL,
+  INDEX idx_billing_item_invoice (invoice_id),
+  CONSTRAINT fk_billing_item_invoice FOREIGN KEY (invoice_id) REFERENCES billing_invoices(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS billing_payments (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  invoice_id BIGINT UNSIGNED NOT NULL,
+  username VARCHAR(64) NOT NULL,
+  payment_date DATE NOT NULL,
+  amount DECIMAL(12,2) NOT NULL,
+  currency CHAR(3) NOT NULL DEFAULT 'USD',
+  method ENUM('cash','bank_transfer','mobile_money','card','check','other') NOT NULL DEFAULT 'cash',
+  reference VARCHAR(120) NULL,
+  notes TEXT NULL,
+  received_by BIGINT UNSIGNED NULL,
+  created_at DATETIME NOT NULL,
+  INDEX idx_billing_payment_invoice (invoice_id),
+  INDEX idx_billing_payment_customer (username),
+  INDEX idx_billing_payment_date (payment_date),
+  CONSTRAINT fk_billing_payment_invoice FOREIGN KEY (invoice_id) REFERENCES billing_invoices(id) ON DELETE CASCADE,
+  CONSTRAINT fk_billing_payment_customer FOREIGN KEY (username) REFERENCES customer_profiles(username) ON DELETE CASCADE,
+  CONSTRAINT fk_billing_payment_receiver FOREIGN KEY (received_by) REFERENCES portal_users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

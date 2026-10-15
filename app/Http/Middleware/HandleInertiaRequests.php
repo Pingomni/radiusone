@@ -2,46 +2,42 @@
 
 namespace App\Http\Middleware;
 
+use App\Support\Auth;
+use App\Support\Settings;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
 class HandleInertiaRequests extends Middleware
 {
-    /**
-     * The root template that's loaded on the first page visit.
-     *
-     * @see https://inertiajs.com/server-side-setup#root-template
-     *
-     * @var string
-     */
     protected $rootView = 'app';
 
     /**
-     * Determines the current asset version.
-     *
-     * @see https://inertiajs.com/asset-versioning
-     */
-    public function version(Request $request): ?string
-    {
-        return parent::version($request);
-    }
-
-    /**
-     * Define the props that are shared by default.
-     *
-     * @see https://inertiajs.com/shared-data
+     * Props every page receives. Flash messages use the legacy shape {type, message}
+     * with type one of success | danger | warning | info.
      *
      * @return array<string, mixed>
      */
     public function share(Request $request): array
     {
+        $user = Auth::user();
+
         return [
             ...parent::share($request),
-            'name' => config('app.name'),
+            'appName' => config('app.name'),
             'auth' => [
-                'user' => $request->user(),
+                'user' => $user ? [
+                    'id' => (int) $user['id'],
+                    'username' => (string) $user['username'],
+                    'name' => (string) ($user['name'] ?? ''),
+                    'email' => (string) ($user['email'] ?? ''),
+                    'role' => (string) $user['role'],
+                    'two_factor_enabled' => (bool) $user['two_factor_enabled'],
+                ] : null,
+                'permissions' => $user ? Auth::permissions() : [],
             ],
-            'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
+            'flash' => fn () => $request->session()->get('flash'),
+            'logo' => fn () => Settings::logo(),
+            'clock' => fn () => ['time' => date('H:i'), 'timezone' => date_default_timezone_get()],
         ];
     }
 }

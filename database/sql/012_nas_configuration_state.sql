@@ -1,0 +1,9 @@
+ALTER TABLE nas_metadata
+ ADD COLUMN IF NOT EXISTS config_revision BIGINT UNSIGNED NOT NULL DEFAULT 1,
+ ADD COLUMN IF NOT EXISTS applied_revision BIGINT UNSIGNED NULL,
+ ADD COLUMN IF NOT EXISTS applied_at DATETIME NULL,
+ ADD COLUMN IF NOT EXISTS applied_evidence VARCHAR(500) NULL,
+ ADD COLUMN IF NOT EXISTS pending_delete TINYINT(1) NOT NULL DEFAULT 0;
+
+UPDATE nas_metadata m JOIN nas n ON n.id=m.nas_id
+ SET m.coa_enabled=0 WHERE COALESCE(NULLIF(m.vendor,''),n.type)='mikrotik';

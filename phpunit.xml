@@ -18,19 +18,25 @@
         </include>
     </source>
     <php>
-        <env name="APP_ENV" value="testing"/>
-        <env name="APP_MAINTENANCE_DRIVER" value="file"/>
+        <!-- tests/run.sh starts a private MariaDB (no networking) and sets DB_SOCKET. -->
+        <env name="APP_ENV" value="testing" force="true"/>
+        <env name="APP_DEBUG" value="false" force="true"/>
+        <env name="APP_URL" value="https://frweb.test" force="true"/>
+        <env name="FORCE_HTTPS" value="false" force="true"/>
+        <env name="FRWEB_SHARED_ENV" value="" force="true"/>
+        <env name="FRWEB_SECRETS_KEY" value="frweb-test-only-key-not-for-production-use" force="true"/>
+        <env name="TRUSTED_PROXIES" value="127.0.0.1" force="true"/>
         <env name="BCRYPT_ROUNDS" value="4"/>
-        <env name="BROADCAST_CONNECTION" value="null"/>
-        <env name="CACHE_STORE" value="array"/>
-        <env name="DB_CONNECTION" value="sqlite"/>
-        <env name="DB_DATABASE" value=":memory:"/>
-        <env name="DB_URL" value=""/>
+        <env name="CACHE_STORE" value="array" force="true"/>
+        <env name="DB_CONNECTION" value="mysql" force="true"/>
+        <env name="DB_DATABASE" value="frweb_test" force="true"/>
+        <env name="DB_USERNAME" value="root" force="true"/>
+        <env name="DB_PASSWORD" value="" force="true"/>
+        <env name="DB_HOST" value="localhost" force="true"/>
+        <env name="LOG_CHANNEL" value="null" force="true"/>
         <env name="MAIL_MAILER" value="array"/>
-        <env name="QUEUE_CONNECTION" value="sync"/>
-        <env name="SESSION_DRIVER" value="array"/>
-        <env name="PULSE_ENABLED" value="false"/>
-        <env name="TELESCOPE_ENABLED" value="false"/>
-        <env name="NIGHTWATCH_ENABLED" value="false"/>
+        <env name="QUEUE_CONNECTION" value="sync" force="true"/>
+        <env name="SESSION_DRIVER" value="array" force="true"/>
+        <env name="SESSION_SECURE_COOKIE" value="false" force="true"/>
     </php>
 </phpunit>
