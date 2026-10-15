@@ -70,7 +70,7 @@ final class ServiceController extends Controller
     public function save(Request $request): RedirectResponse
     {
         Auth::requireCan('services.manage');
-        $input = $this->formInput($request);
+        $input = $this->formInput($request) + array_fill_keys(self::SERVICE_FIELDS, '');
         $id = (int) ($input['id'] ?? 0) ?: null;
         // Vendor rates are derived from the speeds; billing period is always monthly.
         $input['mikrotik_rate_limit'] = '';

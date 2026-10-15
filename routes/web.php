@@ -89,10 +89,10 @@ Route::middleware('frweb.auth')->group(function () {
         Route::get('/clients/{username}/diagnostics', [ClientController::class, 'diagnostics']);
         Route::post('/clients/save', [ClientController::class, 'save']);
         Route::post('/clients/bulk', [ClientController::class, 'bulk']);
-        Route::post('/clients/{username}/suspension', [ClientController::class, 'suspension']);
+        Route::post('/clients/{username}/suspension', [ClientController::class, 'suspension'])->middleware('recent-auth');
         Route::post('/clients/{username}/delete', [ClientController::class, 'delete']);
         Route::post('/clients/{username}/disconnect', [ClientController::class, 'disconnect']);
-        Route::post('/clients/{username}/reveal-password', [ClientController::class, 'revealPassword']);
+        Route::post('/clients/{username}/reveal-password', [ClientController::class, 'revealPassword'])->middleware('recent-auth');
         Route::post('/documents/{id}/delete', [ClientController::class, 'documentDelete'])->whereNumber('id');
         Route::get('/documents/{id}/download', [ClientController::class, 'documentDownload'])->whereNumber('id');
     });
