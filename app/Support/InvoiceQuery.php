@@ -31,7 +31,27 @@ final class InvoiceQuery
         $page = max(1, min($pages, $page));
         $offset = ($page - 1) * $size;
         $rows = Db::select("SELECT i.*, c.first_name, c.last_name, c.company_name, s.name AS service_name
-            $from $where ORDER BY i.created_at DESC, i.id DESC LIMIT $size OFFSET $offset", $params);
+            $from $where ORDER BY i.id DESC LIMIT $size OFFSET $offset", $params);
         return compact('rows', 'total', 'page', 'pages', 'size');
+    }
+
+    /**
+     * Every match, newest first, in primary-key chunks (exports): each row is read once.
+     * @return \Generator<array>
+     */
+    public static function each(array $filters, int $chunk = 1000): \Generator
+    {
+        [$where, $params] = self::conditions($filters);
+        $after = PHP_INT_MAX;
+        do {
+            $rows = Db::select('SELECT i.*, c.first_name, c.last_name, c.company_name, s.name AS service_name
+                FROM billing_invoices i JOIN customer_profiles c ON c.username=i.username
+                LEFT JOIN service_metadata s ON s.group_name=i.service_group
+                ' . ($where === '' ? 'WHERE' : $where . ' AND') . " i.id < ? ORDER BY i.id DESC LIMIT $chunk", [...$params, $after]);
+            foreach ($rows as $row) {
+                yield $row;
+            }
+            $after = $rows ? (int) $rows[count($rows) - 1]['id'] : 0;
+        } while (count($rows) === $chunk);
     }
 }

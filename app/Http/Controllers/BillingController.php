@@ -95,7 +95,7 @@ final class BillingController extends Controller
     {
         $filters = $request->query();
         return Csv::download('invoices.csv', ['Invoice', 'Username', 'Customer', 'Service', 'Issued', 'Due', 'Total', 'Paid', 'Balance', 'Currency', 'Status'],
-            static fn (int $page) => InvoiceQuery::page($filters, $page, 200),
+            static fn () => InvoiceQuery::each($filters),
             static fn (array $r) => [$r['invoice_number'], $r['username'], Clients::displayName($r), $r['service_name'] ?: $r['service_group'], $r['issue_date'], $r['due_date'], $r['total_amount'], $r['amount_paid'], $r['balance_due'], $r['currency'], $r['status']]);
     }
 

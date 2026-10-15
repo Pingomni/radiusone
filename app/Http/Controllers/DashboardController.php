@@ -11,6 +11,7 @@ use App\Support\Auth;
 use App\Support\ClientQuery;
 use App\Support\Db;
 use App\Support\Entitlement;
+use App\Support\MicroCache;
 use App\Support\NasMonitor;
 use Illuminate\Http\JsonResponse;
 use Inertia\Inertia;
@@ -21,7 +22,12 @@ final class DashboardController extends Controller
 {
     public function dashboard(): Response
     {
-        $topUsers = Db::select('SELECT username, COALESCE(SUM(acctoutputoctets),0) AS down, COALESCE(SUM(acctinputoctets),0) AS up FROM radacct GROUP BY username ORDER BY COALESCE(SUM(acctinputoctets),0) + COALESCE(SUM(acctoutputoctets),0) DESC LIMIT 8');
+        // Sessions started this month (indexed range); all-time totals meant summing the whole history on every view.
+        $topUsers = MicroCache::remember('dashboard:top-users:' . date('Y-m'), 300, static fn () => Db::select(
+            'SELECT username, COALESCE(SUM(acctoutputoctets),0) AS down, COALESCE(SUM(acctinputoctets),0) AS up FROM radacct
+             WHERE acctstarttime >= DATE_FORMAT(CURDATE(), "%Y-%m-01") GROUP BY username
+             ORDER BY COALESCE(SUM(acctinputoctets),0) + COALESCE(SUM(acctoutputoctets),0) DESC LIMIT 8'
+        ));
         $showRejects = Auth::can('logs.view') && Db::value("SHOW TABLES LIKE 'radpostauth'");
 
         return Inertia::render('Dashboard', [

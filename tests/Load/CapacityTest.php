@@ -63,6 +63,8 @@ final class CapacityTest extends TestCase
         $pdo->exec('SET FOREIGN_KEY_CHECKS=0');
         $pdo->exec('DROP TABLE radacct');
         $pdo->exec(self::RADACCT);
+        // Indexes this app adds to the FreeRADIUS table (production gets them from frweb:migrate).
+        $pdo->exec((string) file_get_contents(base_path('database/sql/027_radacct_nas_stop_index.sql')));
         $pdo->exec('DROP TABLE radpostauth');
         $pdo->exec(self::RADPOSTAUTH);
 
@@ -168,6 +170,8 @@ final class CapacityTest extends TestCase
             }
         }
 
+        $this->timed('frweb:prune-job-runs (1M rows, keep 30 days)', fn () => Artisan::call('frweb:prune-job-runs'));
+        $this->report('    ' . trim(Artisan::output()));
         $this->report('Slow (>1 s): ' . ($slow ? implode(', ', $slow) : 'none'));
         Db::pdo()->exec('SET GLOBAL slow_query_log=0');
         $this->report('Slowest queries (>50 ms):');

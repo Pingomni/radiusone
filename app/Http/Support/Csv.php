@@ -7,16 +7,16 @@ namespace App\Http\Support;
 use App\Support\Db;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
-/** Streams every match of a paged query as CSV, read from one consistent snapshot. */
+/** Streams rows as CSV, read from one consistent snapshot. */
 final class Csv
 {
     /**
-     * @param callable(int): array{rows: array, pages: int} $queryPage
+     * @param callable(): iterable<array> $rows called inside the snapshot (e.g. ClientQuery::each)
      * @param callable(array): array $cells
      */
-    public static function download(string $filename, array $headers, callable $queryPage, callable $cells): StreamedResponse
+    public static function download(string $filename, array $headers, callable $rows, callable $cells): StreamedResponse
     {
-        return response()->streamDownload(static function () use ($headers, $queryPage, $cells): void {
+        return response()->streamDownload(static function () use ($headers, $rows, $cells): void {
             $out = fopen('php://output', 'wb');
             $pdo = Db::pdo();
             $pdo->exec('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ');
@@ -24,14 +24,10 @@ final class Csv
             $pdo->beginTransaction();
             try {
                 fputcsv($out, $headers, escape: '\\');
-                $page = 1;
-                do {
-                    $result = $queryPage($page);
-                    foreach ($result['rows'] as $row) {
-                        // A leading = + @ - would run as a formula in spreadsheets.
-                        fputcsv($out, array_map(static fn ($v) => preg_match('/^[=+@\-\t\r]/', (string) $v) ? "'" . $v : $v, $cells($row)), escape: '\\');
-                    }
-                } while (++$page <= $result['pages']);
+                foreach ($rows() as $row) {
+                    // A leading = + @ - would run as a formula in spreadsheets.
+                    fputcsv($out, array_map(static fn ($v) => preg_match('/^[=+@\-\t\r]/', (string) $v) ? "'" . $v : $v, $cells($row)), escape: '\\');
+                }
                 $pdo->commit();
             } finally {
                 if ($pdo->inTransaction()) {

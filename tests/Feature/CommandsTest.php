@@ -47,7 +47,7 @@ final class CommandsTest extends TestCase
         $this->artisan('frweb:encrypt-secrets')->assertExitCode(0);
         // Every migration is already in the ledger, so a rerun applies nothing.
         $this->artisan('frweb:migrate')->assertExitCode(0);
-        $this->assertSame(26, (int) Db::value('SELECT COUNT(*) FROM schema_migrations'));
+        $this->assertSame(count(glob(base_path('database/sql/*.sql'))), (int) Db::value('SELECT COUNT(*) FROM schema_migrations'));
     }
 
     public function test_guarded_commands_refuse_without_their_safeguards(): void
@@ -62,6 +62,17 @@ final class CommandsTest extends TestCase
         $this->artisan('frweb:migrate', ['--baseline-through' => '010'])
             ->expectsOutputToContain('requires --confirm-schema-reviewed')->assertExitCode(1);
         $this->artisan('frweb:restore', ['file' => '/nonexistent.sql.gz'])->assertExitCode(1);
+    }
+
+    public function test_job_history_is_pruned_but_running_jobs_and_job_health_are_kept(): void
+    {
+        Db::exec('INSERT INTO job_runs (job_name, state, started_at, finished_at) VALUES
+            ("customer-notifications", "succeeded", NOW() - INTERVAL 40 DAY, NOW() - INTERVAL 40 DAY),
+            ("billing", "running", NOW() - INTERVAL 40 DAY, NULL),
+            ("customer-notifications", "succeeded", NOW() - INTERVAL 1 MINUTE, NOW() - INTERVAL 1 MINUTE)');
+        $this->artisan('frweb:prune-job-runs')->expectsOutputToContain('"deleted":1')->assertExitCode(0);
+        $this->assertSame(['running', 'succeeded'], array_column(Db::select('SELECT state FROM job_runs ORDER BY id'), 'state'));
+        $this->assertSame('running', \App\Support\JobHealth::all()['customer-notifications']['state']);
     }
 
     public function test_paused_jobs_are_only_scheduled_when_enabled(): void

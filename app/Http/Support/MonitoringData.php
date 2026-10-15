@@ -114,6 +114,33 @@ final class MonitoringData
         };
     }
 
+    /**
+     * Latest accounting packet per NAS id (accounting may name a NAS by address or short name):
+     * the newest open-session update, or the newest stop. Index lookups only (open sessions are few;
+     * stops use idx_radacct_nas_stop), so the cost does not grow with the session history.
+     * @return array<int, string>
+     */
+    private static function lastAccounting(array $nasRows): array
+    {
+        $open = [];
+        foreach (Db::select('SELECT nasipaddress, MAX(COALESCE(acctupdatetime, acctstarttime)) AS at FROM radacct WHERE acctstoptime IS NULL GROUP BY nasipaddress') as $row) {
+            $open[(string) $row['nasipaddress']] = (string) $row['at'];
+        }
+        $last = [];
+        foreach ($nasRows as $nas) {
+            $times = [];
+            foreach (array_unique(array_filter([(string) $nas['nasname'], (string) $nas['shortname']])) as $name) {
+                $times[] = $open[$name] ?? null;
+                $times[] = Db::value('SELECT MAX(acctstoptime) FROM radacct WHERE nasipaddress=?', [$name]) ?: null;
+            }
+            $times = array_filter($times);
+            if ($times) {
+                $last[(int) $nas['id']] = max($times);
+            }
+        }
+        return $last;
+    }
+
     public static function overview(): array
     {
         $latest = self::latest();
@@ -153,9 +180,9 @@ final class MonitoringData
         ];
 
         $nasRows = Db::select('SELECT n.id, n.nasname, n.shortname, n.type, n.secret, COALESCE(m.vendor, n.type) AS vendor, COALESCE(m.enabled, 1) AS enabled, m.pending_delete, m.config_revision, m.applied_revision,
-                COALESCE(m.coa_enabled, 1) AS coa_enabled, m.api_host, m.api_user, (COALESCE(m.api_password, "") <> "") AS api_password_saved,
-                (SELECT MAX(COALESCE(a.acctupdatetime, a.acctstarttime)) FROM radacct a WHERE a.nasipaddress=n.nasname OR a.nasipaddress=n.shortname) AS last_accounting_at
+                COALESCE(m.coa_enabled, 1) AS coa_enabled, m.api_host, m.api_user, (COALESCE(m.api_password, "") <> "") AS api_password_saved
             FROM nas n LEFT JOIN nas_metadata m ON m.nas_id=n.id WHERE COALESCE(m.pending_delete, 0)=0 ORDER BY n.shortname, n.id');
+        $lastAccountingAt = self::lastAccounting($nasRows);
         $snmp = NasMonitor::available() ? array_column(Db::select('SELECT * FROM nas_snmp'), null, 'nas_id') : [];
         // Without SNMP, ping is the only reachability signal; all pings run in parallel (about 1 s).
         $pingHosts = array_values(array_map(static fn ($n) => (string) $n['nasname'], array_filter($nasRows, static fn ($n) => !NasMonitor::configured($snmp[(int) $n['id']] ?? null))));
@@ -177,7 +204,8 @@ final class MonitoringData
                 default => ['polling', ''],
             };
             $responding += $isConfigured && $age !== null && $age <= NasTraffic::STALE_SECONDS ? 1 : 0;
-            $lastAccounting = $nas['last_accounting_at'] ? max(0, time() - (int) strtotime((string) $nas['last_accounting_at'])) : null;
+            $lastAt = $lastAccountingAt[(int) $nas['id']] ?? null;
+            $lastAccounting = $lastAt ? max(0, time() - (int) strtotime($lastAt)) : null;
             $nasTones = [self::tone($sample['cpu'] ?? null, 75, 90), self::tone($sample['mem'] ?? null, 85, 95), self::tone($sample['hottest'] ?? null, 65, 80)];
             $alerts += ($stateTone === 'danger' ? 1 : 0) + count(array_filter($nasTones, static fn ($t) => $t === 'danger'));
             $disconnect = self::disconnectLabel($nas);

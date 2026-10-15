@@ -13,6 +13,8 @@ $log = static fn (string $name): string => '/var/log/freeradius-web/' . $name . 
 Schedule::command('frweb:process-customer-notifications')->everyMinute()->runInBackground()->appendOutputTo($log('customer-notifications'));
 Schedule::command('frweb:poll-snmp')->everyMinute()->runInBackground()->appendOutputTo($log('snmp-poll'));
 Schedule::command('frweb:generate-billing')->dailyAt('02:15')->appendOutputTo($log('billing'));
+// Needs DELETE on job_runs (docs/operations/job-runs-retention-grants.sql).
+Schedule::command('frweb:prune-job-runs')->dailyAt('03:30')->appendOutputTo($log('maintenance'));
 
 // Paused in the legacy cron (migration 018 rollout; notification delivery); enable explicitly.
 Schedule::command('frweb:sync-expired')->everyMinute()->runInBackground()->appendOutputTo($log('expiry'))

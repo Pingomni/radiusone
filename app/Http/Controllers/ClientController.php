@@ -91,7 +91,7 @@ final class ClientController extends Controller
     {
         $filters = $request->query();
         return Csv::download('customers.csv', ['Username', 'Customer', 'Plan', 'Account status', 'Connection', 'Session counter total (bytes)', 'Expiry'],
-            static fn (int $page) => ClientQuery::page($filters, $page, 200),
+            static fn () => ClientQuery::each($filters),
             static fn (array $r) => [$r['username'], trim($r['first_name'] . ' ' . $r['last_name']) ?: $r['company_name'], $r['service_name'] ?: $r['service_group'], Clients::statusLabel($r), Clients::accountingLabel($r), (string) ((int) $r['up'] + (int) $r['down']), $r['expiry_date']]);
     }
 

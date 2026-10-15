@@ -9,6 +9,7 @@ use App\Http\Support\Present;
 use App\Support\Accounting;
 use App\Support\ClientQuery;
 use App\Support\Db;
+use App\Support\MicroCache;
 use DateTimeImmutable;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -36,7 +37,8 @@ final class ReportsController extends Controller
         $daily = Db::select("SELECT DATE(acctstarttime) AS day, SUM(acctoutputoctets) AS down, SUM(acctinputoctets) AS up FROM radacct WHERE $range GROUP BY DATE(acctstarttime) ORDER BY day DESC", $params);
         $today = (int) Db::value('SELECT COALESCE(SUM(COALESCE(acctinputoctets,0) + COALESCE(acctoutputoctets,0)),0) FROM radacct WHERE acctstarttime >= CURDATE() AND acctstarttime < DATE_ADD(CURDATE(), INTERVAL 1 DAY)');
         $month = (int) Db::value('SELECT COALESCE(SUM(COALESCE(acctinputoctets,0) + COALESCE(acctoutputoctets,0)),0) FROM radacct WHERE acctstarttime >= DATE_FORMAT(CURDATE(), "%Y-%m-01") AND acctstarttime < DATE_ADD(DATE_FORMAT(CURDATE(), "%Y-%m-01"),INTERVAL 1 MONTH)');
-        $quality = Accounting::quality();
+        // A pass over every session: refreshed every 10 minutes rather than on each view.
+        $quality = MicroCache::remember('reports:accounting-quality', 600, static fn () => Accounting::quality());
 
         return Inertia::render('reports/Reports', [
             'filters' => ['from' => $from, 'to' => $to, 'username' => $user, 'max' => date('Y-m-d')],
@@ -87,14 +89,14 @@ final class ReportsController extends Controller
         $audit = Db::select("SELECT * FROM audit_logs WHERE $auditWhere ORDER BY created_at DESC, id DESC LIMIT 300", $auditParams);
         $auditMatches = (int) Db::value("SELECT COUNT(*) FROM audit_logs WHERE $auditWhere", $auditParams);
         $hasPostAuth = (bool) Db::value("SHOW TABLES LIKE 'radpostauth'");
-        $rejectsToday = $hasPostAuth ? (int) Db::value('SELECT COUNT(*) FROM radpostauth WHERE DATE(authdate)=CURDATE() AND reply LIKE "%Reject%"') : 0;
+        $rejectsToday = $hasPostAuth ? (int) Db::value('SELECT COUNT(*) FROM radpostauth WHERE authdate >= CURDATE() AND authdate < CURDATE() + INTERVAL 1 DAY AND reply LIKE "%Reject%"') : 0;
 
         return Inertia::render('reports/Logs', [
             'filters' => ['q' => $q, 'reply' => $reply, 'auth_user' => $authUser],
             'metrics' => [
-                Present::metric('Audit events today', (int) Db::value('SELECT COUNT(*) FROM audit_logs WHERE DATE(created_at)=CURDATE()'), 'logs'),
+                Present::metric('Audit events today', (int) Db::value('SELECT COUNT(*) FROM audit_logs WHERE created_at >= CURDATE() AND created_at < CURDATE() + INTERVAL 1 DAY'), 'logs'),
                 Present::metric('Audit events total', (int) Db::value('SELECT COUNT(*) FROM audit_logs'), 'logs'),
-                Present::metric('Auth attempts today', $hasPostAuth ? (int) Db::value('SELECT COUNT(*) FROM radpostauth WHERE DATE(authdate)=CURDATE()') : 'n/a', 'shield'),
+                Present::metric('Auth attempts today', $hasPostAuth ? (int) Db::value('SELECT COUNT(*) FROM radpostauth WHERE authdate >= CURDATE() AND authdate < CURDATE() + INTERVAL 1 DAY') : 'n/a', 'shield'),
                 Present::metric('Rejects today', $hasPostAuth ? $rejectsToday : 'n/a', 'lock', $rejectsToday > 0 ? 'warning' : '', $hasPostAuth ? '/logs?reply=reject' : ''),
             ],
             'audit' => array_map(static fn (array $r) => [

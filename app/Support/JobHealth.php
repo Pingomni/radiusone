@@ -24,8 +24,13 @@ final class JobHealth
         $result = [];
         $last = [];
         try {
-            foreach (Db::select('SELECT job_name, MAX(UNIX_TIMESTAMP(started_at)) AS last FROM job_runs WHERE state IN ("succeeded","skipped","running") GROUP BY job_name') as $row) {
-                $last[$row['job_name']] = (int) $row['last'];
+            // Newest first through idx_job_monitor (job_name, started_at): stops at the latest run
+            // instead of grouping the whole history (a minute job adds ~525k rows a year).
+            foreach (array_keys(self::JOBS) as $job) {
+                $at = Db::value('SELECT UNIX_TIMESTAMP(started_at) FROM job_runs WHERE job_name=? AND state IN ("succeeded","skipped","running") ORDER BY started_at DESC LIMIT 1', [$job]);
+                if ($at !== false && $at !== null) {
+                    $last[$job] = (int) $at;
+                }
             }
         } catch (\Throwable) {
             // Older schema without job_runs: every job reads as never run.

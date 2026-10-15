@@ -45,6 +45,30 @@ final class ClientQuery
         return compact('rows', 'total', 'page', 'pages', 'size');
     }
 
+    /**
+     * Every match, newest client first, in chunks keyed on the primary key (exports). Unlike page(),
+     * the cost does not grow with the position, so a full export reads each row once.
+     * @return \Generator<array>
+     */
+    public static function each(array $filters, int $chunk = 500): \Generator
+    {
+        [$where, $params] = self::conditions($filters);
+        $after = PHP_INT_MAX;
+        do {
+            $rows = Db::select("SELECT c.*, s.name AS service_name
+                FROM customer_profiles c LEFT JOIN service_metadata s ON s.group_name=c.service_group
+                WHERE $where AND c.id < ? ORDER BY c.id DESC LIMIT $chunk", [...$params, $after]);
+            if (!$rows) {
+                return;
+            }
+            self::accountingForPage($rows);
+            foreach ($rows as $row) {
+                yield $row;
+            }
+            $after = (int) $rows[count($rows) - 1]['id'];
+        } while (count($rows) === $chunk);
+    }
+
     private static function accountingForPage(array &$rows): void
     {
         if (!$rows) { return; }
