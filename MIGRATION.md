@@ -25,7 +25,7 @@ Status: **done** = controller + page + HTTP feature test; **todo** = not started
 | NAS | `/nas*`, `/nas/{id}/access`, `/nas/access/save`, `/nas/{id}/snmp` | done |
 | Monitoring | `/monitoring*`, `/nas/{id}/monitor*` | done |
 | Clients | `/clients*`, `/documents/*` | done |
-| Billing | `/billing*` | todo |
+| Billing | `/billing*` | done |
 
 ## Workers (`bin/*` → artisan)
 

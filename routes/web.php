@@ -155,7 +155,7 @@ Route::middleware('frweb.auth')->group(function () {
         Route::post('/billing/invoices/save', [BillingController::class, 'save']);
         Route::post('/billing/invoices/{id}/payment', [BillingController::class, 'paymentSave'])->whereNumber('id');
         Route::post('/billing/invoices/{id}/payment/new', [BillingController::class, 'paymentStart'])->whereNumber('id');
-        Route::post('/billing/invoices/{id}/classify', [BillingController::class, 'classify'])->whereNumber('id');
+        Route::post('/billing/invoices/{id}/classify', [BillingController::class, 'classify'])->whereNumber('id')->middleware('recent-auth');
         Route::post('/billing/invoices/{id}/void', [BillingController::class, 'void'])->whereNumber('id');
         Route::post('/billing/invoices/{id}/delete', [BillingController::class, 'delete'])->whereNumber('id');
         Route::post('/billing/generate', [BillingController::class, 'generate']);

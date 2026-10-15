@@ -5,6 +5,9 @@ declare(strict_types=1);
 namespace App\Http\Support;
 
 use App\Support\BillingCalendar;
+use App\Support\Branding;
+use App\Support\Settings;
+use App\Support\SimplePdf;
 
 /** Invoice presentation shared by Billing and the client Billing tab (legacy app/Http/billing.php). */
 final class Invoices
@@ -116,5 +119,63 @@ final class Invoices
             'draftPdf' => $invoice['status'] !== 'void',
             'receipt' => self::receipt($invoice),
         ];
+    }
+
+    /** One sentence that answers "does the customer still owe anything on this invoice?". */
+    public static function banner(array $invoice, array $payments): array
+    {
+        $currency = ' ' . $invoice['currency'];
+        $balance = Format::money($invoice['balance_due']) . $currency;
+        $paid = Format::money($invoice['amount_paid']) . $currency;
+        $lastPayment = $payments ? max(array_column($payments, 'payment_date')) : '';
+        [$tone, $title, $text] = match ((string) $invoice['status']) {
+            'draft' => ['info', 'Draft — not issued to the customer', 'This invoice is not billed yet and does not count toward the customer balance. Edit it, then save it with status "Issue now" to bill the customer.'],
+            'open' => ['warning', 'Unpaid — ' . $balance . ' due', 'No payment recorded yet. Payment is due by ' . $invoice['due_date'] . '.'],
+            'partial' => ['warning', 'Partially paid — ' . $balance . ' still due', $paid . ' received so far. The remainder is due by ' . $invoice['due_date'] . '.'],
+            'overdue' => ['danger', 'Overdue — ' . $balance . ' outstanding', 'The due date ' . $invoice['due_date'] . ' has passed' . ((float) $invoice['amount_paid'] > 0 ? ' with ' . $paid . ' paid.' : ' and nothing has been paid.')],
+            'paid' => ['success', 'Paid in full', Format::money($invoice['total_amount']) . $currency . ' received' . ($lastPayment !== '' ? '; last payment on ' . $lastPayment : '') . '. Nothing is owed on this invoice.'],
+            'void' => ['neutral', 'Cancelled', 'This invoice was voided. The customer does not owe anything on it.'],
+            default => ['neutral', ucfirst((string) $invoice['status']), ''],
+        };
+        return ['tone' => $tone, 'title' => $title, 'text' => $text];
+    }
+
+    /** Payment request / receipt PDF (legacy invoicePdfDocument()). */
+    public static function pdf(string $title, array $invoice, array $items, array $payments, string $footer, string $paymentState = ''): string
+    {
+        $currency = (string) $invoice['currency'];
+        $period = self::periodLabel((string) ($invoice['billing_period'] ?? 'monthly'));
+        $money = static fn ($value) => Format::money($value) . ' ' . $currency;
+        $logo = Settings::value('portal_logo_path', '');
+        return SimplePdf::receipt([
+            'title' => $title,
+            'payment_state' => $paymentState,
+            'subtitle' => 'Generated on ' . date('Y-m-d H:i'),
+            'app_name' => (string) config('app.name', 'FreeRADIUS Web'),
+            'logo_path' => str_starts_with($logo, '/uploads/branding/') ? Branding::file(basename($logo)) : null,
+            'meta' => [
+                'Invoice' => (string) $invoice['invoice_number'],
+                'Customer' => Clients::displayName($invoice),
+                'Username' => (string) $invoice['username'],
+                'Phone' => (string) (($invoice['phone'] ?? '') ?: '-'),
+                'Email' => (string) (($invoice['email'] ?? '') ?: '-'),
+                'Service' => (string) (($invoice['service_name'] ?? '') ?: ($invoice['service_group'] ?? '-')),
+                'Period' => $period,
+                'Issued' => (string) $invoice['issue_date'],
+                'Due' => (string) $invoice['due_date'],
+                'Status' => strtoupper((string) $invoice['status']),
+            ],
+            'items' => array_map(static fn ($item) => [(string) $item['description'], $period, $money($item['line_total'])], $items),
+            'payments' => array_map(static fn ($p) => [(string) $p['payment_date'], Format::money($p['amount']) . ' ' . $p['currency'], (string) $p['method'], (string) (($p['reference'] ?? '') ?: '-')], $payments),
+            'totals' => [
+                'Subtotal' => $money($invoice['subtotal']),
+                'Discount' => $money($invoice['discount_amount']),
+                'Tax' => $money($invoice['tax_amount']),
+                'Invoice total' => $money($invoice['total_amount']),
+                'Amount paid' => $money($invoice['amount_paid']),
+                'Balance due' => $money($invoice['balance_due']),
+            ],
+            'footer' => $footer,
+        ]);
     }
 }
