@@ -30,17 +30,11 @@ final class CustomerNotifications
 
     public static function ready(string $channel): bool
     {
-        if ($channel === 'sms') {
-            $s = NotificationService::smsGatewaySettings();
-            $payload=$s['url'].($s['method']==='POST'?$s['body']:'');
-            $host=strtolower((string)parse_url($s['url'],PHP_URL_HOST));
-            $allowed=array_map('trim',explode(',',strtolower((string)App::env('NOTIFICATION_HTTP_ALLOWED_HOSTS',''))));
-            return $s['enabled'] === '1' && in_array($host,$allowed,true) && (bool)preg_match('#^https?://#i', $s['url']) && str_contains($payload, '{phone}') && str_contains($payload, '{message}');
-        }
-        if ($channel !== 'email') return false;
-        $s = NotificationService::emailGatewaySettings();
-        return $s['enabled'] === '1' && (bool)filter_var($s['from_email'], FILTER_VALIDATE_EMAIL)
-            && ($s['transport'] === 'mail' || trim($s['host']) !== '');
+        return match ($channel) {
+            'sms' => SmsProviders::ready(NotificationService::smsGatewaySettings()),
+            'email' => EmailProviders::ready(NotificationService::emailGatewaySettings()),
+            default => false,
+        };
     }
 
     public static function validateText(string $subject, string $body, string $channel): void

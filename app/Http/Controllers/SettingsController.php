@@ -12,10 +12,12 @@ use App\Support\Auth;
 use App\Support\Branding;
 use App\Support\CustomerNotifications;
 use App\Support\Db;
+use App\Support\EmailProviders;
 use App\Support\NotificationService;
 use App\Support\Retention;
 use App\Support\SchemaCompatibility;
 use App\Support\Settings;
+use App\Support\SmsProviders;
 use App\Support\Security;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -119,9 +121,11 @@ final class SettingsController extends Controller
                 $gateway = (string) $request->query('gateway', in_array($legacy, ['email', 'sms'], true) ? $legacy : '');
                 $data['gateway'] = in_array($gateway, ['email', 'sms'], true) ? $gateway : null;
                 if ($data['gateway'] === 'sms') {
-                    $data['sms'] = NotificationService::smsGatewaySettings();
+                    $data['sms'] = NotificationService::withoutSecrets(NotificationService::smsGatewaySettings(), SmsProviders::SECRETS);
+                    $data['providers'] = SmsProviders::PROVIDERS;
                 } elseif ($data['gateway'] === 'email') {
-                    $data['email'] = array_diff_key(NotificationService::emailGatewaySettings(), ['password' => true]);
+                    $data['email'] = NotificationService::withoutSecrets(NotificationService::emailGatewaySettings(), EmailProviders::SECRETS);
+                    $data['providers'] = EmailProviders::PROVIDERS;
                 }
             } elseif ($view === 'templates') {
                 $templates = CustomerNotifications::templates();
@@ -333,13 +337,39 @@ final class SettingsController extends Controller
     public function saveSmsGateway(Request $request): RedirectResponse
     {
         return $this->saveGateway($request, 'sms', static fn (array $input) => NotificationService::saveSmsGateway($input),
-            ['enabled' => $request->has('sms_gateway_enabled'), 'method' => $request->input('sms_gateway_method', 'GET')], 'SMS gateway settings saved.');
+            ['enabled' => $request->has('sms_gateway_enabled'), 'provider' => $request->input('sms_gateway_provider', 'custom')], 'SMS gateway settings saved.');
     }
 
     public function saveEmailGateway(Request $request): RedirectResponse
     {
         return $this->saveGateway($request, 'email', static fn (array $input) => NotificationService::saveEmailGateway($input),
-            ['enabled' => $request->has('email_gateway_enabled'), 'transport' => $request->input('email_gateway_transport', 'smtp')], 'Email gateway settings saved.');
+            ['enabled' => $request->has('email_gateway_enabled'), 'provider' => $request->input('email_gateway_provider', 'smtp')], 'Email gateway settings saved.');
+    }
+
+    /** Sends one real message through the saved gateway, so an operator can check the setup end to end. */
+    public function testGateway(Request $request, string $channel): RedirectResponse
+    {
+        $to = trim((string) $request->input('to', ''));
+        $back = self::NOTICES . '&view=gateways&gateway=' . $channel;
+        if ($channel === 'email' ? !filter_var($to, FILTER_VALIDATE_EMAIL) : !preg_match('/^\+?[0-9][0-9 ()-]{5,24}$/D', $to)) {
+            return $this->fail($channel === 'email' ? 'Enter the email address to send the test to.' : 'Enter the phone number to send the test to.', $back);
+        }
+        $app = (string) config('app.name');
+        try {
+            NotificationService::withSettings(static function () use ($channel, $to, $app): void {
+                if (!CustomerNotifications::ready($channel)) {
+                    throw new RuntimeException('Save and enable the gateway first.');
+                }
+                $channel === 'email'
+                    ? NotificationService::sendEmail(['email' => $to], $app . ' test email', 'This is a test from ' . $app . '. Your email gateway works.', true)
+                    : NotificationService::sendSms([], $to, 'Test from ' . $app . ': your SMS gateway works.', true);
+            });
+        } catch (Throwable $e) {
+            Audit::log('test_failed', 'settings', $channel . '_gateway', null, ['to' => $to]);
+            return $this->fail('Test not sent: ' . ($e instanceof RuntimeException ? $e->getMessage() : get_class($e)), $back);
+        }
+        Audit::log('test', 'settings', $channel . '_gateway', null, ['to' => $to]);
+        return $this->ok($back, 'Test ' . ($channel === 'email' ? 'email' : 'SMS') . ' accepted by the provider for ' . $to . '. Check that it arrives.');
     }
 
     private function saveGateway(Request $request, string $channel, \Closure $save, array $audit, string $message): RedirectResponse

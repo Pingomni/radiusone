@@ -39,10 +39,18 @@ final class NotificationService
     {
         return [
             'enabled' => self::setting('sms_gateway_enabled', '0'),
+            'provider' => self::setting('sms_gateway_provider', 'custom') ?: 'custom',
+            'country_code' => self::setting('sms_gateway_country_code', ''),
             'method' => self::setting('sms_gateway_method', 'GET') ?: 'GET',
             'url' => self::setting('sms_gateway_url', ''),
             'body' => self::setting('sms_gateway_body', ''),
             'success' => self::setting('sms_gateway_success', ''),
+            'twilio_sid' => self::setting('sms_gateway_twilio_sid', ''),
+            'twilio_token' => self::setting('sms_gateway_twilio_token', ''),
+            'twilio_from' => self::setting('sms_gateway_twilio_from', ''),
+            'infobip_base_url' => self::setting('sms_gateway_infobip_base_url', ''),
+            'infobip_api_key' => self::setting('sms_gateway_infobip_api_key', ''),
+            'infobip_from' => self::setting('sms_gateway_infobip_from', ''),
         ];
     }
 
@@ -50,6 +58,7 @@ final class NotificationService
     {
         return [
             'enabled' => self::setting('email_gateway_enabled', '0'),
+            'provider' => self::setting('email_gateway_provider', 'smtp') ?: 'smtp',
             'transport' => self::setting('email_gateway_transport', 'smtp'),
             'host' => self::setting('email_gateway_host', ''),
             'port' => self::setting('email_gateway_port', '587'),
@@ -60,7 +69,26 @@ final class NotificationService
             'from_name' => self::setting('email_gateway_from_name', App::env('APP_NAME', 'FreeRADIUS Web')),
             'reply_to' => self::setting('email_gateway_reply_to', ''),
             'timeout' => self::setting('email_gateway_timeout', '12'),
+            'ms_tenant_id' => self::setting('email_gateway_ms_tenant_id', ''),
+            'ms_client_id' => self::setting('email_gateway_ms_client_id', ''),
+            'ms_client_secret' => self::setting('email_gateway_ms_client_secret', ''),
+            'mailgun_domain' => self::setting('email_gateway_mailgun_domain', ''),
+            'mailgun_api_key' => self::setting('email_gateway_mailgun_api_key', ''),
+            'mailgun_region' => self::setting('email_gateway_mailgun_region', 'us') ?: 'us',
         ];
+    }
+
+    /**
+     * Settings for the browser: credentials are replaced by whether one is saved.
+     * @param list<string> $secrets
+     */
+    public static function withoutSecrets(array $settings, array $secrets): array
+    {
+        foreach ($secrets as $key) {
+            $settings[$key . '_saved'] = ($settings[$key] ?? '') !== '';
+            unset($settings[$key]);
+        }
+        return $settings;
     }
 
     public static function templates(): array
@@ -90,59 +118,94 @@ final class NotificationService
 
     public static function saveSmsGateway(array $input): void
     {
-        if (isset($input['sms_gateway_enabled'])) {
-            $url = trim((string)($input['sms_gateway_url'] ?? ''));
-            $body = strtoupper((string)($input['sms_gateway_method'] ?? 'GET')) === 'POST' ? (string)($input['sms_gateway_body'] ?? '') : '';
-            if (!preg_match('#^https?://#i', $url) || !str_contains($url.$body, '{phone}') || !str_contains($url.$body, '{message}')) throw new \InvalidArgumentException('Enter a gateway URL and include {phone} and {message} in the URL or POST body.');
-            $host = strtolower((string)parse_url($url, PHP_URL_HOST));
-            $allowed = array_map('trim', explode(',', strtolower((string)App::env('NOTIFICATION_HTTP_ALLOWED_HOSTS', ''))));
-            if (!in_array($host, $allowed, true)) throw new \InvalidArgumentException('This SMS provider host needs administrator approval in NOTIFICATION_HTTP_ALLOWED_HOSTS before it can be enabled.');
-            $parts=parse_url($url);
-            if (!$parts || isset($parts['user']) || isset($parts['pass']) || isset($parts['fragment']) || !in_array($parts['port']??(str_starts_with($url,'https:')?443:80),[80,443],true)) throw new \InvalidArgumentException('Use an HTTP or HTTPS gateway on port 80 or 443 without URL credentials or a fragment.');
-            Security::assertHttpUrl($url);
+        $provider = (string) ($input['sms_gateway_provider'] ?? 'custom');
+        if (!isset(SmsProviders::PROVIDERS[$provider])) {
+            $provider = 'custom';
         }
         $method = strtoupper((string) ($input['sms_gateway_method'] ?? 'GET'));
         if (!in_array($method, ['GET', 'POST'], true)) {
             $method = 'GET';
         }
-        self::saveSetting('sms_gateway_enabled', isset($input['sms_gateway_enabled']) ? '1' : '0');
-        self::saveSetting('sms_gateway_method', $method);
-        self::saveSetting('sms_gateway_url', trim((string) ($input['sms_gateway_url'] ?? '')), true);
-        self::saveSetting('sms_gateway_body', trim((string) ($input['sms_gateway_body'] ?? '')), true);
-        self::saveSetting('sms_gateway_success', trim((string) ($input['sms_gateway_success'] ?? '')));
+        $current = self::smsGatewaySettings();
+        $values = [
+            'enabled' => isset($input['sms_gateway_enabled']) ? '1' : '0',
+            'provider' => $provider,
+            'country_code' => trim((string) ($input['sms_gateway_country_code'] ?? '')),
+            'method' => $method,
+            'url' => trim((string) ($input['sms_gateway_url'] ?? '')),
+            'body' => trim((string) ($input['sms_gateway_body'] ?? '')),
+            'success' => trim((string) ($input['sms_gateway_success'] ?? '')),
+            'twilio_sid' => trim((string) ($input['sms_gateway_twilio_sid'] ?? '')),
+            'twilio_from' => trim((string) ($input['sms_gateway_twilio_from'] ?? '')),
+            'infobip_base_url' => trim((string) ($input['sms_gateway_infobip_base_url'] ?? '')),
+            'infobip_from' => trim((string) ($input['sms_gateway_infobip_from'] ?? '')),
+        ];
+        foreach (SmsProviders::SECRETS as $key) {
+            $typed = trim((string) ($input['sms_gateway_' . $key] ?? ''));
+            $values[$key] = $typed !== '' ? $typed : $current[$key];
+        }
+        if ($values['enabled'] === '1') {
+            if ($provider === 'custom') {
+                self::validateCustomSms($values);
+            }
+            SmsProviders::validate($values);
+        }
+        foreach ($values as $key => $value) {
+            self::saveSetting('sms_gateway_' . $key, $value, in_array($key, ['url', 'body', ...SmsProviders::SECRETS], true));
+        }
+    }
+
+    private static function validateCustomSms(array $values): void
+    {
+        $url = $values['url'];
+        $body = $values['method'] === 'POST' ? $values['body'] : '';
+        if (!preg_match('#^https?://#i', $url) || !str_contains($url.$body, '{phone}') || !str_contains($url.$body, '{message}')) throw new \InvalidArgumentException('Enter a gateway URL and include {phone} and {message} in the URL or POST body.');
+        $host = strtolower((string)parse_url($url, PHP_URL_HOST));
+        $allowed = array_map('trim', explode(',', strtolower((string)App::env('NOTIFICATION_HTTP_ALLOWED_HOSTS', ''))));
+        if (!in_array($host, $allowed, true)) throw new \InvalidArgumentException('This SMS provider host needs administrator approval in NOTIFICATION_HTTP_ALLOWED_HOSTS before it can be enabled.');
+        $parts=parse_url($url);
+        if (!$parts || isset($parts['user']) || isset($parts['pass']) || isset($parts['fragment']) || !in_array($parts['port']??(str_starts_with($url,'https:')?443:80),[80,443],true)) throw new \InvalidArgumentException('Use an HTTP or HTTPS gateway on port 80 or 443 without URL credentials or a fragment.');
+        Security::assertHttpUrl($url);
     }
 
     public static function saveEmailGateway(array $input): void
     {
-        if (isset($input['email_gateway_enabled'])) {
-            if (!filter_var(trim((string)($input['email_gateway_from_email'] ?? '')), FILTER_VALIDATE_EMAIL)) throw new \InvalidArgumentException('Enter a valid sender email address.');
-            if (($input['email_gateway_transport'] ?? 'smtp') !== 'mail' && trim((string)($input['email_gateway_host'] ?? '')) === '') throw new \InvalidArgumentException('Enter your SMTP host.');
-            $reply = trim((string)($input['email_gateway_reply_to'] ?? ''));
-            if ($reply !== '' && !filter_var($reply, FILTER_VALIDATE_EMAIL)) throw new \InvalidArgumentException('Enter a valid reply-to address.');
+        $provider = (string) ($input['email_gateway_provider'] ?? 'smtp');
+        if (!isset(EmailProviders::PROVIDERS[$provider])) {
+            $provider = 'smtp';
         }
         $transport = (string) ($input['email_gateway_transport'] ?? 'smtp');
-        if (!in_array($transport, ['smtp', 'mail'], true)) {
-            $transport = 'smtp';
-        }
         $encryption = (string) ($input['email_gateway_encryption'] ?? 'tls');
-        if (!in_array($encryption, ['tls', 'ssl', 'none'], true)) {
-            $encryption = 'tls';
+        $region = (string) ($input['email_gateway_mailgun_region'] ?? 'us');
+        $current = self::emailGatewaySettings();
+        $values = [
+            'enabled' => isset($input['email_gateway_enabled']) ? '1' : '0',
+            'provider' => $provider,
+            'transport' => in_array($transport, ['smtp', 'mail'], true) ? $transport : 'smtp',
+            'host' => trim((string) ($input['email_gateway_host'] ?? '')),
+            'port' => (string) max(1, min(65535, (int) ($input['email_gateway_port'] ?? 587))),
+            'encryption' => in_array($encryption, ['tls', 'ssl', 'none'], true) ? $encryption : 'tls',
+            'username' => trim((string) ($input['email_gateway_username'] ?? '')),
+            'from_email' => trim((string) ($input['email_gateway_from_email'] ?? '')),
+            'from_name' => trim((string) ($input['email_gateway_from_name'] ?? '')),
+            'reply_to' => trim((string) ($input['email_gateway_reply_to'] ?? '')),
+            'timeout' => (string) max(3, min(60, (int) ($input['email_gateway_timeout'] ?? 12))),
+            'ms_tenant_id' => trim((string) ($input['email_gateway_ms_tenant_id'] ?? '')),
+            'ms_client_id' => trim((string) ($input['email_gateway_ms_client_id'] ?? '')),
+            'mailgun_domain' => strtolower(trim((string) ($input['email_gateway_mailgun_domain'] ?? ''))),
+            'mailgun_region' => in_array($region, ['us', 'eu'], true) ? $region : 'us',
+        ];
+        foreach (EmailProviders::SECRETS as $key) {
+            // Passwords are never trimmed; blank keeps the saved credential.
+            $typed = (string) ($input['email_gateway_' . $key] ?? '');
+            $values[$key] = $typed !== '' ? $typed : $current[$key];
         }
-
-        self::saveSetting('email_gateway_enabled', isset($input['email_gateway_enabled']) ? '1' : '0');
-        self::saveSetting('email_gateway_transport', $transport);
-        self::saveSetting('email_gateway_host', trim((string) ($input['email_gateway_host'] ?? '')));
-        self::saveSetting('email_gateway_port', (string) max(1, min(65535, (int) ($input['email_gateway_port'] ?? 587))));
-        self::saveSetting('email_gateway_encryption', $encryption);
-        self::saveSetting('email_gateway_username', trim((string) ($input['email_gateway_username'] ?? '')), true);
-        $password = (string) ($input['email_gateway_password'] ?? '');
-        if ($password !== '') {
-            self::saveSetting('email_gateway_password', $password, true);
+        if ($values['enabled'] === '1') {
+            EmailProviders::validate($values);
         }
-        self::saveSetting('email_gateway_from_email', trim((string) ($input['email_gateway_from_email'] ?? '')));
-        self::saveSetting('email_gateway_from_name', trim((string) ($input['email_gateway_from_name'] ?? '')));
-        self::saveSetting('email_gateway_reply_to', trim((string) ($input['email_gateway_reply_to'] ?? '')));
-        self::saveSetting('email_gateway_timeout', (string) max(3, min(60, (int) ($input['email_gateway_timeout'] ?? 12))));
+        foreach ($values as $key => $value) {
+            self::saveSetting('email_gateway_' . $key, $value, in_array($key, ['username', ...EmailProviders::SECRETS], true));
+        }
     }
 
     public static function saveTemplates(array $input): void
@@ -190,11 +253,16 @@ final class NotificationService
         if ($settings['enabled'] !== '1') {
             throw new RuntimeException('SMS gateway disabled');
         }
+        $text = $literal ? $message : self::applyTemplate($message, $client, ['phone' => $phone], false);
+        if ($settings['provider'] !== 'custom') {
+            SmsProviders::send($settings, $phone, $text);
+            return;
+        }
         if (trim($settings['url']) === '') {
             throw new RuntimeException('SMS gateway URL missing');
         }
 
-        $vars = self::placeholderValues($client, ['phone' => $phone, 'message' => $literal ? $message : self::applyTemplate($message, $client, ['phone' => $phone], false)]);
+        $vars = self::placeholderValues($client, ['phone' => $phone, 'message' => $text]);
         $url = self::replacePlaceholders($settings['url'], $vars);
         $body = self::replacePlaceholders($settings['body'], $vars);
         $method = strtoupper($settings['method']) === 'POST' ? 'POST' : 'GET';
@@ -225,11 +293,7 @@ final class NotificationService
 
         $subject = $literal ? $subjectTemplate : self::applyTemplate($subjectTemplate, $client, [], false);
         $body = $literal ? $bodyTemplate : self::applyTemplate($bodyTemplate, $client, [], false);
-        if ($settings['transport'] === 'mail') {
-            self::sendViaMail($email, $subject, $body, $settings);
-            return;
-        }
-        self::sendViaSmtp($email, $subject, $body, $settings);
+        EmailProviders::send($settings, $email, $subject, $body);
     }
 
     public static function applyTemplate(string $template, array $client, array $extra = [], bool $encode = true): string
@@ -244,7 +308,7 @@ final class NotificationService
         return strtr($template, $map);
     }
 
-    private static function sendViaMail(string $to, string $subject, string $body, array $settings): void
+    public static function sendViaMail(string $to, string $subject, string $body, array $settings): void
     {
         $headers = [
             'From: ' . self::mailbox((string) $settings['from_email'], (string) $settings['from_name']),
@@ -258,7 +322,7 @@ final class NotificationService
         }
     }
 
-    private static function sendViaSmtp(string $to, string $subject, string $body, array $settings): void
+    public static function sendViaSmtp(string $to, string $subject, string $body, array $settings): void
     {
         $host = trim((string) $settings['host']);
         if ($host === '') {
@@ -337,7 +401,7 @@ final class NotificationService
         return $response;
     }
 
-    private static function mailbox(string $email, string $name): string
+    public static function mailbox(string $email, string $name): string
     {
         $email = trim($email);
         $name = trim($name);

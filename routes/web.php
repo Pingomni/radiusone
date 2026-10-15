@@ -60,6 +60,7 @@ Route::middleware('frweb.auth')->group(function () {
         Route::post('/settings/notifications/templates', [SettingsController::class, 'saveNotificationTemplates']);
         Route::post('/settings/notifications/bulk-preview', [SettingsController::class, 'notificationBulkPreview']);
         Route::post('/settings/notifications/bulk-confirm', [SettingsController::class, 'notificationBulkConfirm']);
+        Route::post('/settings/notifications/{channel}-test', [SettingsController::class, 'testGateway'])->whereIn('channel', ['email', 'sms']);
         foreach (['general', 'sms-template', 'email-template', 'send-sms'] as $legacy) {
             Route::post('/settings/notifications/' . $legacy, [SettingsController::class, 'notificationLegacy']);
         }

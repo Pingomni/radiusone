@@ -3,12 +3,16 @@ declare(strict_types=1);
 namespace App\Support;
 final class HttpGateway
 {
-    public static function destination(string $url, ?\Closure $resolve=null): array
+    /**
+     * @param list<string>|null $hosts approved hosts ("*.example.com" matches any subdomain); null uses
+     *        NOTIFICATION_HTTP_ALLOWED_HOSTS, the administrator's list for custom gateways
+     */
+    public static function destination(string $url, ?\Closure $resolve=null, ?array $hosts=null): array
     {
         Security::assertHttpUrl($url);$p=parse_url($url);$host=strtolower($p['host']);
-        $allowed=array_filter(array_map('trim',explode(',',strtolower((string)App::env('NOTIFICATION_HTTP_ALLOWED_HOSTS','')))));
+        $allowed=$hosts ?? array_filter(array_map('trim',explode(',',strtolower((string)App::env('NOTIFICATION_HTTP_ALLOWED_HOSTS','')))));
         $port=$p['port'] ?? ($p['scheme']==='https'?443:80);
-        if(!in_array($host,$allowed,true) || isset($p['user']) || isset($p['pass']) || isset($p['fragment']) || !in_array($port,[80,443],true)){
+        if(!self::approved($host,$allowed) || isset($p['user']) || isset($p['pass']) || isset($p['fragment']) || !in_array($port,[80,443],true)){
             throw new \RuntimeException('Gateway destination is not approved.');
         }
         $resolve ??= static function($host){
@@ -26,6 +30,18 @@ final class HttpGateway
         }
         return [$host,$port,$ips[0]];
     }
+    /** @param list<string> $allowed */
+    public static function approved(string $host, array $allowed): bool
+    {
+        foreach ($allowed as $entry) {
+            $entry = strtolower(trim($entry));
+            if ($entry === $host || (str_starts_with($entry, '*.') && str_ends_with($host, substr($entry, 1)) && strlen($host) > strlen($entry) - 1)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public static function request(string $url, string $method, string $body): array
     {
         if(!function_exists('curl_init')){throw new \RuntimeException('SMS delivery requires PHP cURL; no alternate redirect policy is used.');}

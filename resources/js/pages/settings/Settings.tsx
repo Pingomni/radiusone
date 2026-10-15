@@ -7,6 +7,7 @@ import { DataTable } from '@/components/table';
 import { Badge, Check, Empty, Field, Select, Tag, TextArea, type TagData } from '@/components/ui';
 import AppLayout, { BrandLogo } from '@/layouts/AppLayout';
 import { useCan } from '@/lib/auth';
+import { bind } from '@/lib/form';
 
 type Overview = { engine: TagData; rows: [string, string][] };
 type Operator = { id: number; name: string; email: string; username: string; role: string; enabled: boolean; twoFactor: TagData; lastLogin: string; self: boolean };
@@ -16,12 +17,22 @@ type Bulk = { channel: 'email' | 'sms'; q: string; rows: { id: number; username:
 type PreviewItem = { username: string; recipient: string; reason: string; subject: string; body: string };
 type Preview = { token: string; channel: string; eligible: number; items: PreviewItem[]; sample: PreviewItem };
 type HistoryRow = { id: number; queued: string; username: string; template: string; channel: string; recipient: string; status: TagData; reason: string };
+type SmsGateway = {
+    enabled: string; provider: string; country_code: string; method: string; url: string; body: string; success: string;
+    twilio_sid: string; twilio_from: string; twilio_token_saved: boolean; infobip_base_url: string; infobip_from: string; infobip_api_key_saved: boolean;
+};
+type EmailGateway = {
+    enabled: string; provider: string; transport: string; host: string; port: string; encryption: string; username: string; from_email: string; from_name: string;
+    reply_to: string; timeout: string; password_saved: boolean; ms_tenant_id: string; ms_client_id: string; ms_client_secret_saved: boolean;
+    mailgun_domain: string; mailgun_region: string; mailgun_api_key_saved: boolean;
+};
 type Notifications = {
     view: 'templates' | 'gateways' | 'bulk' | 'preview' | 'history';
     ready: { email: boolean; sms: boolean };
     gateway?: 'email' | 'sms' | null;
-    sms?: { enabled: string; method: string; url: string; body: string; success: string };
-    email?: { enabled: string; transport: string; host: string; port: string; encryption: string; username: string; from_email: string; from_name: string; reply_to: string; timeout: string };
+    providers?: Record<string, string>;
+    sms?: SmsGateway;
+    email?: EmailGateway;
     labels?: Record<string, string>;
     tokens?: string[];
     templates?: Record<string, Template>;
@@ -298,64 +309,171 @@ function RetentionTab({ r }: { r: Retention }) {
     );
 }
 
-function GatewayPanel({ n }: { n: Notifications }) {
-    const sms = useForm({
-        sms_gateway_enabled: n.sms?.enabled === '1',
-        sms_gateway_method: n.sms?.method ?? 'GET',
-        sms_gateway_url: n.sms?.url ?? '',
-        sms_gateway_body: n.sms?.body ?? '',
-        sms_gateway_success: n.sms?.success ?? '',
+/** Credential input: blank keeps the saved value, which is never sent to the browser. */
+function SecretField({ label, name, saved, value, onChange, error, hint }: { label: string; name: string; saved: boolean; value: string; onChange: (v: string) => void; error?: string; hint?: string }) {
+    return (
+        <Field
+            label={label}
+            name={name}
+            type="password"
+            autoComplete="new-password"
+            value={value}
+            error={error}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder={saved ? 'Saved — leave blank to keep' : ''}
+            hint={[hint, saved ? 'A value is saved. Type a new one only to replace it.' : ''].filter(Boolean).join(' ') || undefined}
+        />
+    );
+}
+
+/** Sends one real message through the saved gateway. */
+function TestSend({ channel, ready }: { channel: 'email' | 'sms'; ready: boolean }) {
+    const form = useForm({ to: '' });
+    if (!ready) return <p className="span2 hint">Save and enable the gateway to send a test.</p>;
+    return (
+        <form className="span2 inline-form gateway-test" onSubmit={(e) => { e.preventDefault(); form.post(`/settings/notifications/${channel}-test`, { preserveScroll: true }); }}>
+            <Field
+                label={channel === 'email' ? 'Send a test email to' : 'Send a test SMS to'}
+                name="to"
+                type={channel === 'email' ? 'email' : 'tel'}
+                required
+                placeholder={channel === 'email' ? 'you@example.com' : '+355 69 123 4567'}
+                value={form.data.to}
+                onChange={(e) => form.setData('to', e.target.value)}
+            />
+            <button disabled={form.processing}>Send test</button>
+        </form>
+    );
+}
+
+function SmsGatewayForm({ g, providers, ready }: { g: SmsGateway; providers: Record<string, string>; ready: boolean }) {
+    const form = useForm({
+        sms_gateway_enabled: g.enabled === '1',
+        sms_gateway_provider: g.provider,
+        sms_gateway_country_code: g.country_code,
+        sms_gateway_method: g.method,
+        sms_gateway_url: g.url,
+        sms_gateway_body: g.body,
+        sms_gateway_success: g.success,
+        sms_gateway_twilio_sid: g.twilio_sid,
+        sms_gateway_twilio_token: '',
+        sms_gateway_twilio_from: g.twilio_from,
+        sms_gateway_infobip_base_url: g.infobip_base_url,
+        sms_gateway_infobip_api_key: '',
+        sms_gateway_infobip_from: g.infobip_from,
     });
-    const email = useForm({
-        email_gateway_enabled: n.email?.enabled === '1',
-        email_gateway_transport: n.email?.transport ?? 'smtp',
-        email_gateway_host: n.email?.host ?? '',
-        email_gateway_port: n.email?.port ?? '587',
-        email_gateway_encryption: n.email?.encryption ?? 'tls',
-        email_gateway_timeout: n.email?.timeout ?? '12',
-        email_gateway_username: n.email?.username ?? '',
+    const provider = form.data.sms_gateway_provider;
+    return (
+        <Sheet title="SMS gateway" description="Choose your SMS provider and enter the details from its dashboard." icon="message" meta={g.enabled === '1' ? <Badge tone="success">gateway enabled</Badge> : <Badge tone="warning">gateway disabled</Badge>}>
+            <form className="form-grid" onSubmit={(event) => { event.preventDefault(); form.post('/settings/notifications/sms-gateway', { preserveScroll: true, onFinish: () => form.setData((d) => ({ ...d, sms_gateway_twilio_token: '', sms_gateway_infobip_api_key: '' })) }); }}>
+                <Check label="Enable SMS gateway" name="sms_gateway_enabled" checked={form.data.sms_gateway_enabled} onChange={(e) => form.setData('sms_gateway_enabled', e.target.checked)} />
+                <Select label="Provider" options={providers} {...bind(form, 'sms_gateway_provider')} />
+                <Field label="Default country code" placeholder="355" hint="Local numbers such as 069… are sent as +355 69…. Leave blank if every saved number already includes its country code." {...bind(form, 'sms_gateway_country_code')} />
+                {provider === 'twilio' && (
+                    <>
+                        <Field label="Account SID" placeholder="AC…" hint="Twilio Console → Account info." {...bind(form, 'sms_gateway_twilio_sid')} />
+                        <SecretField label="Auth token" name="sms_gateway_twilio_token" saved={g.twilio_token_saved} value={form.data.sms_gateway_twilio_token} error={form.errors.sms_gateway_twilio_token} onChange={(v) => form.setData('sms_gateway_twilio_token', v)} />
+                        <Field label="Sender" hint="Your Twilio number (+1…), a Messaging Service SID (MG…), or an alphanumeric sender ID where your country allows it." {...bind(form, 'sms_gateway_twilio_from')} />
+                    </>
+                )}
+                {provider === 'infobip' && (
+                    <>
+                        <Field label="Base URL" placeholder="xxxxx.api.infobip.com" hint="Shown on the Infobip portal home page; it is specific to your account." {...bind(form, 'sms_gateway_infobip_base_url')} />
+                        <SecretField label="API key" name="sms_gateway_infobip_api_key" saved={g.infobip_api_key_saved} value={form.data.sms_gateway_infobip_api_key} error={form.errors.sms_gateway_infobip_api_key} onChange={(v) => form.setData('sms_gateway_infobip_api_key', v)} hint="Infobip portal → Developer tools → API keys." />
+                        <Field label="Sender" hint="A registered sender name or number." {...bind(form, 'sms_gateway_infobip_from')} />
+                    </>
+                )}
+                {provider === 'custom' && (
+                    <>
+                        <Select label="HTTP method" options={{ GET: 'GET', POST: 'POST' }} {...bind(form, 'sms_gateway_method')} />
+                        <TextArea label="Gateway URL template" hint="Include {phone} and {message} in the URL, or in the body for POST. Your administrator must approve the provider host before enabling SMS." {...bind(form, 'sms_gateway_url')} />
+                        <TextArea label="POST body template" hint="Form-encoded fields, for example: to={phone}&text={message}. Used only with POST." {...bind(form, 'sms_gateway_body')} />
+                        <Field label="Success text contains" hint="Optional. Leave blank to accept any HTTP 2xx response." {...bind(form, 'sms_gateway_success')} />
+                    </>
+                )}
+                <div className="span2 form-actions"><button className="primary" disabled={form.processing}>Save SMS gateway</button></div>
+            </form>
+            <TestSend channel="sms" ready={ready} />
+        </Sheet>
+    );
+}
+
+function EmailGatewayForm({ g, providers, ready }: { g: EmailGateway; providers: Record<string, string>; ready: boolean }) {
+    const form = useForm({
+        email_gateway_enabled: g.enabled === '1',
+        email_gateway_provider: g.provider,
+        email_gateway_transport: g.transport,
+        email_gateway_host: g.host,
+        email_gateway_port: g.port,
+        email_gateway_encryption: g.encryption,
+        email_gateway_timeout: g.timeout,
+        email_gateway_username: g.username,
         email_gateway_password: '',
-        email_gateway_from_email: n.email?.from_email ?? '',
-        email_gateway_from_name: n.email?.from_name ?? '',
-        email_gateway_reply_to: n.email?.reply_to ?? '',
+        email_gateway_from_email: g.from_email,
+        email_gateway_from_name: g.from_name,
+        email_gateway_reply_to: g.reply_to,
+        email_gateway_ms_tenant_id: g.ms_tenant_id,
+        email_gateway_ms_client_id: g.ms_client_id,
+        email_gateway_ms_client_secret: '',
+        email_gateway_mailgun_domain: g.mailgun_domain,
+        email_gateway_mailgun_region: g.mailgun_region,
+        email_gateway_mailgun_api_key: '',
     });
-    if (n.gateway === 'sms' && n.sms) {
-        return (
-            <Sheet title="SMS gateway" description="Connect your SMS provider and define a successful response." icon="message" meta={n.sms.enabled === '1' ? <Badge tone="success">gateway enabled</Badge> : <Badge tone="warning">gateway disabled</Badge>}>
-                <form className="form-grid" onSubmit={(event) => { event.preventDefault(); sms.post('/settings/notifications/sms-gateway', { preserveScroll: true }); }}>
-                    <Check label="Enable SMS gateway" name="sms_gateway_enabled" checked={sms.data.sms_gateway_enabled} onChange={(e) => sms.setData('sms_gateway_enabled', e.target.checked)} />
-                    <Select label="HTTP method" name="sms_gateway_method" options={{ GET: 'GET', POST: 'POST' }} value={sms.data.sms_gateway_method} onChange={(e) => sms.setData('sms_gateway_method', e.target.value)} />
-                    <TextArea label="Gateway URL template" name="sms_gateway_url" hint="Include {phone} and {message} in the URL, or in the body for POST. Your administrator must approve the provider host before enabling SMS." value={sms.data.sms_gateway_url} onChange={(e) => sms.setData('sms_gateway_url', e.target.value)} />
-                    <TextArea label="POST body template" name="sms_gateway_body" hint="Form-encoded fields, for example: to={phone}&text={message}. Used only with POST." value={sms.data.sms_gateway_body} onChange={(e) => sms.setData('sms_gateway_body', e.target.value)} />
-                    <Field label="Success text contains" name="sms_gateway_success" hint="Optional. Leave blank to accept any HTTP 2xx response." value={sms.data.sms_gateway_success} onChange={(e) => sms.setData('sms_gateway_success', e.target.value)} />
-                    <div className="span2 form-actions"><button className="primary" disabled={sms.processing}>Save SMS gateway</button></div>
-                </form>
-            </Sheet>
-        );
-    }
-    if (n.gateway === 'email' && n.email) {
-        const text = (label: string, key: keyof typeof email.data, props: Record<string, unknown> = {}) => (
-            <Field label={label} name={key} value={String(email.data[key])} onChange={(e) => email.setData(key, e.target.value as never)} {...props} />
-        );
-        return (
-            <Sheet title="Email gateway" description="Set your mail connection and the sender customers will recognize." icon="mail" meta={n.email.enabled === '1' ? <Badge tone="success">gateway enabled</Badge> : <Badge tone="warning">gateway disabled</Badge>}>
-                <form className="form-grid" onSubmit={(event) => { event.preventDefault(); email.post('/settings/notifications/email-gateway', { preserveScroll: true, onFinish: () => email.setData('email_gateway_password', '') }); }}>
-                    <Check label="Enable email gateway" name="email_gateway_enabled" checked={email.data.email_gateway_enabled} onChange={(e) => email.setData('email_gateway_enabled', e.target.checked)} />
-                    <Select label="Transport" name="email_gateway_transport" options={{ smtp: 'SMTP', mail: 'PHP mail()' }} value={email.data.email_gateway_transport} onChange={(e) => email.setData('email_gateway_transport', e.target.value)} />
-                    {text('SMTP host', 'email_gateway_host')}
-                    {text('SMTP port', 'email_gateway_port', { type: 'number', min: 1, max: 65535 })}
-                    <Select label="Encryption" name="email_gateway_encryption" options={{ tls: 'STARTTLS', ssl: 'SSL/TLS', none: 'None' }} value={email.data.email_gateway_encryption} onChange={(e) => email.setData('email_gateway_encryption', e.target.value)} />
-                    {text('Timeout seconds', 'email_gateway_timeout', { type: 'number', min: 3, max: 60 })}
-                    {text('SMTP username', 'email_gateway_username')}
-                    {text('SMTP password', 'email_gateway_password', { type: 'password', autoComplete: 'new-password', hint: 'Leave blank to keep the current password.' })}
-                    {text('From email', 'email_gateway_from_email', { type: 'email' })}
-                    {text('From name', 'email_gateway_from_name')}
-                    {text('Reply-to email', 'email_gateway_reply_to', { type: 'email' })}
-                    <div className="span2 form-actions"><button className="primary" disabled={email.processing}>Save email gateway</button></div>
-                </form>
-            </Sheet>
-        );
-    }
+    const provider = form.data.email_gateway_provider;
+    const clearSecrets = () => form.setData((d) => ({ ...d, email_gateway_password: '', email_gateway_ms_client_secret: '', email_gateway_mailgun_api_key: '' }));
+    const secret = (label: string, key: 'email_gateway_password' | 'email_gateway_ms_client_secret' | 'email_gateway_mailgun_api_key', saved: boolean, hint?: string) => (
+        <SecretField label={label} name={key} saved={saved} value={form.data[key]} error={form.errors[key]} onChange={(v) => form.setData(key, v)} hint={hint} />
+    );
+    return (
+        <Sheet title="Email gateway" description="Choose your email provider and the sender customers will recognize." icon="mail" meta={g.enabled === '1' ? <Badge tone="success">gateway enabled</Badge> : <Badge tone="warning">gateway disabled</Badge>}>
+            <form className="form-grid" onSubmit={(event) => { event.preventDefault(); form.post('/settings/notifications/email-gateway', { preserveScroll: true, onFinish: clearSecrets }); }}>
+                <Check label="Enable email gateway" name="email_gateway_enabled" checked={form.data.email_gateway_enabled} onChange={(e) => form.setData('email_gateway_enabled', e.target.checked)} />
+                <Select label="Provider" options={providers} {...bind(form, 'email_gateway_provider')} />
+                {provider === 'google' && (
+                    <>
+                        <Field label="Google account" type="email" hint="The Gmail or Google Workspace address that signs in." {...bind(form, 'email_gateway_username')} />
+                        {secret('App password', 'email_gateway_password', g.password_saved, 'Google Account → Security → 2-Step Verification → App passwords. Your normal password does not work.')}
+                    </>
+                )}
+                {provider === 'microsoft' && (
+                    <>
+                        <p className="span2 hint">In Microsoft Entra (Azure), register an app, add the Microsoft Graph application permission Mail.Send, grant admin consent, and create a client secret. The From email below must be a mailbox in your organisation.</p>
+                        <Field label="Tenant ID or domain" placeholder="contoso.onmicrosoft.com" {...bind(form, 'email_gateway_ms_tenant_id')} />
+                        <Field label="Application (client) ID" {...bind(form, 'email_gateway_ms_client_id')} />
+                        {secret('Client secret', 'email_gateway_ms_client_secret', g.ms_client_secret_saved, 'The secret value, not its ID. Secrets expire; set a reminder to renew it.')}
+                    </>
+                )}
+                {provider === 'mailgun' && (
+                    <>
+                        <Field label="Sending domain" placeholder="mg.example.com" {...bind(form, 'email_gateway_mailgun_domain')} />
+                        <Select label="Region" options={{ us: 'US (api.mailgun.net)', eu: 'EU (api.eu.mailgun.net)' }} {...bind(form, 'email_gateway_mailgun_region')} />
+                        {secret('API key', 'email_gateway_mailgun_api_key', g.mailgun_api_key_saved, 'Mailgun → API Security → sending or private API key.')}
+                    </>
+                )}
+                {provider === 'smtp' && (
+                    <>
+                        <Select label="Transport" options={{ smtp: 'SMTP', mail: 'PHP mail()' }} {...bind(form, 'email_gateway_transport')} />
+                        <Field label="SMTP host" {...bind(form, 'email_gateway_host')} />
+                        <Field label="SMTP port" type="number" min={1} max={65535} {...bind(form, 'email_gateway_port')} />
+                        <Select label="Encryption" options={{ tls: 'STARTTLS', ssl: 'SSL/TLS', none: 'None' }} {...bind(form, 'email_gateway_encryption')} />
+                        <Field label="Timeout seconds" type="number" min={3} max={60} {...bind(form, 'email_gateway_timeout')} />
+                        <Field label="SMTP username" {...bind(form, 'email_gateway_username')} />
+                        {secret('SMTP password', 'email_gateway_password', g.password_saved)}
+                    </>
+                )}
+                <Field label="From email" type="email" hint={provider === 'mailgun' ? 'An address on your Mailgun sending domain.' : undefined} {...bind(form, 'email_gateway_from_email')} />
+                <Field label="From name" {...bind(form, 'email_gateway_from_name')} />
+                <Field label="Reply-to email" type="email" {...bind(form, 'email_gateway_reply_to')} />
+                <div className="span2 form-actions"><button className="primary" disabled={form.processing}>Save email gateway</button></div>
+            </form>
+            <TestSend channel="email" ready={ready} />
+        </Sheet>
+    );
+}
+
+function GatewayPanel({ n }: { n: Notifications }) {
+    if (n.gateway === 'sms' && n.sms) return <SmsGatewayForm g={n.sms} providers={n.providers ?? {}} ready={n.ready.sms} />;
+    if (n.gateway === 'email' && n.email) return <EmailGatewayForm g={n.email} providers={n.providers ?? {}} ready={n.ready.email} />;
     return null;
 }
 
