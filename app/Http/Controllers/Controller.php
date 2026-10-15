@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers;
 
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use InvalidArgumentException;
 use PDOException;
 use RuntimeException;
@@ -12,6 +13,30 @@ use Throwable;
 
 abstract class Controller
 {
+    /**
+     * Request input shaped like a classic HTML form post, which is what app/Support expects:
+     * unchecked boxes (false/null) are absent, true is '1', numbers are strings. Files are left out.
+     */
+    protected function formInput(Request $request): array
+    {
+        $normalise = static function (array $values) use (&$normalise): array {
+            $out = [];
+            foreach ($values as $key => $value) {
+                if ($value === false || $value === null) {
+                    continue;
+                }
+                $out[$key] = match (true) {
+                    $value === true => '1',
+                    is_int($value), is_float($value) => (string) $value,
+                    is_array($value) => $normalise($value),
+                    default => $value,
+                };
+            }
+            return $out;
+        };
+        return $normalise($request->except(array_keys($request->allFiles())));
+    }
+
     /** Redirect with a success message (legacy ok()). */
     protected function ok(string $path, string $message): RedirectResponse
     {
