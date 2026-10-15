@@ -37,6 +37,12 @@ final class Present
         return (int) ($row['coa_enabled'] ?? 0) === 1 ? self::tag('CoA', null) : self::tag('CoA off', 'warning');
     }
 
+    /** Key-figure card (resources/js/components/metrics.tsx). */
+    public static function metric(string $label, string|int $value, string $icon, string $tone = '', string $href = ''): array
+    {
+        return ['label' => $label, 'value' => (string) $value, 'icon' => $icon, 'tone' => $tone, 'href' => $href];
+    }
+
     public static function uptime(int $seconds): string
     {
         $days = intdiv($seconds, 86400);

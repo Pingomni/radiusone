@@ -100,7 +100,7 @@ Route::middleware('frweb.auth')->group(function () {
     // Network operations queue.
     Route::middleware('permission:operations.view')->group(function () {
         Route::get('/operations', [OperationsController::class, 'index']);
-        Route::post('/operations/{id}/retry', [OperationsController::class, 'retry'])->whereNumber('id');
+        Route::post('/operations/{id}/retry', [OperationsController::class, 'retry'])->whereNumber('id')->middleware('recent-auth');
     });
 
     // Services and static IP pools.

@@ -93,6 +93,30 @@ abstract class TestCase extends BaseTestCase
         return Db::row('SELECT * FROM portal_users WHERE username=?', [$username]);
     }
 
+    /**
+     * Inserts a fixture row, filling every NOT NULL column that has no default with a neutral
+     * value for its type, and returns the new id (or 0 for tables without one).
+     */
+    protected function insertRow(string $table, array $values): int
+    {
+        $columns = Db::select('SELECT COLUMN_NAME, DATA_TYPE, COLUMN_TYPE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND IS_NULLABLE="NO" AND COLUMN_DEFAULT IS NULL AND EXTRA NOT LIKE "%auto_increment%"', [$table]);
+        foreach ($columns as $column) {
+            if (array_key_exists($column['COLUMN_NAME'], $values)) {
+                continue;
+            }
+            $values[$column['COLUMN_NAME']] = match ($column['DATA_TYPE']) {
+                'date' => date('Y-m-d'),
+                'datetime', 'timestamp' => date('Y-m-d H:i:s'),
+                'int', 'bigint', 'tinyint', 'smallint', 'mediumint', 'decimal', 'double', 'float' => 0,
+                'enum' => trim(explode(',', substr($column['COLUMN_TYPE'], 5, -1))[0], "'"),
+                default => '',
+            };
+        }
+        $names = array_keys($values);
+        Db::exec('INSERT INTO `' . $table . '` (`' . implode('`,`', $names) . '`) VALUES (' . implode(',', array_fill(0, count($names), '?')) . ')', array_values($values));
+        return (int) Db::pdo()->lastInsertId();
+    }
+
     /** Current TOTP code for a base32 secret (same algorithm as Security::totpCounter). */
     protected function totp(string $secret, int $offset = 0): string
     {

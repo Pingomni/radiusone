@@ -1,35 +1,15 @@
 import { Link } from '@inertiajs/react';
 import Icon from '@/components/Icon';
 import { LivePanel } from '@/components/LivePanel';
+import { MetricCards, type Metric } from '@/components/metrics';
 import { DataTable } from '@/components/table';
 import { Badge, Empty, Panel, Tags, Time, type TagData } from '@/components/ui';
 import AppLayout from '@/layouts/AppLayout';
 import { useCan, useShared } from '@/lib/auth';
 
-type Metric = { label: string; value: string; icon: string; tone: string; href: string };
 type NasCard = { id: number; name: string; address: string; href: string | null; tags: TagData[] };
 type Reject = { username: string; reply: string; authdate: string };
 type TopUser = { username: string; down: string; up: string; total: string };
-
-function Kpis({ metrics }: { metrics: Metric[] }) {
-    return (
-        <section className="cards dashboard-cards">
-            {metrics.map((m) => (
-                <MetricCardWithIcon key={m.label} metric={m} />
-            ))}
-        </section>
-    );
-}
-
-function MetricCardWithIcon({ metric }: { metric: Metric }) {
-    const body = (
-        <div className={`metric dashboard-metric ${metric.tone}`.trim()}>
-            <span className="metric-icon"><Icon name={metric.icon} className="metric-svg" /></span>
-            <div><span>{metric.label}</span><strong>{metric.value}</strong></div>
-        </div>
-    );
-    return metric.href ? <Link className="metric-link" href={metric.href}>{body}</Link> : body;
-}
 
 function NasCards({ cards }: { cards: NasCard[] }) {
     if (!cards.length) return <Empty>No NAS devices configured.</Empty>;
@@ -77,7 +57,7 @@ export default function Dashboard({ kpis, nas, rejects, topUsers }: { kpis: Metr
                     {can('billing.view') && <Link className="button" href="/billing?status=overdue">Review overdue invoices</Link>}
                 </div>
             </div>
-            <LivePanel title="Key figures" url="/fragments/dashboard-kpis" interval={60} initial={kpis} className="live-bare" render={(m) => <Kpis metrics={m} />} />
+            <LivePanel title="Key figures" url="/fragments/dashboard-kpis" interval={60} initial={kpis} className="live-bare" render={(m) => <MetricCards metrics={m} />} />
             <div className="dashboard-grid">
                 <LivePanel
                     title="NAS status"
