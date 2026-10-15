@@ -77,7 +77,7 @@ export default function Dashboard({ kpis, nas, rejects, topUsers }: { kpis: Metr
                         render={(rows) => <Rejects rows={rows} linkClients={can('clients.view')} timezone={clock.timezone} />}
                     />
                 )}
-                <Panel title="Top users this month (sessions started this month)">
+                <Panel title="Top users this month">
                     <DataTable
                         rows={topUsers}
                         columns={[

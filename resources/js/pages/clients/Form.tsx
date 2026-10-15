@@ -84,7 +84,7 @@ function OverviewPanel({ username, initial }: { username: string; initial: Overv
             render={(o) => (
                 <>
                     {o.items.map((i) => (
-                        <div className="kv" key={i.label}><span>{i.label}</span>{i.tone ? <Badge tone={i.tone}>{i.value}</Badge> : <strong>{i.value}</strong>}</div>
+                        <div className="kv" key={i.label}><span>{i.label}</span>{i.tone ? <Badge tone={i.tone}>{i.value}</Badge> : <strong className={i.value.length <= 22 ? 'nowrap' : undefined}>{i.value}</strong>}</div>
                     ))}
                     <Link className="button wide" href={`/clients/${enc}/diagnostics`}>Connection diagnostics</Link>
                     {o.revealPassword && (
@@ -103,7 +103,7 @@ function OverviewPanel({ username, initial }: { username: string; initial: Overv
                         />
                     ) : (
                         <>
-                            <button type="button" className="danger wide" disabled>Disconnect unavailable</button>
+                            <button type="button" className="wide" disabled>Disconnect unavailable</button>
                             <small className="overview-note">{o.disconnect.reason}</small>
                         </>
                     ))}
@@ -204,7 +204,9 @@ export default function ClientForm({ values, draftRestored, draftTab, canEdit, c
     const can = useCan();
     const ask = useConfirm();
     const form = useForm<Values>({ ...values, id_front: null, id_back: null });
-    const [tab, setTab] = useState(draftTab ?? 'account');
+    const [tab, setTab] = useState(draftTab ?? (typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('tab') : null) ?? 'account');
+    // Accounting, Billing and Logs are read-only views: the form's Save bar does not apply there.
+    const formTab = !['accounting', 'billing', 'logs'].includes(tab);
     const [generated, setGenerated] = useState(false);
     const disabled = !canEdit;
     const dhcp = form.data.auth_method === 'dhcp';
@@ -407,7 +409,8 @@ export default function ClientForm({ values, draftRestored, draftTab, canEdit, c
                 />
             ),
         },
-    ];
+    // A client that is not saved yet has no sessions, invoices or history to show.
+    ].filter((t) => client || !['accounting', 'billing', 'logs'].includes(t.key));
 
     return (
         <AppLayout title={client ? 'Client Profile' : 'New Client'}>
@@ -429,10 +432,10 @@ export default function ClientForm({ values, draftRestored, draftTab, canEdit, c
                     )}
                     <ErrorSummary errors={form.errors} />
                     <Tabs label="Client sections" tabs={tabs} defaultTab={tab} onChange={setTab} />
-                    <div className={canEdit ? 'form-actions sticky-actions' : 'form-actions'}>
+                    {formTab && <div className={canEdit ? 'form-actions sticky-actions' : 'form-actions'}>
                         {canEdit && <button className="primary" disabled={form.processing}>{client ? 'Save changes' : 'Create client'}</button>}
                         <Link className="button" href="/clients">Back to clients</Link>
-                    </div>
+                    </div>}
                 </form>
                 {client ? <OverviewPanel username={client.username} initial={client.overview} /> : (
                     <aside className="overview">

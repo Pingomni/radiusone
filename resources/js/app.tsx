@@ -9,8 +9,10 @@ void createInertiaApp({
     withApp(app) {
         return <ConfirmProvider>{app}</ConfirmProvider>;
     },
+    // The bar's CSS lives in app.css: the Content Security Policy (style-src 'self') blocks the <style> Inertia would inject.
     progress: {
-        color: '#2563eb',
         delay: 250,
+        includeCSS: false,
+        showSpinner: false,
     },
 });

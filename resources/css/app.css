@@ -399,6 +399,7 @@ label.check small, label.checkbox small { flex-basis: 100%; }
   font-size: var(--fs-md);
   font-weight: 600;
 }
+.form-grid > .form-section-title { grid-column: 1 / -1; }
 .form-grid > .form-section-title:first-child { margin-top: 0; }
 .form-actions {
   display: flex;
@@ -707,6 +708,16 @@ td > .link + .link, td > a + form, td > a + a, td > a + .link, td > form + form 
 .list-cell-stack { display: grid; gap: 1px; line-height: 1.3; }
 .list-cell-stack > a { font-weight: 600; }
 .list-subline, .list-cell-caption { display: block; color: var(--text-muted); font-size: var(--fs-sm); font-weight: 400; }
+/* The client list keeps the auth badge under the username (narrower column), and stacks account and connection badges. */
+.clients-page .list-cell-stack:has(> .list-subline > .badge:only-child) { display: grid; }
+.list-badges { justify-items: start; gap: 3px; }
+/* Long names and plan titles may wrap on laptop widths rather than push columns out of view. */
+@media (max-width: 1439px) {
+  td.cell-wrap { white-space: normal; min-width: 7.5em; }
+  .clients-page th, .clients-page td { padding-left: 7px; padding-right: 7px; }
+}
+/* "IP 100.64.1.11" on one line: a caption beside its value keeps list rows compact. */
+.list-cell-stack > span > .list-cell-caption { display: inline-block; min-width: 2.6em; }
 .list-cell-stack:has(> .list-subline > .badge:only-child) { display: flex; align-items: center; gap: 6px; }
 
 .table-tools { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px; }
@@ -816,6 +827,9 @@ form.list-filterbar { padding: var(--sp-2) var(--sp-3); }
 .kv:last-child { border-bottom: 0; }
 .kv > span:first-child { color: var(--text-muted); }
 .kv > strong { color: var(--text-strong); font-weight: 600; text-align: right; overflow-wrap: anywhere; }
+/* Short values (sizes, dates, IPs) never split across lines; the label wraps instead. */
+.kv > strong.nowrap { white-space: nowrap; overflow-wrap: normal; }
+.kv > span:first-child { min-width: 0; }
 .settings-list { display: grid; }
 .settings-list > div {
   display: grid;
@@ -1863,6 +1877,27 @@ td .list-menu > summary:hover { border-color: var(--line); background: var(--sur
 .backup-destination-head h3 { margin: 0; }
 .backup-destination-head .toolbar-actions { display: flex; flex-wrap: wrap; gap: var(--sp-2); align-items: center; }
 .backup-sftp-key { display: grid; gap: var(--sp-2); }
-.backup-sftp-key textarea { font-family: var(--font-mono, monospace); font-size: 12px; }
+.backup-key-line { display: flex; gap: var(--sp-2); align-items: center; }
+.backup-key-line code { flex: 1; min-width: 0; padding: 6px 8px; overflow-x: auto; white-space: nowrap; font-family: var(--font-mono); font-size: 12px; }
+.backup-local-form { display: flex; flex-wrap: wrap; gap: var(--sp-2); align-items: flex-end; margin-bottom: var(--sp-3); }
 .gateway-test { display: flex; flex-wrap: wrap; gap: var(--sp-2); align-items: flex-end; margin-top: var(--sp-3); }
 @media (max-width: 640px) { .backup-destination-head .toolbar-actions { width: 100%; } }
+
+/* Page-load progress bar (Inertia's nprogress markup; its injected <style> is blocked by the CSP). */
+#nprogress { pointer-events: none; position: fixed; inset: 0 0 auto 0; width: 100%; height: 0; margin: 0; padding: 0; border: 0; background: none; overflow: visible; }
+#nprogress::backdrop { display: none; }
+#nprogress .bar { position: fixed; z-index: 1031; top: 0; left: 0; width: 100%; height: 3px; background: var(--accent); }
+#nprogress .peg { display: block; position: absolute; right: 0; width: 100px; height: 100%; box-shadow: 0 0 10px var(--accent), 0 0 5px var(--accent); transform: rotate(3deg) translate(0, -4px); }
+
+/* Phones: data tables become one card per row, each value labelled by its column (data-label from DataTable). */
+@media (max-width: 760px) {
+  .table-wrap { overflow-x: visible; }
+  .table-wrap table, .table-wrap tbody, .table-wrap tr, .table-wrap td { display: block; width: 100%; }
+  .table-wrap thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .table-wrap tr { padding: var(--sp-2) var(--sp-3); border-bottom: 1px solid var(--line); }
+  .table-wrap td { display: grid; grid-template-columns: minmax(6.5em, 34%) minmax(0, 1fr); gap: var(--sp-2); align-items: start; padding: 3px 0; border: 0; white-space: normal; text-align: left; }
+  .table-wrap td::before { content: attr(data-label); color: var(--text-muted); font-size: var(--fs-sm); font-weight: 500; }
+  .table-wrap td[data-label=""] { display: block; }
+  .table-wrap td[data-label=""]::before, .table-wrap td.empty::before { content: none; }
+  .table-wrap td.empty { display: block; text-align: center; }
+}

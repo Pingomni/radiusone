@@ -58,7 +58,11 @@ export default function InvoiceForm({ values, customers, services, staticPools, 
                         form.post('/billing/invoices/save', { preserveScroll: true });
                     }}
                 >
-                    <Select label="Customer" required placeholder="" options={customers} {...bind(form, 'username')} />
+                    {/* Type to search: a plain select of every customer does not scale to thousands. */}
+                    <Field label="Customer" required list="invoice-customers" autoComplete="off" placeholder="Type a name or username" hint="Choose from the suggestions; the username is saved." {...bind(form, 'username')} />
+                    <datalist id="invoice-customers">
+                        {customers.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+                    </datalist>
                     <Select
                         label="Service plan"
                         hint="Choose a service for internet billing, or no internet charge for static-IP-only invoices."
@@ -96,7 +100,7 @@ export default function InvoiceForm({ values, customers, services, staticPools, 
                     <Select
                         label="Status"
                         hint="Payments are recorded on the invoice page after it is issued."
-                        options={{ open: 'Issue now — customer owes it (unpaid)', draft: 'Save as draft — not billed yet' }}
+                        options={{ open: 'Issue now (unpaid)', draft: 'Draft (not billed yet)' }}
                         {...bind(form, 'status')}
                     />
                     <section className="span2 invoice-total-preview" aria-live="polite">

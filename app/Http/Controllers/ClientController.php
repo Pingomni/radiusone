@@ -226,7 +226,7 @@ final class ClientController extends Controller
                 'invoiceId' => (int) $p['invoice_id'],
                 'invoice' => (string) $p['invoice_number'],
                 'amount' => Format::money($p['amount']) . ' ' . $p['currency'],
-                'method' => (string) $p['method'],
+                'method' => BillingController::PAYMENT_METHODS[$p['method']] ?? (string) $p['method'],
                 'reference' => (string) ($p['reference'] ?: '-'),
             ], Db::select('SELECT p.*, i.invoice_number FROM billing_payments p JOIN billing_invoices i ON i.id=p.invoice_id WHERE p.username=? ORDER BY p.payment_date DESC, p.id DESC LIMIT 50', [$client['username']])),
         ];
@@ -370,6 +370,7 @@ final class ClientController extends Controller
 
     public function diagnostics(string $username): Response
     {
+        abort_if(!Db::value('SELECT 1 FROM customer_profiles WHERE username = ?', [$username]), 404, 'Client ' . $username . ' was not found. It may have been renamed.');
         $d = ConnectionDiagnostics::forCustomer($username);
         $c = $d['client'];
         $p = $d['profile'];
@@ -386,7 +387,7 @@ final class ClientController extends Controller
             ['Network provisioning', $c['provisioning_state'] ?? 'unpublished'],
             ['Desired / verified revision', ($c['policy_revision'] ?? 0) . ' / ' . ($c['applied_revision'] ?? 'none')],
             ['Observed connection', $r ? Accounting::state($r) : 'unknown'],
-            ['Last authentication', $d['auth'] ? ($d['auth']['reply'] . ' at ' . $d['auth']['authdate']) : 'unknown'],
+            ['Last authentication', $d['auth'] ? ($d['auth']['reply'] . ' at ' . substr((string) $d['auth']['authdate'], 0, 19)) : 'unknown'],
             ['Recorded access decision', $d['decision'] ? ($d['decision']['decision'] . ' at ' . $d['decision']['occurred_at'] . ' via ' . $d['decision']['adapter']) : 'unknown'],
             ['Last authentication reason', $d['decision']['reason'] ?? 'Not recorded by legacy radpostauth; current policy below is not a historical decision.'],
             ['Current authorization policy', $eligible ? 'eligible (PPP still requires credentials)' : 'blocked'],

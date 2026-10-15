@@ -10,7 +10,7 @@ type Service = { id: number; name: string; group: string; download: string; uplo
 function DeleteControl({ s }: { s: Service }) {
     if (s.clients > 0) {
         // The repository refuses this delete anyway; say why up front instead of after a click.
-        return <span className="muted-action" title="Move or archive its clients first">Delete unavailable: {s.clients} {s.clients === 1 ? 'client uses' : 'clients use'} this plan</span>;
+        return <span className="muted-action" title="To delete this plan, move or archive its clients first.">In use by {s.clients} {s.clients === 1 ? 'client' : 'clients'}</span>;
     }
     return (
         <DeleteButton

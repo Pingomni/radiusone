@@ -72,18 +72,17 @@ export default function Clients({ filters, plans, nasOptions, result }: { filter
             header: 'Username',
             cell: (r: Row) => <div className="list-cell-stack"><Link href={`/clients/${encodeURIComponent(r.username)}/edit`}>{r.username}</Link><span className="list-subline"><Tag tag={r.auth} /></span></div>,
         },
-        { header: 'Customer', cell: (r: Row) => <div className="list-cell-stack"><span>{r.customer}</span>{r.phone && <span className="list-subline">{r.phone}</span>}</div> },
-        { header: 'Plan', cell: (r: Row) => r.plan },
-        { header: 'Account status', cell: (r: Row) => <Tag tag={r.status} /> },
-        { header: 'Connection', cell: (r: Row) => <Tag tag={r.connection} /> },
+        { header: 'Customer', className: 'cell-wrap', cell: (r: Row) => <div className="list-cell-stack"><span>{r.customer}</span>{r.phone && <span className="list-subline">{r.phone}</span>}</div> },
+        { header: 'Plan', className: 'cell-wrap', cell: (r: Row) => r.plan },
+        { header: 'Status', cell: (r: Row) => <div className="list-cell-stack list-badges"><Tag tag={r.status} /><Tag tag={r.connection} /></div> },
         {
-            header: 'Connection',
+            header: 'IP / NAS',
             cell: (r: Row) => {
                 const parts = ([['IP', r.ip], ['NAS', r.nas], ['MAC', r.mac]] as const).filter(([, v]) => v);
                 return parts.length ? <div className="list-cell-stack">{parts.map(([label, value]) => <span key={label}><span className="list-cell-caption">{label}</span> {value}</span>)}</div> : '—';
             },
         },
-        { header: 'Session totals', cell: (r: Row) => r.traffic },
+        { header: 'Traffic', cell: (r: Row) => r.traffic },
         { header: 'Expiry', cell: (r: Row) => r.expiry },
         { header: 'Balance', cell: (r: Row) => r.balance },
         {

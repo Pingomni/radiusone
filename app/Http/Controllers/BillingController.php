@@ -31,7 +31,7 @@ use Throwable;
 final class BillingController extends Controller
 {
     private const FILTERS = ['q', 'status'];
-    private const PAYMENT_METHODS = ['cash' => 'cash', 'bank_transfer' => 'bank transfer', 'mobile_money' => 'mobile money', 'card' => 'card', 'check' => 'check', 'other' => 'other'];
+    public const PAYMENT_METHODS = ['cash' => 'cash', 'bank_transfer' => 'bank transfer', 'mobile_money' => 'mobile money', 'card' => 'card', 'check' => 'check', 'other' => 'other'];
 
     private const FIELD_ERRORS = [
         'username' => '/^Select a valid billing customer/',
@@ -51,10 +51,11 @@ final class BillingController extends Controller
             'SELECT
                 COUNT(*) AS invoices,
                 COALESCE(SUM(CASE WHEN status NOT IN ("paid", "void", "draft") THEN balance_due ELSE 0 END),0) AS outstanding,
-                COALESCE(SUM(CASE WHEN status = "overdue" THEN balance_due ELSE 0 END),0) AS overdue,
-                COALESCE(SUM(CASE WHEN status = "paid" AND issue_date >= DATE_FORMAT(CURDATE(), "%Y-%m-01") THEN total_amount ELSE 0 END),0) AS paid_month
+                COALESCE(SUM(CASE WHEN status = "overdue" THEN balance_due ELSE 0 END),0) AS overdue
              FROM billing_invoices'
-        ) ?: ['invoices' => 0, 'outstanding' => 0, 'overdue' => 0, 'paid_month' => 0];
+        ) ?: ['invoices' => 0, 'outstanding' => 0, 'overdue' => 0];
+        // Money actually received this month, including partial payments and payments on older invoices.
+        $totals['paid_month'] = Db::value('SELECT COALESCE(SUM(amount),0) FROM billing_payments WHERE payment_date >= DATE_FORMAT(CURDATE(), "%Y-%m-01")');
         $manage = Auth::can('billing.manage');
 
         return Inertia::render('billing/Index', [
@@ -62,7 +63,7 @@ final class BillingController extends Controller
             'metrics' => [
                 Present::metric('Outstanding', Format::money($totals['outstanding']), 'billing', (float) $totals['outstanding'] > 0 ? 'warning' : ''),
                 Present::metric('Overdue', Format::money($totals['overdue']), 'billing', (float) $totals['overdue'] > 0 ? 'danger' : ''),
-                Present::metric('Paid this month', Format::money($totals['paid_month']), 'billing', 'success'),
+                Present::metric('Received this month', Format::money($totals['paid_month']), 'billing', 'success'),
                 Present::metric('Invoices', (int) $totals['invoices'], 'billing'),
             ],
             'result' => [
@@ -74,7 +75,8 @@ final class BillingController extends Controller
                     'customer' => Clients::displayName($r),
                     'service' => (string) (($r['service_name'] ?: $r['service_group']) ?: '-'),
                     'canEdit' => $manage && $r['status'] === 'draft',
-                    'canVoid' => $manage && $r['status'] !== 'void',
+                    // Invoices with payments cannot be voided (BillingRepository::voidInvoice), so the action is not offered.
+                    'canVoid' => $manage && $r['status'] !== 'void' && (float) $r['amount_paid'] <= 0,
                     'canDelete' => $manage && $r['status'] === 'draft' && (float) $r['amount_paid'] <= 0,
                 ], $result['rows']),
             ],
@@ -85,7 +87,7 @@ final class BillingController extends Controller
                 'invoice' => (string) $p['invoice_number'],
                 'username' => (string) $p['username'],
                 'amount' => Format::money($p['amount']) . ' ' . $p['currency'],
-                'method' => (string) $p['method'],
+                'method' => self::PAYMENT_METHODS[$p['method']] ?? (string) $p['method'],
                 'reference' => (string) ($p['reference'] ?: '-'),
             ], Db::select('SELECT p.*, i.invoice_number FROM billing_payments p JOIN billing_invoices i ON i.id=p.invoice_id ORDER BY p.payment_date DESC, p.id DESC LIMIT 8')),
         ]);
@@ -166,7 +168,8 @@ final class BillingController extends Controller
             'static_ip_pool_key' => $staticPool,
             'billing_period' => $period,
             'description' => (string) ($item['description'] ?? ($serviceName !== '' ? $serviceName . ' service' : 'Internet service')),
-            'currency' => (string) ($invoice['currency'] ?? $prefill['currency'] ?? 'USD'),
+            // Without a plan yet, the currency most plans use (not a fixed USD).
+            'currency' => (string) ($invoice['currency'] ?? $prefill['currency'] ?? (Db::value('SELECT currency FROM service_metadata WHERE enabled=1 GROUP BY currency ORDER BY COUNT(*) DESC LIMIT 1') ?: 'USD')),
             'discount_amount' => (string) ($invoice['discount_amount'] ?? '0.00'),
             'tax_amount' => (string) ($invoice['tax_amount'] ?? '0.00'),
             'issue_date' => $issueDate,
@@ -273,7 +276,7 @@ final class BillingController extends Controller
                 'id' => (int) $p['id'],
                 'date' => (string) $p['payment_date'],
                 'amount' => Format::money($p['amount']) . ' ' . $p['currency'],
-                'method' => (string) $p['method'],
+                'method' => self::PAYMENT_METHODS[$p['method']] ?? (string) $p['method'],
                 'reference' => (string) ($p['reference'] ?: '-'),
                 'receiver' => (string) (($p['receiver'] ?? '') ?: 'system'),
                 'notes' => (string) ($p['notes'] ?: '-'),
@@ -281,7 +284,7 @@ final class BillingController extends Controller
             'payment' => $payment,
             'methods' => self::PAYMENT_METHODS,
             'canEdit' => $manage && $invoice['status'] === 'draft',
-            'canVoid' => $manage && $invoice['status'] !== 'void',
+            'canVoid' => $manage && $invoice['status'] !== 'void' && !$payments && (float) $invoice['amount_paid'] <= 0,
             'canDelete' => $manage && $invoice['status'] === 'draft' && !$payments && (float) $invoice['amount_paid'] <= 0,
             'classify' => $classify,
             // Set once by paymentSave(): the receipt the browser downloads after a payment is recorded.

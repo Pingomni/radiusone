@@ -87,7 +87,7 @@ function OverviewTab({ overview, usersSummary, branding }: { overview: Overview;
                 <Destination title="Notifications" description="Connect a gateway, customize templates and send customer updates." href="/settings?tab=notifications" icon="mail" status={<Badge>Email + SMS</Badge>} />
                 <Destination title="Branding" description="Give your workspace and invoices a familiar identity." href="/settings?tab=branding" icon="image" status={<Badge>{branding.custom ? 'Custom logo' : 'Default logo'}</Badge>} />
                 <Destination title="Backups" description="Encrypted copies to Google Drive, Amazon S3 or your own server." href="/settings?tab=backups" icon="server" status={<Badge>Remote copies</Badge>} />
-                <Destination title="Data retention" description="Choose how long session and login records are kept." href="/settings?tab=retention" icon="logs" status={<Badge>Session and login history</Badge>} />
+                <Destination title="Data retention" description="Choose how long session and login records are kept." href="/settings?tab=retention" icon="logs" status={<Badge>History</Badge>} />
             </div>
             <Sheet title="System information" description="Environment, operator access, and backup locations for this workspace." icon="server" meta={<Tag tag={overview.engine} />}>
                 <SettingsRows rows={overview.rows} />
@@ -383,8 +383,11 @@ function DestinationRow({ d, b, open, onToggle }: { d: BackupDestination; b: Bac
             </div>
             {d.type === 'sftp' && d.public_key && (
                 <div className="backup-sftp-key">
-                    <TextArea label="Public key for ~/.ssh/authorized_keys" readOnly rows={2} value={d.public_key} />
-                    <button type="button" onClick={() => void navigator.clipboard?.writeText(d.public_key ?? '')}>Copy public key</button>
+                    <strong>Public key for the server’s ~/.ssh/authorized_keys</strong>
+                    <div className="backup-key-line">
+                        <code>{d.public_key}</code>
+                        <button type="button" onClick={() => void navigator.clipboard?.writeText(d.public_key ?? '')}>Copy</button>
+                    </div>
                     <p className="hint">Server host key: {d.fingerprint}. Compare it with the server (ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub).</p>
                 </div>
             )}
@@ -410,9 +413,9 @@ function BackupLocal({ b }: { b: Backups }) {
     const form = useForm({ days: String(b.localDays) });
     return (
         <Sheet title="Local copies" description="Backups also stay on this server; older ones are removed (the newest three of each kind are always kept)." icon="logs">
-            <form className="form-grid" onSubmit={(e) => { e.preventDefault(); form.post('/settings/backups/local', { preserveScroll: true }); }}>
+            <form className="inline-form backup-local-form" onSubmit={(e) => { e.preventDefault(); form.post('/settings/backups/local', { preserveScroll: true }); }}>
                 <Select label="Keep local copies for" options={b.localDaysOptions} {...bind(form, 'days')} />
-                <div className="form-actions"><button disabled={form.processing}>Save</button></div>
+                <button disabled={form.processing}>Save</button>
             </form>
             <DataTable rows={b.local} rowKey={(f) => f.name} columns={[
                 { header: 'File', cell: (f) => f.name },
@@ -558,7 +561,7 @@ function SmsGatewayForm({ g, providers, ready }: { g: SmsGateway; providers: Rec
     return (
         <Sheet title="SMS gateway" description="Choose your SMS provider and enter the details from its dashboard." icon="message" meta={g.enabled === '1' ? <Badge tone="success">gateway enabled</Badge> : <Badge tone="warning">gateway disabled</Badge>}>
             <form className="form-grid" onSubmit={(event) => { event.preventDefault(); form.post('/settings/notifications/sms-gateway', { preserveScroll: true, onFinish: () => form.setData((d) => ({ ...d, sms_gateway_twilio_token: '', sms_gateway_infobip_api_key: '' })) }); }}>
-                <Check label="Enable SMS gateway" name="sms_gateway_enabled" checked={form.data.sms_gateway_enabled} onChange={(e) => form.setData('sms_gateway_enabled', e.target.checked)} />
+                <Check className="check span2" label="Enable SMS gateway" name="sms_gateway_enabled" checked={form.data.sms_gateway_enabled} onChange={(e) => form.setData('sms_gateway_enabled', e.target.checked)} />
                 <Select label="Provider" options={providers} {...bind(form, 'sms_gateway_provider')} />
                 <Field label="Default country code" placeholder="355" hint="Local numbers such as 069… are sent as +355 69…. Leave blank if every saved number already includes its country code." {...bind(form, 'sms_gateway_country_code')} />
                 {provider === 'twilio' && (
@@ -619,7 +622,7 @@ function EmailGatewayForm({ g, providers, ready }: { g: EmailGateway; providers:
     return (
         <Sheet title="Email gateway" description="Choose your email provider and the sender customers will recognize." icon="mail" meta={g.enabled === '1' ? <Badge tone="success">gateway enabled</Badge> : <Badge tone="warning">gateway disabled</Badge>}>
             <form className="form-grid" onSubmit={(event) => { event.preventDefault(); form.post('/settings/notifications/email-gateway', { preserveScroll: true, onFinish: clearSecrets }); }}>
-                <Check label="Enable email gateway" name="email_gateway_enabled" checked={form.data.email_gateway_enabled} onChange={(e) => form.setData('email_gateway_enabled', e.target.checked)} />
+                <Check className="check span2" label="Enable email gateway" name="email_gateway_enabled" checked={form.data.email_gateway_enabled} onChange={(e) => form.setData('email_gateway_enabled', e.target.checked)} />
                 <Select label="Provider" options={providers} {...bind(form, 'email_gateway_provider')} />
                 {provider === 'google' && (
                     <>
@@ -653,6 +656,7 @@ function EmailGatewayForm({ g, providers, ready }: { g: EmailGateway; providers:
                         {secret('SMTP password', 'email_gateway_password', g.password_saved)}
                     </>
                 )}
+                <h3 className="form-section-title">Sender</h3>
                 <Field label="From email" type="email" hint={provider === 'mailgun' ? 'An address on your Mailgun sending domain.' : undefined} {...bind(form, 'email_gateway_from_email')} />
                 <Field label="From name" {...bind(form, 'email_gateway_from_name')} />
                 <Field label="Reply-to email" type="email" {...bind(form, 'email_gateway_reply_to')} />

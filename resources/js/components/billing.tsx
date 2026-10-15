@@ -67,7 +67,7 @@ export function InvoiceTable({ invoices }: { invoices: InvoiceRow[] }) {
                 { header: 'Paid', cell: (i) => i.paid },
                 { header: 'Balance due', cell: (i) => i.balance },
                 { header: 'Status', cell: (i) => <InvoiceStatus status={i.status} /> },
-                { header: 'Documents', noExport: true, cell: (i) => <InvoiceDocuments invoice={i} /> },
+                { header: 'Documents', noExport: true, cell: (i) => <div className="list-cell-stack"><InvoiceDocuments invoice={i} /></div> },
             ]}
         />
     );

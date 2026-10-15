@@ -110,6 +110,7 @@ final class BillingTest extends TestCase
         $this->get('/billing/invoices/' . $id)->assertInertia(fn ($page) => $page
             ->where('payment.recorded.amount', '5.00 EUR')
             ->where('invoice.receipt.label', 'Partial payment receipt')
+            ->where('canVoid', false)
             ->has('payments', 1));
         $this->get('/billing/invoices/' . $id . '/payment-pdf')->assertOk()->assertHeader('Content-Type', 'application/pdf');
 

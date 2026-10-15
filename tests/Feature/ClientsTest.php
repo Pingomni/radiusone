@@ -66,6 +66,7 @@ final class ClientsTest extends TestCase
         $this->assertStringContainsString('alice,"Alice Doe"', $csv);
 
         $this->get('/clients/nobody/edit')->assertNotFound();
+        $this->get('/clients/nobody/diagnostics')->assertNotFound();
     }
 
     public function test_validation_errors_stay_on_the_form(): void
