@@ -376,6 +376,36 @@ final class RadiusRepository
         }catch(\Throwable $e){if($pdo->inTransaction()){$pdo->rollBack();SubscriberPolicy::releaseLocks();}throw $e;}
     }
 
+    /**
+     * FreeRADIUS reads the NAS list (client_query) only when it starts and refuses to start with a broken
+     * one. So while it is running, every NAS saved before it started is in effect: record those revisions,
+     * including removals. Runs every minute (frweb:mark-nas-applied --auto).
+     * @param int|null $radiusStartedAt epoch FreeRADIUS became active; read from systemd when null
+     * @return array<int, int> nas id => revision recorded
+     */
+    public static function recordLoadedNasRevisions(?int $radiusStartedAt = null): array
+    {
+        if ($radiusStartedAt === null) {
+            $radius = ServerMonitor::services()['freeradius'] ?? null;
+            if (!$radius || $radius['state'] !== 'active' || !$radius['since']) {
+                return [];
+            }
+            $radiusStartedAt = (int) $radius['since'];
+        }
+        $recorded = [];
+        $rows = Db::select('SELECT nas_id, config_revision FROM nas_metadata WHERE (applied_revision IS NULL OR applied_revision <> config_revision) AND updated_at < FROM_UNIXTIME(?)', [$radiusStartedAt]);
+        foreach ($rows as $row) {
+            $revision = (int) $row['config_revision'];
+            try {
+                self::markNasApplied((int) $row['nas_id'], $revision, 'FreeRADIUS started ' . date('Y-m-d H:i', $radiusStartedAt) . ', after revision ' . $revision . ' was saved (recorded automatically).');
+                $recorded[(int) $row['nas_id']] = $revision;
+            } catch (RuntimeException) {
+                // Saved again meanwhile: the next restart picks it up.
+            }
+        }
+        return $recorded;
+    }
+
     /** Exactly one accounting identity, optionally explicitly selected. No discovery fallback. */
     public static function disconnectUser(string $username, ?int $nasId = null, ?int $accountingId = null): array
     {

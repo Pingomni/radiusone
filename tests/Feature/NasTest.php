@@ -40,6 +40,33 @@ final class NasTest extends TestCase
             ->has('sessions', 0));
     }
 
+    public function test_changes_saved_before_freeradius_started_are_recorded_as_in_effect(): void
+    {
+        $this->actingAsOperator();
+        $id = $this->createNas();
+        $this->post('/nas/save', ['id' => $id, 'section' => 'device', 'vendor' => 'mikrotik', 'shortname' => 'bras-01', 'nasname' => '10.10.0.1', 'secret' => '', 'enabled' => true, 'coa_enabled' => true, 'coa_port' => '3799'])
+            ->assertSessionHas('flash.message', fn (string $m) => str_contains($m, 'Restart FreeRADIUS'));
+        Db::exec('UPDATE nas_metadata SET updated_at = NOW() - INTERVAL 10 MINUTE WHERE nas_id=?', [$id]);
+        $revision = (int) Db::value('SELECT config_revision FROM nas_metadata WHERE nas_id=?', [$id]);
+
+        // FreeRADIUS started before the save: still waiting.
+        $this->assertSame([], \App\Support\RadiusRepository::recordLoadedNasRevisions(time() - 1200));
+        $this->get('/nas')->assertInertia(fn ($page) => $page->where('devices.0.update.text', 'Waiting for update'));
+
+        // Started after it: in effect, with the evidence recorded.
+        $this->assertSame([$id => $revision], \App\Support\RadiusRepository::recordLoadedNasRevisions(time() - 60));
+        $this->assertSame($revision, (int) Db::value('SELECT applied_revision FROM nas_metadata WHERE nas_id=?', [$id]));
+        $this->assertStringContainsString('recorded automatically', (string) Db::value('SELECT applied_evidence FROM nas_metadata WHERE nas_id=?', [$id]));
+        $this->get('/nas')->assertInertia(fn ($page) => $page->where('devices.0.update.text', 'Up to date'));
+        $this->assertSame([], \App\Support\RadiusRepository::recordLoadedNasRevisions(time()));
+
+        // A CoA-only change needs no restart.
+        $this->post('/nas/save', ['id' => $id, 'section' => 'device', 'vendor' => 'mikrotik', 'shortname' => 'bras-01', 'nasname' => '10.10.0.1', 'secret' => '', 'enabled' => true, 'coa_enabled' => true, 'coa_port' => '1700'])
+            ->assertSessionHas('flash.message', 'NAS saved. These settings apply at once.');
+
+        $this->artisan('frweb:mark-nas-applied --auto')->assertExitCode(0);
+    }
+
     public function test_api_tab_keeps_device_fields_and_secret(): void
     {
         $this->actingAsOperator();

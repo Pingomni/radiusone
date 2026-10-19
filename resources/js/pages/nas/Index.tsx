@@ -40,7 +40,7 @@ export default function NasIndex({ devices }: { devices: Device[] }) {
                                     {can('danger.delete') && !d.pendingDelete && (
                                         <DeleteButton
                                             action={`/nas/${d.id}/delete`}
-                                            message={`The NAS is disabled now and removed at the next RADIUS update; after that its requests are rejected. ${d.online} subscriber${d.online === 1 ? ' is' : 's are'} online on it.`}
+                                            message={`The NAS is disabled now and removed at the next FreeRADIUS restart; after that its requests are rejected. ${d.online} subscriber${d.online === 1 ? ' is' : 's are'} online on it.`}
                                             typeToConfirm={d.name}
                                             title={`Remove NAS ${d.name}?`}
                                         />

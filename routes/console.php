@@ -13,6 +13,8 @@ $log = static fn (string $name): string => '/var/log/freeradius-web/' . $name . 
 Schedule::command('frweb:process-customer-notifications')->everyMinute()->runInBackground()->appendOutputTo($log('customer-notifications'));
 Schedule::command('frweb:poll-snmp')->everyMinute()->runInBackground()->appendOutputTo($log('snmp-poll'));
 // Off until Settings → Notifications → Admin alerts is turned on (the command then checks every minute).
+// FreeRADIUS loads the NAS list when it starts: NAS saved before that are in effect.
+Schedule::command('frweb:mark-nas-applied --auto')->everyMinute()->runInBackground()->appendOutputTo($log('nas-applied'));
 Schedule::command('frweb:admin-alerts')->everyMinute()->runInBackground()->appendOutputTo($log('admin-alerts'));
 Schedule::command('frweb:generate-billing')->dailyAt('03:15')->appendOutputTo($log('billing'));
 // Needs DELETE on job_runs (docs/operations/job-runs-retention-grants.sql).

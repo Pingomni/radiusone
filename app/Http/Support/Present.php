@@ -27,7 +27,7 @@ final class Present
             return self::tag('removal pending', 'warning');
         }
         if (($row['applied_revision'] ?? null) === null || (int) $row['applied_revision'] !== (int) ($row['config_revision'] ?? 0)) {
-            return self::tag('waiting for RADIUS update', 'warning');
+            return self::tag('waiting for FreeRADIUS restart', 'warning');
         }
         $method = RadiusRepository::disconnectMethod($row);
         return match ($method['method']) {

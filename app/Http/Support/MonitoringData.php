@@ -104,7 +104,7 @@ final class MonitoringData
             return 'off: NAS disabled';
         }
         if (($nas['applied_revision'] ?? null) === null || (int) $nas['applied_revision'] !== (int) ($nas['config_revision'] ?? 0)) {
-            return 'waiting for RADIUS update';
+            return 'waiting for FreeRADIUS restart';
         }
         $method = RadiusRepository::disconnectMethod($nas);
         return $method['ok'] ? 'ready (' . ($method['method'] === 'api' ? 'API' : 'CoA') . ')' : ($method['label'] === 'off' ? 'off' : $method['label']);

@@ -201,9 +201,9 @@ export default function NasForm({ device, vendors, setupSteps, canManage, nas, a
                 label="NAS settings"
                 className="tabs nas-tabs"
                 tabs={[
-                    { key: 'device', title: 'Device', icon: 'server', content: <>{intro('How FreeRADIUS recognises this router. Changes take effect after the next RADIUS update.')}<DeviceForm device={device} vendors={vendors} canManage={canManage} /></> },
+                    { key: 'device', title: 'Device', icon: 'server', content: <>{intro('How FreeRADIUS recognises this router. Address, name, type, secret and on/off take effect after a FreeRADIUS restart; CoA settings apply at once.')}<DeviceForm device={device} vendors={vendors} canManage={canManage} /></> },
                     { key: 'api', title: 'API', icon: 'settings', content: <>{intro('Optional RouterOS API access. When it is on, disconnects use the API instead of RADIUS CoA.')}{api && <ApiForm values={api} vendor={nas.vendor} ip={nas.ip} canManage={canManage} />}</> },
-                    { key: 'snmp', title: 'SNMP', icon: 'signal', content: <>{intro('Read-only monitoring for the Monitoring page, live monitor and graphs. Changes here apply immediately; no RADIUS update is needed.')}<SnmpForm snmp={snmp ?? null} nasId={nas.id} ip={nas.ip} canManage={canManage} /></> },
+                    { key: 'snmp', title: 'SNMP', icon: 'signal', content: <>{intro('Read-only monitoring for the Monitoring page, live monitor and graphs. Changes here apply immediately; no FreeRADIUS restart is needed.')}<SnmpForm snmp={snmp ?? null} nasId={nas.id} ip={nas.ip} canManage={canManage} /></> },
                     {
                         key: 'sessions', title: 'Sessions', icon: 'clients', count: sessions?.length ?? 0,
                         content: (

@@ -139,13 +139,9 @@ const SECTIONS: Section[] = [
                 <p><code>/radius incoming set accept=yes port=3799</code></p>
                 <p>RouterOS accepts disconnects only from the RADIUS servers listed under <code>/radius</code>, with the right secret.</p>
                 <p>On MikroTik you can instead switch on the <strong>API</strong> tab (a dedicated RouterOS user with read, write and api rights, over api-ssl on port 8729 with a certificate this server trusts). While the API is on, disconnects use it instead of CoA.</p>
-                <h3>"Waiting for RADIUS update"</h3>
-                <p>Every save of a NAS raises its <em>config revision</em>. FreeRADIUS reads the NAS list only when it starts, so a change is active only after a FreeRADIUS restart. Until the new revision is recorded as applied, the NAS shows <strong>waiting for RADIUS update</strong> and the portal does not send disconnects or speed changes to it.</p>
-                <Steps>
-                    <li>Restart FreeRADIUS (<a href="#monitoring">Monitoring → RADIUS server → Restart</a>).</li>
-                    <li>Check that a customer can log in through that NAS.</li>
-                    <li>Record it on the server: <code>php artisan frweb:mark-nas-applied --id=&lt;NAS id&gt; --revision=&lt;revision&gt; --verified-activation --evidence="restarted, login tested"</code></li>
-                </Steps>
+                <h3>"Waiting for FreeRADIUS restart"</h3>
+                <p>Changing a NAS address, name, type, shared secret or switching it on or off raises its <em>config revision</em>. FreeRADIUS reads the NAS list only when it starts, so such a change takes effect after a FreeRADIUS restart (<a href="#monitoring">Monitoring → RADIUS server → Restart</a>). Until then the NAS shows <strong>waiting for FreeRADIUS restart</strong> and the portal does not send disconnects or speed changes to it.</p>
+                <p>Within a minute after FreeRADIUS has started again, the portal records the change as in effect by itself (FreeRADIUS does not start with a broken NAS list). CoA, API and SNMP settings are used by the portal alone and apply at once, without a restart.</p>
                 <h3>SNMP</h3>
                 <p>With SNMP (v2c read-only community, or v3 with authentication and optional AES privacy), the poller records CPU, memory, temperature and interface traffic every minute for the Monitoring graphs. Only read requests are sent. Without SNMP the NAS is checked by ping.</p>
             </>
@@ -468,7 +464,7 @@ const SECTIONS: Section[] = [
                 rows={[
                     ['A customer cannot connect', 'Clients → the customer → Diagnostics: account state, end date, last login replies. Then Logs → Authentication attempts for that username.'],
                     ['All customers on one router fail', 'Monitoring: is the NAS answering? Does its shared secret match the router? Is the NAS waiting for a RADIUS update (restart FreeRADIUS)?'],
-                    ['A NAS shows "waiting for RADIUS update"', 'Restart FreeRADIUS, test a login, then record the revision (NAS devices).'],
+                    ['A NAS shows "waiting for FreeRADIUS restart"', 'Restart FreeRADIUS (Monitoring → RADIUS server); the NAS shows Up to date within a minute.'],
                     ['Disconnect fails or times out', 'NAS → Device: CoA on and the right port; on MikroTik /radius incoming set accept=yes; the shared secret matches; the router clock is correct. With the API on: the API user and certificate.'],
                     ['Speed changes do nothing', 'Network operations: the router\'s answer.'],
                     ['Restart button says restarts are not enabled', 'Run ops/apply-service-control.sh as root once.'],

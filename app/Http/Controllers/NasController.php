@@ -134,7 +134,7 @@ final class NasController extends Controller
             : 'v' . $snmp['version']);
         $stat = static fn (string $label, string $value, string $note, string $tone = '') => compact('label', 'value', 'note', 'tone');
         return [
-            $stat('RADIUS update', $deployed ? 'Up to date' : 'Waiting', $deployed ? 'RADIUS is using these settings' : 'Saved changes start after the next RADIUS update', $deployed ? '' : 'warning'),
+            $stat('RADIUS update', $deployed ? 'Up to date' : 'Waiting', $deployed ? 'RADIUS is using these settings' : 'Saved changes start after a FreeRADIUS restart (Monitoring → RADIUS server)', $deployed ? '' : 'warning'),
             $stat('Online now', (string) $sessions, 'From RADIUS accounting'),
             $stat('Disconnect', ucfirst((string) $disconnect['label']), $disconnect['note'], $disconnect['class'] === 'success' ? '' : 'warning'),
             $stat('SNMP', $snmpLabel, $snmpLabel === 'Off' ? 'Monitoring not set up' : 'Monitoring enabled', $snmpLabel === 'Off' ? 'info' : ''),
@@ -232,7 +232,9 @@ final class NasController extends Controller
         Audit::log($id ? 'update' : 'create', 'nas', (string) $saved, $before, array_diff_key($post, ['secret' => true, 'api_password' => true]));
         return $this->ok('/nas/' . $saved . '/edit' . ($id ? '?tab=' . $section : ''), $section === 'api'
             ? 'API settings saved. ' . (!empty($post['api_enabled']) ? 'Disconnects on this NAS now use the RouterOS API.' : 'The API is off; disconnects use RADIUS CoA when it is on.')
-            : 'NAS saved. Changes take effect after the next RADIUS update.');
+            : (Db::value('SELECT applied_revision = config_revision FROM nas_metadata WHERE nas_id=?', [$saved])
+                ? 'NAS saved. These settings apply at once.'
+                : 'NAS saved. Restart FreeRADIUS (Monitoring → RADIUS server → Restart) for the change to take effect.'));
     }
 
     /**
@@ -267,7 +269,7 @@ final class NasController extends Controller
             return $this->fail($e->getMessage(), '/nas');
         }
         Audit::log('delete', 'nas', $id, $before);
-        return $this->ok('/nas', 'NAS removed. Its requests stop being accepted after the next RADIUS update.');
+        return $this->ok('/nas', 'NAS removed. Its requests stop being accepted after the next FreeRADIUS restart (Monitoring → RADIUS server).');
     }
 
     public function snmpSave(Request $request, string $id): RedirectResponse

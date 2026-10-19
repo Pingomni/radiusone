@@ -10,12 +10,16 @@ use Throwable;
 
 final class MarkNasApplied extends FrwebCommand
 {
-    protected $signature = 'frweb:mark-nas-applied {--id=} {--revision=} {--evidence=} {--verified-activation}';
-    protected $description = 'Record an independently verified NAS configuration revision (performs no network operation)';
+    protected $signature = 'frweb:mark-nas-applied {--id=} {--revision=} {--evidence=} {--verified-activation} {--auto}';
+    protected $description = 'Record a NAS configuration revision as in effect: --auto for every NAS saved before FreeRADIUS last started, or one verified revision (performs no network operation)';
 
     public function handle(): int
     {
         try {
+            if ($this->option('auto')) {
+                $this->json(['recorded' => RadiusRepository::recordLoadedNasRevisions()]);
+                return self::SUCCESS;
+            }
             if (!$this->option('verified-activation') || !$this->option('id') || !$this->option('revision') || !$this->option('evidence')) {
                 throw new RuntimeException('Require --id, --revision, --evidence and --verified-activation after an independently verified deployment.');
             }
