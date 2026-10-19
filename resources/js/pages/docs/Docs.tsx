@@ -154,6 +154,8 @@ const SECTIONS: Section[] = [
         body: (
             <>
                 <p><Link href="/monitoring">Monitoring</Link> shows the RADIUS server and every NAS on one page, refreshing by itself. Red values need attention: CPU above 90%, memory above 95%, disk above 90%, a NAS that stopped answering, or a stuck background job.</p>
+                <h3>Network tables</h3>
+                <p>On a NAS with SNMP set up, its monitor page (<strong>Monitor</strong> on its card) has <strong>Network tables</strong>: IP addresses, ARP, MAC table, BGP peers and OSPF neighbours. Each is read live from the router over SNMP (read-only) when you open its tab; <strong>Refresh</strong> reads it again, the filter narrows the rows, and the table can be exported as CSV. A device that does not publish a table over SNMP shows it empty with a note (for example, RouterOS may not publish OSPF).</p>
                 <h3>RADIUS server page</h3>
                 <ul>
                     <li><strong>Services</strong>: FreeRADIUS, MariaDB, Nginx, PHP-FPM and Cron, each with its state and how long it has been running (<em>up 4d 6h 37m</em>). The time restarts from zero after every restart.</li>

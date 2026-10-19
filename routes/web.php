@@ -156,6 +156,7 @@ Route::middleware('frweb.auth')->group(function () {
         Route::post('/monitoring/poll', [MonitoringController::class, 'poll']);
         Route::get('/nas/{id}/monitor', [MonitoringController::class, 'nas'])->whereNumber('id');
         Route::get('/nas/{id}/monitor/live', [MonitoringController::class, 'nasLive'])->whereNumber('id');
+        Route::get('/nas/{id}/monitor/tables/{table}', [MonitoringController::class, 'nasTable'])->whereNumber('id')->whereIn('table', array_keys(\App\Support\NasTables::TABLES));
         Route::get('/nas/{id}/monitor/graph', [MonitoringController::class, 'trafficGraph'])->whereNumber('id');
         Route::get('/nas/{id}/monitor/health', [MonitoringController::class, 'healthGraph'])->whereNumber('id');
         Route::get('/nas/{id}/monitor/temperature', [MonitoringController::class, 'temperatureGraph'])->whereNumber('id');

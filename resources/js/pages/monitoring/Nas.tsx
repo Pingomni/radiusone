@@ -1,4 +1,5 @@
 import { Link } from '@inertiajs/react';
+import { useCallback, useEffect, useState } from 'react';
 import { LivePanel } from '@/components/LivePanel';
 import { Gauges, HistorySection, Kv, PollButton, ToneValue, type Gauge, type History } from '@/components/monitoring';
 import { DataTable } from '@/components/table';
@@ -77,13 +78,80 @@ function SnapshotBody({ snap }: { snap: Snapshot }) {
     );
 }
 
-export default function NasMonitor({ nas, snapshot, history, vendorLabel, oids, canManage }: {
+type Cell = string | { text: string; tone: string };
+type TableData = { columns: string[]; rows: Cell[][]; truncated: boolean; empty: string; note: string } | { error: string };
+const MONO = /address|MAC|peer|neighbour|router id/i;
+
+/** Routing and layer-2 tables, read live over SNMP when a tab is opened. */
+function NetworkTables({ nasId, tables }: { nasId: number; tables: Record<string, string> }) {
+    const [table, setTable] = useState(Object.keys(tables)[0]);
+    const [data, setData] = useState<TableData | null>(null);
+    const [loading, setLoading] = useState(false);
+    const [filter, setFilter] = useState('');
+
+    const load = useCallback(async (key: string) => {
+        setLoading(true);
+        try {
+            const response = await fetch(`/nas/${nasId}/monitor/tables/${key}`, { credentials: 'same-origin', cache: 'no-store', headers: { Accept: 'application/json', 'X-Live-Fragment': '1' } });
+            setData(response.ok ? ((await response.json()) as TableData) : { error: `The table could not be read (HTTP ${response.status}).` });
+        } catch {
+            setData({ error: 'The table could not be read. Check the connection and try again.' });
+        } finally {
+            setLoading(false);
+        }
+    }, [nasId]);
+    useEffect(() => { setData(null); setFilter(''); void load(table); }, [table, load]);
+
+    const text = (c: Cell) => (typeof c === 'string' ? c : c.text);
+    const rows = data && 'rows' in data && filter.trim()
+        ? data.rows.filter((r) => r.some((c) => text(c).toLowerCase().includes(filter.trim().toLowerCase())))
+        : data && 'rows' in data ? data.rows : [];
+    return (
+        <Panel title="Network tables">
+            <div className="nas-tables-bar">
+                <div className="segmented" role="tablist" aria-label="Network tables">
+                    {Object.entries(tables).map(([key, label]) => (
+                        <button key={key} type="button" role="tab" aria-selected={table === key} className={table === key ? 'active' : undefined} onClick={() => setTable(key)}>{label}</button>
+                    ))}
+                </div>
+                <input type="search" aria-label="Filter rows" placeholder="Filter" value={filter} onChange={(e) => setFilter(e.target.value)} />
+                <button type="button" onClick={() => void load(table)} disabled={loading}>{loading ? 'Reading…' : 'Refresh'}</button>
+            </div>
+            {!data ? <p className="hint">Reading {tables[table]} from the device…</p>
+                : 'error' in data ? <p className="field-error">{data.error}</p>
+                : (
+                    <>
+                        <DataTable
+                            rows={rows}
+                            exportRows
+                            emptyText={filter ? 'No rows match the filter.' : data.empty}
+                            columns={data.columns.map((header, i) => ({
+                                header,
+                                cell: (r: Cell[]) => {
+                                    const c = r[i];
+                                    if (typeof c !== 'string') return c.tone ? <Badge tone={c.tone}>{c.text}</Badge> : c.text;
+                                    return MONO.test(header) ? <span className="mono">{c}</span> : c;
+                                },
+                            }))}
+                        />
+                        <p className="hint">
+                            {data.rows.length} row{data.rows.length === 1 ? '' : 's'}{filter && rows.length !== data.rows.length ? `, ${rows.length} shown` : ''}, read live over SNMP.
+                            {data.truncated && ' Only the first 2,000 are shown.'}{data.note && ` ${data.note}`}
+                        </p>
+                    </>
+                )}
+        </Panel>
+    );
+}
+
+export default function NasMonitor({ nas, snapshot, history, vendorLabel, oids, canManage, tables }: {
     nas: { id: number; name: string; ip: string };
     snapshot: Snapshot;
     history: History;
     vendorLabel: string;
     oids: { group: string; metric: string; oid: string; notes: string }[];
     canManage: boolean;
+    tables: Record<string, string> | null;
 }) {
     return (
         <AppLayout title="NAS Monitor">
@@ -93,6 +161,7 @@ export default function NasMonitor({ nas, snapshot, history, vendorLabel, oids, 
                 <PollButton target={String(nas.id)} back={`/nas/${nas.id}/monitor`} label="Poll this NAS now" />
             </div>
             <LivePanel title={`${nas.name} ${nas.ip}`} url={`/nas/${nas.id}/monitor/live`} interval={15} initial={snapshot} className="nas-monitor" render={(s) => <SnapshotBody snap={s} />} />
+            {tables && <NetworkTables nasId={nas.id} tables={tables} />}
             <HistorySection history={history} pageUrl={`/nas/${nas.id}/monitor`} />
             <Panel title="SNMP OID reference">
                 <details className="nas-oid-reference">

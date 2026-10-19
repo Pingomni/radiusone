@@ -1674,6 +1674,11 @@ td .list-menu > summary:hover { border-color: var(--line); background: var(--sur
 .nas-gauge.warning { border-left-color: var(--warning); }
 .nas-gauge.danger { border-left-color: var(--danger); }
 .nas-gauge meter { width: 100%; height: 6px; }
+/* NAS monitor → Network tables: tabs, filter and refresh on one line. */
+.nas-tables-bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); }
+.nas-tables-bar input[type="search"] { width: 200px; margin-left: auto; }
+.segmented button { min-height: var(--control-h-sm); padding: 0 12px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--text-muted); font-weight: 600; }
+.segmented button.active { background: var(--surface); color: var(--accent); box-shadow: 0 0 0 1px var(--line); }
 .nas-monitor-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-3); }
 .nas-monitor-grid > section { min-width: 0; padding: var(--sp-2) var(--sp-3); border: 1px solid var(--line); border-radius: var(--radius); }
 .nas-monitor-grid .kv > .badge { flex: none; }

@@ -9,7 +9,9 @@ use App\Http\Support\Nas;
 use App\Support\Audit;
 use App\Support\Auth;
 use App\Support\Db;
+use App\Support\MicroCache;
 use App\Support\NasMonitor;
+use App\Support\NasTables;
 use App\Support\NasTraffic;
 use App\Support\ServerMonitor;
 use Illuminate\Http\JsonResponse;
@@ -104,12 +106,25 @@ final class MonitoringController extends Controller
             'vendorLabel' => Nas::VENDORS[$vendor]['label'] ?? 'this device',
             'oids' => array_map(static fn (array $r) => ['group' => (string) $r[0], 'metric' => (string) $r[1], 'oid' => (string) $r[2], 'notes' => (string) $r[3]], NasMonitor::oidReference($vendor)),
             'canManage' => Auth::can('nas.manage'),
+            'tables' => NasMonitor::configured(NasMonitor::settings((int) $nas['id'])) ? NasTables::TABLES : null,
         ]);
     }
 
     public function nasLive(string $id): JsonResponse
     {
         return self::json(MonitoringData::nasSnapshot(Nas::monitorRow($id)));
+    }
+
+    /** One routing / layer-2 table, read live over SNMP when the operator opens its tab. */
+    public function nasTable(string $id, string $table): JsonResponse
+    {
+        $nas = Nas::monitorRow($id);
+        try {
+            // Opening tabs back and forth does not poll the router again within 10 seconds.
+            return self::json(MicroCache::remember('nas-table:' . (int) $nas['id'] . ':' . $table, 10, static fn () => NasTables::read($nas, $table)));
+        } catch (RuntimeException $e) {
+            return self::json(['error' => $e->getMessage()]);
+        }
     }
 
     public function trafficGraph(Request $request, string $id): JsonResponse
