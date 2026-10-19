@@ -35,7 +35,9 @@ final class SimplePdf
      *   items:array<int,array<int,string>>,
      *   payments:array<int,array<int,string>>,
      *   totals:array<string,string>,
-     *   footer?:string
+     *   footer?:string,
+     *   company_details?:list<string>,
+     *   note?:list<string>
      * } $data
      */
     public static function receipt(array $data): string
@@ -55,9 +57,10 @@ final class SimplePdf
         $pageId = count($objects) + 1;
         $objects[] = 'PAGE_PLACEHOLDER';
         $fontRegularId = count($objects) + 1;
-        $objects[] = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>';
+        // WinAnsi: Albanian ë, ç and the euro sign print as themselves.
+        $objects[] = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>';
         $fontBoldId = count($objects) + 1;
-        $objects[] = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>';
+        $objects[] = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>';
         $pagesId = count($objects) + 1;
         $objects[] = "<< /Type /Pages /Kids [{$pageId} 0 R] /Count 1 >>";
         $catalogId = count($objects) + 1;
@@ -106,7 +109,14 @@ final class SimplePdf
             $textX = 42;
         }
 
-        $c .= self::text((string) $data['app_name'], $textX, 804, 16, true, [1, 1, 1]);
+        $details = array_slice($data['company_details'] ?? [], 0, 4);
+        $c .= self::text(self::clip((string) $data['app_name'], 44), $textX, $details ? 818 : 804, 16, true, [1, 1, 1]);
+        // Company details: up to four lines under the name, inside the header band (746-842).
+        $lineY = 802;
+        foreach ($details as $line) {
+            $c .= self::text(self::clip((string) $line, $image ? 88 : 104), $textX, $lineY, 8.5, false, [0.86, 0.91, 1]);
+            $lineY -= 11.5;
+        }
         $c .= self::text((string) $data['title'], 42, 724, 22, true, [0.06, 0.14, 0.25]);
         if (!empty($data['subtitle'])) {
             $c .= self::text((string) $data['subtitle'], 42, 704, 10, false, [0.38, 0.45, 0.55]);
@@ -133,7 +143,14 @@ final class SimplePdf
         }
 
         $totalBoxHeight = 22 + (count($data['totals']) * 18);
-        $c .= self::totalsBox(354, max(92, $y - $totalBoxHeight - 10), $data['totals']);
+        $totalsY = max(92, $y - $totalBoxHeight - 10);
+        $c .= self::totalsBox(354, $totalsY, $data['totals']);
+        // Note (payment instructions, thanks…) beside the totals, wrapped to the space left of them.
+        $lineY = $totalsY + $totalBoxHeight - 14;
+        foreach (array_slice(self::wrap($data['note'] ?? [], 56), 0, 9) as $i => $line) {
+            $c .= self::text($line, 42, $lineY, $i === 0 ? 9.5 : 9, false, [0.06, 0.14, 0.25]);
+            $lineY -= 13;
+        }
         $footer = (string) ($data['footer'] ?? 'Thank you for your payment.');
         $c .= self::text($footer, 42, 52, 9, false, [0.38, 0.45, 0.55]);
         return $c;
@@ -212,7 +229,23 @@ final class SimplePdf
 
     private static function clip(string $text, int $length): string
     {
-        return strlen($text) > $length ? substr($text, 0, max(0, $length - 3)) . '...' : $text;
+        return mb_strlen($text) > $length ? mb_substr($text, 0, max(0, $length - 3)) . '...' : $text;
+    }
+
+    /** @param list<string> $lines @return list<string> lines wrapped at word boundaries */
+    private static function wrap(array $lines, int $width): array
+    {
+        $out = [];
+        foreach ($lines as $line) {
+            $line = trim((string) $line);
+            while (mb_strlen($line) > $width) {
+                $cut = mb_strrpos(mb_substr($line, 0, $width + 1), ' ') ?: $width;
+                $out[] = rtrim(mb_substr($line, 0, $cut));
+                $line = ltrim(mb_substr($line, $cut));
+            }
+            $out[] = $line;
+        }
+        return $out;
     }
 
     private static function fitBox(int $imageWidth, int $imageHeight, int $maxWidth, int $maxHeight): array
@@ -370,8 +403,9 @@ final class SimplePdf
 
     private static function pdfText(string $value): string
     {
-        $value = iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $value) ?: $value;
-        $value = preg_replace('/[^\x20-\x7E]/', ' ', $value) ?? $value;
+        // Windows-1252 matches the fonts' WinAnsi encoding; anything outside it is transliterated.
+        $value = iconv('UTF-8', 'CP1252//TRANSLIT//IGNORE', $value) ?: $value;
+        $value = preg_replace('/[\x00-\x1F\x7F]/', ' ', $value) ?? $value;
         return str_replace(['\\', '(', ')'], ['\\\\', '\\(', '\\)'], $value);
     }
 }

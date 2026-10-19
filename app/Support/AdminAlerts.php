@@ -26,6 +26,22 @@ final class AdminAlerts
         'resources' => 'Disk or memory almost full on the server',
         'jobs' => 'Background job stuck',
     ];
+    /**
+     * Message templates (Settings → Notifications → Admin alerts → Message templates); blank uses the default.
+     * key => [label, default, max characters]
+     */
+    public const TEMPLATES = [
+        'alert_subject' => ['Alert subject', '[{app}] {summary} on {host}', 150],
+        'alert_body' => ['Alert message', "{events}\n\nServer: {host}\nTime: {time}\n\n{open}", 2000],
+        'alert_sms' => ['Alert SMS / short text', '{app}: {events_short}', 300],
+        'report_subject' => ['Daily report subject', '[{app}] Daily report {date} · {status}', 150],
+        'report_intro' => ['Daily report opening text', '', 1000],
+    ];
+    /** Placeholders per template, shown under the fields. */
+    public const PLACEHOLDERS = [
+        'alert' => ['app', 'host', 'summary', 'events', 'events_short', 'open', 'time'],
+        'report' => ['app', 'host', 'date', 'status', 'time'],
+    ];
     private const STATE = 'notification_admin_state';
     private const LOG_SIZE = 30;
 
@@ -45,7 +61,17 @@ final class AdminAlerts
             'checks' => $checks,
             'report_enabled' => Settings::value('notification_admin_report_enabled', '0') === '1',
             'report_time' => Settings::value('notification_admin_report_time', '07:00'),
+            'templates' => array_map(static fn (string $key) => Settings::value('notification_admin_tpl_' . $key, ''), array_combine(array_keys(self::TEMPLATES), array_keys(self::TEMPLATES))),
         ];
+    }
+
+    /** A template with its placeholders filled; the default when none is saved. */
+    private static function render(string $key, array $values): string
+    {
+        $template = Settings::value('notification_admin_tpl_' . $key, '');
+        $template = $template !== '' ? $template : self::TEMPLATES[$key][1];
+        $text = strtr($template, array_combine(array_map(static fn ($k) => '{' . $k . '}', array_keys($values)), array_map('strval', $values)));
+        return trim((string) preg_replace("/\n{3,}/", "\n\n", $text));
     }
 
     public static function save(array $input): void
@@ -84,6 +110,18 @@ final class AdminAlerts
         if ($enabled && !$emails && !$phones && !$chats) {
             throw new InvalidArgumentException('Add at least one email address, phone number or Telegram chat to receive alerts.');
         }
+        $templates = [];
+        foreach (self::TEMPLATES as $key => [$label, , $max]) {
+            $value = trim(str_replace("\r", '', (string) (((array) ($input['templates'] ?? []))[$key] ?? '')));
+            if (mb_strlen($value) > $max) {
+                throw new InvalidArgumentException("$label: at most $max characters.");
+            }
+            $allowed = self::PLACEHOLDERS[str_starts_with($key, 'report') ? 'report' : 'alert'];
+            if (preg_match('/\{(?!(?:' . implode('|', $allowed) . ')\})[a-z_]*\}/', $value, $m)) {
+                throw new InvalidArgumentException("$label: {$m[0]} cannot be used here. Available: {" . implode('}, {', $allowed) . '}.');
+            }
+            $templates[$key] = $value;
+        }
         $checks = array_values(array_intersect(array_keys(self::CHECKS), (array) ($input['checks'] ?? [])));
         Settings::save('notification_admin_enabled', $enabled ? '1' : '0');
         Settings::save('notification_admin_emails', implode(', ', $emails));
@@ -101,6 +139,9 @@ final class AdminAlerts
         Settings::save('notification_admin_checks', implode(',', $checks));
         Settings::save('notification_admin_report_enabled', !empty($input['report_enabled']) ? '1' : '0');
         Settings::save('notification_admin_report_time', $time);
+        foreach ($templates as $key => $value) {
+            Settings::save('notification_admin_tpl_' . $key, $value);
+        }
     }
 
     /** @return list<array{at:int,kind:string,text:string,sent:string}> newest first */
@@ -187,12 +228,16 @@ final class AdminAlerts
         if ($opened || $resolved) {
             $host = (string) gethostname();
             $lines = array_merge(array_map(static fn ($t) => 'PROBLEM: ' . $t, $opened), array_map(static fn ($t) => 'RESOLVED: ' . $t, $resolved));
-            $subject = '[' . self::appName() . '] ' . ($opened ? count($opened) . ' problem' . (count($opened) === 1 ? '' : 's') : 'All clear') . ' on ' . $host;
-            $body = implode("\n", $lines) . "\n\nServer: $host\nTime: " . date('Y-m-d H:i T', $now) . "\n";
-            if ($state['active']) {
-                $body .= "\nStill open:\n" . implode("\n", array_map(static fn ($p) => '- ' . $p['text'], $state['active'])) . "\n";
-            }
-            $sent = self::deliver($settings, $subject, $body, self::appName() . ': ' . implode('; ', $lines), self::alertChannels($settings));
+            $values = [
+                'app' => self::appName(),
+                'host' => $host,
+                'summary' => $opened ? count($opened) . ' problem' . (count($opened) === 1 ? '' : 's') : 'All clear',
+                'events' => implode("\n", $lines),
+                'events_short' => implode('; ', $lines),
+                'open' => $state['active'] ? "Still open:\n" . implode("\n", array_map(static fn ($p) => '- ' . $p['text'], $state['active'])) : '',
+                'time' => date('Y-m-d H:i T', $now),
+            ];
+            $sent = self::deliver($settings, self::render('alert_subject', $values), self::render('alert_body', $values) . "\n", self::render('alert_sms', $values), self::alertChannels($settings));
             foreach ($opened as $text) {
                 self::log($state, $now, 'problem', $text, $sent);
             }
@@ -243,10 +288,17 @@ final class AdminAlerts
     {
         $host = (string) gethostname();
         $overview = MonitoringData::overview();
+        $open = self::state()['active'];
+        $values = ['app' => self::appName(), 'host' => $host, 'date' => date('Y-m-d', $now), 'time' => date('Y-m-d H:i T', $now),
+            'status' => $open ? count($open) . ' open problem' . (count($open) === 1 ? '' : 's') : 'all OK'];
         $out = [];
+        $intro = self::render('report_intro', $values);
+        if ($intro !== '') {
+            $out[] = $intro;
+            $out[] = '';
+        }
         $out[] = self::appName() . ' daily report · ' . $host . ' · ' . date('Y-m-d H:i T', $now);
         $out[] = '';
-        $open = self::state()['active'];
         $out[] = $open ? 'OPEN PROBLEMS (' . count($open) . ')' : 'No open problems.';
         foreach ($open as $p) {
             $out[] = '- ' . $p['text'] . ' (since ' . date('Y-m-d H:i', (int) $p['since']) . ')';
@@ -301,8 +353,7 @@ final class AdminAlerts
             $out[] = '- ' . date('H:i', $e['at']) . ' ' . strtoupper($e['kind']) . ': ' . $e['text'];
         }
 
-        $subject = '[' . self::appName() . '] Daily report ' . date('Y-m-d', $now) . ($open ? ' · ' . count($open) . ' open problem' . (count($open) === 1 ? '' : 's') : ' · all OK');
-        return [$subject, implode("\n", $out) . "\n"];
+        return [self::render('report_subject', $values), implode("\n", $out) . "\n"];
     }
 
     /**

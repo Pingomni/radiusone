@@ -397,7 +397,7 @@ final class BillingController extends Controller
     {
         $invoice = BillingRepository::invoice((int) $id);
         abort_if(!$invoice, 404, 'Invoice not found.');
-        $pdf = Invoices::pdf('DRAFT PAYMENT REQUEST', $invoice, BillingRepository::invoiceItems((int) $id), [], 'This document is a payment request, not a receipt.');
+        $pdf = Invoices::pdf($invoice, BillingRepository::invoiceItems((int) $id), []);
         return $this->pdfDownload('draft-payment-' . $invoice['invoice_number'] . '.pdf', $pdf);
     }
 
@@ -414,7 +414,7 @@ final class BillingController extends Controller
         $invoice['amount_paid'] = $receipt['amount_paid'];
         $invoice['balance_due'] = $receipt['balance_due'];
         $invoice['status'] = $receipt['state'];
-        $pdf = Invoices::pdf($receipt['title'], $invoice, BillingRepository::invoiceItems((int) $id), $payments, 'Confirms recorded payments only; see amount paid and remaining balance.', $receipt['state']);
+        $pdf = Invoices::pdf($invoice, BillingRepository::invoiceItems((int) $id), $payments, $receipt['state']);
         return $this->pdfDownload('payment-' . $invoice['invoice_number'] . '.pdf', $pdf);
     }
 

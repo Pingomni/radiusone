@@ -30,12 +30,12 @@ type EmailGateway = {
 };
 type AdminSettings = {
     enabled: boolean; emails: string; phones: string; alert_email: boolean; alert_sms: boolean; checks: string[]; report_enabled: boolean; report_time: string;
-    alert_telegram: boolean; report_telegram: boolean; telegram_chats: string; telegram_token_saved: boolean;
+    alert_telegram: boolean; report_telegram: boolean; telegram_chats: string; telegram_token_saved: boolean; templates: Record<string, string>;
 };
 type AdminEvent = { at: string; kind: TagData; text: string; sent: string };
 type Notifications = {
     view: 'templates' | 'gateways' | 'bulk' | 'preview' | 'history' | 'admin';
-    admin?: { settings: AdminSettings; checks: Record<string, string>; recent: AdminEvent[] };
+    admin?: { settings: AdminSettings; checks: Record<string, string>; recent: AdminEvent[]; templates: Record<string, { label: string; default: string }>; placeholders: Record<'alert' | 'report', string[]> };
     ready: { email: boolean; sms: boolean };
     gateway?: 'email' | 'sms' | null;
     providers?: Record<string, string>;
@@ -470,6 +470,67 @@ function BackupsTab({ b }: { b: Backups }) {
 
 /** Days of history a period keeps; "Keep forever" (0) keeps everything. */
 const keeps = (days: number) => (days === 0 ? Infinity : days);
+
+type Documents = {
+    values: Record<string, string>; defaults: Record<string, string>; labels: Record<string, string>; lines: Record<string, number>; placeholders: string[];
+};
+
+const DOCUMENT_HINTS: Record<string, string> = {
+    company_name: 'At the top of every PDF.',
+    company_details: 'Address, phone, email, tax number (NIPT). Up to 4 lines, shown in the header.',
+    draft_note: 'Bank account, IBAN, where and how to pay. Shown beside the totals.',
+    receipt_note: 'Shown beside the totals.',
+};
+
+function DocumentsTab({ d }: { d: Documents }) {
+    const form = useForm({ ...d.values });
+    const field = (key: string) => (
+        <TextArea
+            key={key}
+            className="span2"
+            label={d.labels[key]}
+            name={key}
+            rows={d.lines[key] > 1 ? Math.min(d.lines[key], 6) : 1}
+            placeholder={d.defaults[key] || 'Optional'}
+            hint={DOCUMENT_HINTS[key]}
+            value={form.data[key] ?? ''}
+            error={form.errors[key]}
+            onChange={(e) => form.setData(key, e.target.value)}
+        />
+    );
+    const preview = (kind: 'request' | 'receipt', label: string) => (
+        <a className="button" href={`/settings/documents/preview/${kind}`} target="_blank" rel="noreferrer" aria-disabled={form.isDirty || undefined} onClick={(e) => form.isDirty && e.preventDefault()} title={form.isDirty ? 'Save first' : undefined}>{label}</a>
+    );
+    return (
+        <form onSubmit={(e) => { e.preventDefault(); form.post('/settings/documents', { preserveScroll: true }); }}>
+            <Sheet title="Invoices & receipts" description="The wording of the payment request (draft PDF) and payment receipt your customers get. Leave a field empty to use the default shown in it." icon="billing">
+                <div className="form-grid">
+                    {field('company_name')}
+                    {field('company_details')}
+                    <p className="span2 hint">Titles, notes and footers can use: {d.placeholders.map((p) => `{${p}}`).join(' ')}</p>
+                </div>
+            </Sheet>
+            <Sheet title="Payment request" description="The PDF sent before payment (Billing → invoice → Draft PDF)." icon="billing">
+                <div className="form-grid">
+                    {field('draft_title')}
+                    {field('draft_note')}
+                    {field('draft_footer')}
+                    <div className="span2 form-actions">{preview('request', 'Preview payment request')}</div>
+                </div>
+            </Sheet>
+            <Sheet title="Payment receipt" description="The PDF that confirms a payment (Billing → invoice → Payment receipt)." icon="billing">
+                <div className="form-grid">
+                    {field('receipt_title')}
+                    {field('receipt_partial_title')}
+                    {field('receipt_note')}
+                    {field('receipt_footer')}
+                    <div className="span2 form-actions">{preview('receipt', 'Preview receipt')}</div>
+                </div>
+            </Sheet>
+            <div className="form-actions"><button className="primary" disabled={form.processing}>Save invoices & receipts</button></div>
+        </form>
+    );
+}
 
 type Regional = {
     timezone: string; timezones: Record<string, string>; timezoneLog: string[]; timezoneReady: boolean;
@@ -1071,6 +1132,31 @@ function AdminAlerts({ admin, ready }: { admin: NonNullable<Notifications['admin
                     <Check className="span2 checkbox" label="Also send the daily report to Telegram" name="report_telegram" checked={form.data.report_telegram} onChange={(e) => form.setData('report_telegram', e.target.checked)} />
                     <Field label="Send at" name="report_time" type="time" required value={form.data.report_time} onChange={(e) => form.setData('report_time', e.target.value)} hint={`Server time (${timeZone}).`} />
 
+                    <details className="span2">
+                        <summary>Message templates</summary>
+                        <p className="hint">Leave a field empty to use the default shown in it. Placeholders are filled in when the message is sent.</p>
+                        <div className="form-grid">
+                            {Object.entries(admin.templates).map(([key, t]) => {
+                                const kind = key.startsWith('report') ? 'report' : 'alert';
+                                const long = key === 'alert_body' || key === 'report_intro';
+                                return (
+                                    <TextArea
+                                        key={key}
+                                        className="span2"
+                                        label={t.label}
+                                        name={`templates[${key}]`}
+                                        rows={long ? 5 : 1}
+                                        placeholder={t.default || 'Optional'}
+                                        hint={`Placeholders: ${admin.placeholders[kind].map((p) => `{${p}}`).join(' ')}`}
+                                        value={form.data.templates[key] ?? ''}
+                                        error={(form.errors as Record<string, string>)[`templates.${key}`]}
+                                        onChange={(e) => form.setData('templates', { ...form.data.templates, [key]: e.target.value })}
+                                    />
+                                );
+                            })}
+                        </div>
+                    </details>
+
                     <div className="span2 form-actions">
                         <button className="primary" disabled={form.processing}>Save admin alerts</button>
                         <PostButton action="/settings/notifications/admin/test" className="" label="Send test alert" disabled={form.isDirty} title={form.isDirty ? 'Save first' : undefined} />
@@ -1127,14 +1213,15 @@ function NotificationsTab({ n }: { n: Notifications }) {
     );
 }
 
-export default function Settings({ tab, overview, users, usersSummary, roleDescriptions, branding, notifications, regional, retention, backups }: {
-    tab: 'overview' | 'users' | 'notifications' | 'branding' | 'regional' | 'retention' | 'backups';
+export default function Settings({ tab, overview, users, usersSummary, roleDescriptions, branding, notifications, documents, regional, retention, backups }: {
+    tab: 'overview' | 'users' | 'notifications' | 'branding' | 'documents' | 'regional' | 'retention' | 'backups';
     overview: Overview;
     users: Operator[] | null;
     usersSummary: { enabled: number; total: number };
     roleDescriptions: { role: string; description: string }[];
     branding: Branding;
     notifications: Notifications | null;
+    documents: Documents | null;
     regional: Regional | null;
     retention: Retention | null;
     backups: Backups | null;
@@ -1148,6 +1235,7 @@ export default function Settings({ tab, overview, users, usersSummary, roleDescr
                     {tab === 'users' && <UsersTab users={users} usersSummary={usersSummary} roleDescriptions={roleDescriptions} />}
                     {tab === 'notifications' && notifications && <NotificationsTab n={notifications} />}
                     {tab === 'branding' && <BrandingTab branding={branding} />}
+                    {tab === 'documents' && documents && <DocumentsTab d={documents} />}
                     {tab === 'regional' && regional && <RegionalTab r={regional} />}
                     {tab === 'retention' && retention && <RetentionTab r={retention} />}
                     {tab === 'backups' && backups && <BackupsTab b={backups} />}

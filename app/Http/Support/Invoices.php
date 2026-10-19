@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Support;
 
 use App\Support\BillingCalendar;
+use App\Support\BillingDocuments;
 use App\Support\Branding;
 use App\Support\Settings;
 use App\Support\SimplePdf;
@@ -140,18 +141,28 @@ final class Invoices
         return ['tone' => $tone, 'title' => $title, 'text' => $text];
     }
 
-    /** Payment request / receipt PDF (legacy invoicePdfDocument()). */
-    public static function pdf(string $title, array $invoice, array $items, array $payments, string $footer, string $paymentState = ''): string
+    /**
+     * Payment request ($payments empty) or receipt PDF, worded as in Settings → Invoices & receipts.
+     * $paymentState: '' for a payment request, 'paid' or 'partial' for a receipt.
+     */
+    public static function pdf(array $invoice, array $items, array $payments, string $paymentState = ''): string
     {
+        $words = BillingDocuments::settings();
+        $receipt = $paymentState !== '';
+        $title = $receipt ? ($paymentState === 'paid' ? $words['receipt_title'] : $words['receipt_partial_title']) : $words['draft_title'];
+        $note = $receipt ? $words['receipt_note'] : $words['draft_note'];
+        $footer = $receipt ? $words['receipt_footer'] : $words['draft_footer'];
         $currency = (string) $invoice['currency'];
         $period = self::periodLabel((string) ($invoice['billing_period'] ?? 'monthly'));
         $money = static fn ($value) => Format::money($value) . ' ' . $currency;
         $logo = Settings::value('portal_logo_path', '');
         return SimplePdf::receipt([
-            'title' => $title,
+            'title' => BillingDocuments::fill($title, $invoice),
             'payment_state' => $paymentState,
             'subtitle' => 'Generated on ' . date('Y-m-d H:i'),
-            'app_name' => (string) config('app.name', 'FreeRADIUS Web'),
+            'app_name' => $words['company_name'],
+            'company_details' => $words['company_details'] !== '' ? explode("\n", $words['company_details']) : [],
+            'note' => $note !== '' ? explode("\n", BillingDocuments::fill($note, $invoice)) : [],
             // An uploaded logo wins; otherwise the RadiusWeb logo (white background: the PDF writer drops transparency).
             'logo_path' => str_starts_with($logo, '/uploads/branding/') ? Branding::file(basename($logo)) : ($logo === '' ? public_path('brand/logo-invoice.png') : null),
             'meta' => [
@@ -176,7 +187,7 @@ final class Invoices
                 'Amount paid' => $money($invoice['amount_paid']),
                 'Balance due' => $money($invoice['balance_due']),
             ],
-            'footer' => $footer,
+            'footer' => BillingDocuments::fill($footer, $invoice),
         ]);
     }
 }

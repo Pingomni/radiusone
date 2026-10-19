@@ -10,6 +10,7 @@ use App\Support\AdminAlerts;
 use App\Support\App;
 use App\Support\Audit;
 use App\Support\Auth;
+use App\Support\BillingDocuments;
 use App\Support\Branding;
 use App\Support\Currency;
 use App\Support\CustomerNotifications;
@@ -39,7 +40,7 @@ final class SettingsController extends Controller
     {
         $tab = (string) $request->query('tab', 'overview');
         $tab = $tab === 'custom' ? 'branding' : $tab;
-        $tab = in_array($tab, ['overview', 'users', 'notifications', 'branding', 'regional', 'retention', 'backups'], true) ? $tab : 'overview';
+        $tab = in_array($tab, ['overview', 'users', 'notifications', 'branding', 'documents', 'regional', 'retention', 'backups'], true) ? $tab : 'overview';
 
         $userCount = (int) Db::value('SELECT COUNT(*) FROM portal_users');
         $enabledUsers = (int) Db::value('SELECT COUNT(*) FROM portal_users WHERE enabled = 1');
@@ -62,6 +63,13 @@ final class SettingsController extends Controller
             // Only the active tab's notification data is built: it may query many customers.
             'notifications' => $tab === 'notifications' ? $this->notifications($request) : null,
             'backups' => $tab === 'backups' ? BackupSettingsController::props() : null,
+            'documents' => $tab === 'documents' ? [
+                'values' => BillingDocuments::saved(),
+                'defaults' => array_map(static fn (array $f) => $f[1], BillingDocuments::FIELDS) + ['company_name' => (string) config('app.name', 'RadiusWeb')],
+                'labels' => array_map(static fn (array $f) => $f[0], BillingDocuments::FIELDS),
+                'lines' => array_map(static fn (array $f) => $f[3], BillingDocuments::FIELDS),
+                'placeholders' => BillingDocuments::PLACEHOLDERS,
+            ] : null,
             'regional' => $tab === 'regional' ? [
                 'timezone' => TimeZone::current(),
                 'timezones' => TimeZone::options(),
@@ -134,6 +142,8 @@ final class SettingsController extends Controller
                 $data['admin'] = [
                     'settings' => NotificationService::withoutSecrets(AdminAlerts::settings(), ['telegram_token']),
                     'checks' => AdminAlerts::CHECKS,
+                    'templates' => array_map(static fn (array $t) => ['label' => $t[0], 'default' => $t[1]], AdminAlerts::TEMPLATES),
+                    'placeholders' => AdminAlerts::PLACEHOLDERS,
                     'recent' => array_map(static fn (array $e) => [
                         'at' => date('Y-m-d H:i', (int) $e['at']),
                         'kind' => Present::tag(ucfirst((string) $e['kind']), match ($e['kind']) { 'problem' => 'danger', 'resolved' => 'success', default => '' }),
@@ -402,6 +412,32 @@ final class SettingsController extends Controller
         }
         Audit::log('update', 'setting', 'retention', $before, Retention::settings());
         return $this->ok('/settings?tab=retention', 'Retention saved. Older records are deleted in the nightly cleanup at 03:45.');
+    }
+
+    public function saveDocuments(Request $request): RedirectResponse
+    {
+        $before = BillingDocuments::saved();
+        try {
+            BillingDocuments::save($this->formInput($request));
+        } catch (InvalidArgumentException $e) {
+            return $this->failKeepingInput($e, '/settings?tab=documents');
+        }
+        Audit::log('update', 'setting', 'billing_documents', $before, BillingDocuments::saved());
+        return $this->ok('/settings?tab=documents', 'Saved. New payment requests and receipts use this wording; use Preview to check the layout.');
+    }
+
+    /** Sample payment request or receipt with the saved wording. */
+    public function previewDocument(string $kind): \Illuminate\Http\Response
+    {
+        $receipt = $kind === 'receipt';
+        $invoice = BillingDocuments::sample($receipt);
+        $items = [['description' => 'Home 50 service', 'line_total' => '20.00']];
+        $payments = $receipt ? [['payment_date' => date('Y-m-d'), 'amount' => '20.00', 'currency' => $invoice['currency'], 'method' => 'cash', 'reference' => 'R-0001']] : [];
+        return response(\App\Http\Support\Invoices::pdf($invoice, $items, $payments, $receipt ? 'paid' : ''), 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'inline; filename="preview-' . ($receipt ? 'receipt' : 'payment-request') . '.pdf"',
+            'Cache-Control' => 'no-store, max-age=0',
+        ]);
     }
 
     public function saveCurrency(Request $request): RedirectResponse

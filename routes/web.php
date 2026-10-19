@@ -65,6 +65,8 @@ Route::middleware('frweb.auth')->group(function () {
         Route::post('/settings/notifications/{channel}-test', [SettingsController::class, 'testGateway'])->whereIn('channel', ['email', 'sms']);
         Route::post('/settings/notifications/admin/telegram-chats', [SettingsController::class, 'telegramChats']);
         Route::post('/settings/notifications/admin/{kind}', [SettingsController::class, 'sendAdminAlert'])->whereIn('kind', ['test', 'report']);
+        Route::post('/settings/documents', [SettingsController::class, 'saveDocuments']);
+        Route::get('/settings/documents/preview/{kind}', [SettingsController::class, 'previewDocument'])->whereIn('kind', ['request', 'receipt']);
         Route::post('/settings/backups/run', [BackupSettingsController::class, 'runNow']);
         Route::post('/settings/backups/destinations/{id}/test', [BackupSettingsController::class, 'test'])->where('id', '[0-9a-f]{12}');
         foreach (['general', 'sms-template', 'email-template', 'send-sms'] as $legacy) {
