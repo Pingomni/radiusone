@@ -62,7 +62,8 @@ final class NetworkOperations
         if(!in_array($op['state'],['pending','running','ack','timeout','uncertain'],true) && ($op['result_code']??'')!=='no_observed_session_next_authentication'){return $op['state'];}
         $sub=Db::row('SELECT * FROM subscriptions WHERE id=?',[$op['subscription_id']]);
         if((int)$sub['policy_revision']!==(int)$op['policy_revision']){return self::finish($op,'superseded','newer_policy_revision');}
-        $profile=$sub['access_profile_id']?Db::row('SELECT * FROM nas_access_profiles WHERE id=?',[$sub['access_profile_id']]):null;
+        if(!$sub['access_profile_id']){return self::reconnect($op,$sub);}
+        $profile=Db::row('SELECT * FROM nas_access_profiles WHERE id=?',[$sub['access_profile_id']]);
         if(AccessPolicy::capability($profile,$op['action'])){return self::finish($op,'blocked','capability_unverified');}
         $policy=json_decode(Db::value('SELECT policy_json FROM policy_revisions WHERE subscription_id=? AND revision=?',[$sub['id'],$op['policy_revision']]),true,512,JSON_THROW_ON_ERROR);
         $policy['revision']=(int)$op['policy_revision'];
@@ -102,6 +103,35 @@ final class NetworkOperations
             return self::finish($op,$outcome,'transport_'.$outcome);
         }catch(\Throwable){return self::finish($op,'uncertain','worker_or_transport_interrupted');}
     }
+    /**
+     * Without an access profile there is no router adapter: RADIUS already holds the new policy, so an online
+     * customer is disconnected (CoA or RouterOS API, as the Disconnect button does) and gets it on reconnect;
+     * an offline one gets it at the next login. A refused disconnect is retried with back-off, five times.
+     */
+    private static function reconnect(array $op,array $sub): string
+    {
+        if(Db::value('SELECT auth_method FROM customer_profiles WHERE id=?',[$sub['customer_id']])==='dhcp'){
+            return self::finish($op,'verified','next_dhcp_lease');
+        }
+        $sessions=self::sessions($sub);
+        if(!$sessions){return self::finish($op,'verified','no_session_next_login');}
+        Db::exec('UPDATE network_operations SET state="running",session_json=?,claimed_at=NOW(),attempts=attempts+1,updated_at=NOW() WHERE id=?',[json_encode($sessions,JSON_THROW_ON_ERROR),$op['id']]);
+        $failed=null;$sent=0;
+        foreach($sessions as $session){
+            try{
+                RadiusRepository::disconnectUser((string)$session['username'],null,(int)$session['radacctid']);
+                $sent++;
+            }catch(\Throwable $e){
+                // A session whose accounting went quiet is not online any more: the new policy applies at its next login.
+                if(str_contains($e->getMessage(),'stale') || str_contains($e->getMessage(),'No identified active session')){continue;}
+                $failed=$e->getMessage();
+            }
+        }
+        if($failed===null){return self::finish($op,'verified',$sent?'disconnected_for_new_policy':'no_session_next_login');}
+        $op['attempts']=(int)$op['attempts']+1;
+        return self::finish($op,$op['attempts']>=5?'failed':'uncertain',$op['attempts']>=5?'disconnect_failed_manual_review':'disconnect_retry: '.mb_substr($failed,0,60));
+    }
+
     private static function verified(array $o,array $policy,array $op): bool
     {
         if(empty($o['fresh']) || empty($o['evidence'])){return false;}

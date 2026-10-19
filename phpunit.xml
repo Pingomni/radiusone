@@ -39,5 +39,9 @@
         <env name="QUEUE_CONNECTION" value="sync" force="true"/>
         <env name="SESSION_DRIVER" value="array" force="true"/>
         <env name="SESSION_SECURE_COOKIE" value="false" force="true"/>
+        <!-- Production switches: off in tests, whatever .env says; tests that need them turn them on. -->
+        <env name="FRWEB_SCHEDULE_EXPIRY_SYNC" value="false" force="true"/>
+        <env name="FRWEB_SCHEDULE_EXPIRY_NOTIFICATIONS" value="false" force="true"/>
+        <env name="NETWORK_WORKER_ENABLED" value="false" force="true"/>
     </php>
 </phpunit>

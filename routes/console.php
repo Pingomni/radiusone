@@ -5,8 +5,7 @@ use Illuminate\Support\Facades\Schedule;
 // Replaces the www-data entries in /etc/cron.d/freeradius-web-* at cutover (one cron line runs
 // `php artisan schedule:run` every minute). Each job keeps its own lock in job_runs (JobRunner), so
 // overlapping runs exit 75 instead of running twice.
-// Not scheduled here: frweb:backup runs from root's cron with FRWEB_OPERATOR_ENV_FILE=backup.env,
-// and frweb:process-network-operations stays manual until device acceptance.
+// Not scheduled here: frweb:backup runs from root's cron with FRWEB_OPERATOR_ENV_FILE=backup.env.
 
 $log = static fn (string $name): string => '/var/log/freeradius-web/' . $name . '.log';
 
@@ -26,5 +25,9 @@ Schedule::command('frweb:prune-radius')->dailyAt('03:45')->appendOutputTo($log('
 // Paused in the legacy cron (migration 018 rollout; notification delivery); enable explicitly.
 Schedule::command('frweb:sync-expired')->everyMinute()->runInBackground()->appendOutputTo($log('expiry'))
     ->when(static fn () => config('app.schedule_expiry_sync'));
+// Sends policy changes to the network: customers without an access profile who are online are
+// disconnected (CoA or RouterOS API) so they reconnect with the new policy. Needs NETWORK_WORKER_ENABLED=true.
+Schedule::command('frweb:process-network-operations')->everyMinute()->runInBackground()->appendOutputTo($log('network'))
+    ->when(static fn () => filter_var(env('NETWORK_WORKER_ENABLED', false), FILTER_VALIDATE_BOOL));
 Schedule::command('frweb:process-notifications')->everyFiveMinutes()->runInBackground()->appendOutputTo($log('notifications'))
     ->when(static fn () => config('app.schedule_expiry_notifications'));
