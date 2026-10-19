@@ -29,12 +29,12 @@ final class Present
         if (($row['applied_revision'] ?? null) === null || (int) $row['applied_revision'] !== (int) ($row['config_revision'] ?? 0)) {
             return self::tag('waiting for RADIUS update', 'warning');
         }
-        $vendor = strtolower((string) (($row['vendor'] ?? '') ?: ($row['type'] ?? '') ?: ''));
-        if ($vendor === 'mikrotik') {
-            $api = RadiusRepository::mikrotikDisconnectApiStatus($row);
-            return $api['ok'] ? self::tag('RouterOS API', null) : self::tag('API login missing', 'warning');
-        }
-        return (int) ($row['coa_enabled'] ?? 0) === 1 ? self::tag('CoA', null) : self::tag('CoA off', 'warning');
+        $method = RadiusRepository::disconnectMethod($row);
+        return match ($method['method']) {
+            'api' => self::tag('RouterOS API', null),
+            'coa' => self::tag('CoA', null),
+            default => self::tag($method['label'] === 'off' ? 'Disconnect off' : $method['label'], 'warning'),
+        };
     }
 
     /** Key-figure card (resources/js/components/metrics.tsx). */

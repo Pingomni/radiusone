@@ -358,8 +358,22 @@ final class ClientController extends Controller
     {
         Auth::requireCan('clients.disconnect');
         $back = '/clients/' . rawurlencode($username) . '/edit';
+        $nasId = (int) $request->input('nas_id', 0);
+        $accountingId = (int) $request->input('radacctid', 0);
+        $profiled = (bool) Db::value('SELECT s.access_profile_id FROM subscriptions s JOIN customer_profiles c ON c.id=s.customer_id WHERE c.username=?', [$username]);
+        if (!$profiled) {
+            // No access profile: disconnect now, like a RADIUS manager does (CoA, or the RouterOS API).
+            try {
+                $result = RadiusRepository::disconnectUser($username, $nasId ?: null, $accountingId ?: null);
+            } catch (Throwable $e) {
+                Audit::log('disconnect_failed', 'client', $username, null, ['nas_id' => $nasId, 'radacctid' => $accountingId, 'error' => mb_substr($e->getMessage(), 0, 300)]);
+                return $this->fail(mb_substr($e->getMessage(), 0, 220), $back);
+            }
+            Audit::log('disconnect', 'client', $username, null, ['nas_id' => $nasId, 'radacctid' => $accountingId, 'method' => $result['command']]);
+            return $this->ok($back, 'Disconnected. ' . $result['output'] . ' Most CPEs redial on their own; refresh in a few seconds to see the new session.');
+        }
         try {
-            $operationId = NetworkOperations::requestDisconnect($username, (int) $request->input('nas_id', 0), (int) $request->input('radacctid', 0));
+            $operationId = NetworkOperations::requestDisconnect($username, $nasId, $accountingId);
             Audit::log('disconnect', 'client', $username, null, ['operation_id' => $operationId]);
             return $this->ok($back, 'Disconnect queued. Network completion has not been verified.');
         } catch (Throwable $e) {

@@ -7,16 +7,10 @@ import AppLayout from '@/layouts/AppLayout';
 import { bind, bindCheck } from '@/lib/form';
 
 type Vendor = { label: string; summary: string; disconnect: string };
-type Device = { id: number | ''; section: string; vendor: string; shortname: string; nasname: string; secret: string; description: string; enabled: boolean };
+type Device = { id: number | ''; section: string; vendor: string; shortname: string; nasname: string; secret: string; description: string; enabled: boolean; coa_enabled: boolean; coa_port: string };
 type Stat = { label: string; value: string; note: string; tone: string };
 type NasInfo = { id: number; name: string; ip: string; vendor: string; vendorLabel: string; enabled: boolean; description: string; stats: Stat[] };
-type Disconnect = { id: number; section: string; api_user: string; api_password: string; apiPasswordSaved: boolean; coa_enabled: boolean; coa_port: string };
-type Profile = {
-    id: number | ''; nas_id: number; adapter: string; model: string; software_version: string; listener_key: string; dhcp_server: string;
-    expected_interval: string; grace_seconds: string; evidence: string; enabled: boolean; authorization_verified: boolean;
-    actions_verified: boolean; forwarding_verified: boolean; sourceIp?: string; stale?: boolean;
-};
-type Access = { adapters: Record<string, string>; paused: string | null; profiles: Profile[] };
+type Api = { id: number; section: string; api_enabled: boolean; api_user: string; api_password: string; apiPasswordSaved: boolean };
 type SnmpValues = {
     snmp_enabled: boolean; snmp_port: string; snmp_host: string; snmp_version: string; snmp_timeout_ms: string; snmp_community: string;
     snmp_v3_user: string; snmp_v3_context: string; snmp_v3_auth_protocol: string; snmp_v3_auth_password: string; snmp_v3_priv_protocol: string; snmp_v3_priv_password: string;
@@ -48,100 +42,48 @@ function DeviceForm({ device, vendors, canManage }: { device: Device; vendors: R
                     ))}
                 </fieldset>
                 <Field label="Name" required disabled={!canManage} autoComplete="off" hint="Short label shown in lists, e.g. bras-tirana-01." {...bind(form, 'shortname')} />
-                <Field label="NAS IP address" required disabled={!canManage} autoComplete="off" inputMode="decimal" hint="The address the router sends RADIUS from. The API, SNMP and access profiles use it too." {...bind(form, 'nasname')} />
+                <Field label="NAS IP address" required disabled={!canManage} autoComplete="off" inputMode="decimal" hint="The address the router sends RADIUS from. The API and SNMP use it too." {...bind(form, 'nasname')} />
                 <Field label="RADIUS shared secret" type="password" required={isNew} disabled={!canManage} autoComplete="new-password" hint={isNew ? 'Must match the secret configured on the router.' : 'Leave blank to keep the saved secret.'} {...bind(form, 'secret')} />
                 <Field label="Description" disabled={!canManage} autoComplete="off" hint="Optional, e.g. site or rack." {...bind(form, 'description')} />
                 <div className="span2"><Check label="Accept RADIUS requests from this NAS" disabled={!canManage} {...bindCheck(form, 'enabled')} /></div>
+                <h3 className="span2 form-section-title">Disconnect (CoA)</h3>
+                <div className="span2"><Check label="Disconnect sessions with RADIUS (CoA)" disabled={!canManage} {...bindCheck(form, 'coa_enabled')} /></div>
+                <Field
+                    label="CoA port"
+                    type="number"
+                    min={1}
+                    max={65535}
+                    disabled={!canManage || !form.data.coa_enabled}
+                    hint={form.data.vendor === 'mikrotik'
+                        ? 'UDP port of /radius incoming on the router (3799). Signed with the shared secret above; no API login needed.'
+                        : 'UDP port of the dynamic-authorization server on the router (often 1700 or 3799). Signed with the shared secret above.'}
+                    {...bind(form, 'coa_port')}
+                />
                 <Actions show={canManage} label={isNew ? 'Add NAS' : 'Save device'} busy={form.processing} />
             </form>
         </>
     );
 }
 
-function DisconnectForm({ values, vendor, ip, canManage }: { values: Disconnect; vendor: string; ip: string; canManage: boolean }) {
-    const form = useForm<Disconnect>(values);
+function ApiForm({ values, vendor, ip, canManage }: { values: Api; vendor: string; ip: string; canManage: boolean }) {
+    const form = useForm<Api>(values);
+    if (vendor !== 'mikrotik') {
+        return <Empty>The RouterOS API is only for MikroTik. This router disconnects with RADIUS CoA, set on the Device tab.</Empty>;
+    }
     const submit = (event: React.FormEvent) => { event.preventDefault(); form.post('/nas/save', { preserveScroll: true, onFinish: () => form.setData('api_password', '') }); };
-    if (vendor === 'mikrotik') {
-        return (
-            <form className="form-grid nas-form" onSubmit={submit}>
-                <div className="span2 kv nas-endpoint"><span>RouterOS API</span><strong className="mono">tls://{ip}:8729</strong></div>
-                <Field label="API user" disabled={!canManage} autoComplete="off" hint="Dedicated least-privilege RouterOS user." {...bind(form, 'api_user')} />
-                <Field label="API password" type="password" disabled={!canManage} autoComplete="new-password" hint={values.apiPasswordSaved ? 'Saved. Leave blank to keep it.' : 'Required to disconnect sessions.'} {...bind(form, 'api_password')} />
-                <p className="span2 hint">The portal connects to api-ssl on the NAS IP. The router certificate must be valid for that address.</p>
-                <Actions show={canManage} label="Save disconnect settings" busy={form.processing} />
-            </form>
-        );
-    }
-    if (vendor === 'cisco') {
-        return (
-            <form className="form-grid nas-form" onSubmit={submit}>
-                <div className="span2"><Check label="Send RADIUS disconnect requests (CoA)" disabled={!canManage} {...bindCheck(form, 'coa_enabled')} /></div>
-                <Field label="CoA port" type="number" min={1} max={65535} disabled={!canManage} hint="UDP port of the dynamic-authorization server on the router (often 1700 or 3799). Uses the RADIUS shared secret." {...bind(form, 'coa_port')} />
-                <Actions show={canManage} label="Save disconnect settings" busy={form.processing} />
-            </form>
-        );
-    }
-    return <Empty>Choose MikroTik RouterOS or Cisco IOS XE on the Device tab to set up disconnects.</Empty>;
-}
-
-function ProfileCard({ profile, adapters, canManage }: { profile: Profile; adapters: Record<string, string>; canManage: boolean }) {
-    const form = useForm<Profile>(profile);
-    const isNew = profile.id === '';
-    const tested = isNew ? [] : ([['login', profile.authorization_verified], ['disconnect/speed', profile.actions_verified], ['DHCP blocking', profile.forwarding_verified]] as const).filter(([, on]) => on).map(([label]) => label);
-    const disabled = !canManage;
+    const on = form.data.api_enabled;
     return (
-        <details className="access-profile" open={profile.stale || undefined}>
-            <summary>
-                {isNew ? <strong>Add access profile</strong> : (
-                    <>
-                        <strong>{adapters[profile.adapter] ?? profile.adapter}</strong>
-                        <span className="access-meta">{`${profile.model} ${profile.software_version}`.trim() || 'model not recorded'}</span>
-                        {profile.stale ? <Badge tone="warning">previous NAS IP</Badge> : !profile.enabled && <Badge>off</Badge>}
-                        <span className="access-meta">{tested.length ? `tested: ${tested.join(', ')}` : 'not tested yet'}</span>
-                    </>
-                )}
-            </summary>
-            <form className="form-grid" onSubmit={(event) => { event.preventDefault(); form.post('/nas/access/save', { preserveScroll: true }); }}>
-                <Select label="Platform and access" options={adapters} disabled={disabled} {...bind(form, 'adapter')} />
-                <Field label="Exact model" disabled={disabled} {...bind(form, 'model')} />
-                <Field label="Software version" disabled={disabled} {...bind(form, 'software_version')} />
-                {profile.stale && (
-                    <p className="span2 field-warning" role="alert">This profile is bound to the previous NAS IP {profile.sourceIp} and no longer matches this NAS. Add a new profile for the current IP.</p>
-                )}
-                <Field label="RADIUS listener" required disabled={disabled} hint="Name of the RADIUS listener this router uses, for example routeros_pppoe (set up on both RADIUS servers)." {...bind(form, 'listener_key')} />
-                <Field label="DHCP server name on the router" disabled={disabled} {...bind(form, 'dhcp_server')} />
-                <Field label="Accounting update every (seconds)" type="number" required disabled={disabled} {...bind(form, 'expected_interval')} />
-                <Field label={'Extra wait before "no recent update" (seconds)'} type="number" required disabled={disabled} {...bind(form, 'grace_seconds')} />
-                <Field label="Test notes" disabled={disabled} hint="Where the test results are recorded (ticket or document). Do not paste passwords." {...bind(form, 'evidence')} />
-                <div className="span2 access-checks">
-                    <Check label="Profile enabled" disabled={disabled} {...bindCheck(form, 'enabled')} />
-                    <Check label="Login tested on this software version" disabled={disabled} {...bindCheck(form, 'authorization_verified')} />
-                    <Check label="Disconnect and speed changes tested" disabled={disabled} {...bindCheck(form, 'actions_verified')} />
-                    <Check label="DHCP blocking tested, including static IPs" disabled={disabled} {...bindCheck(form, 'forwarding_verified')} />
-                </div>
-                <Actions show={canManage} label={isNew ? 'Add profile' : 'Save profile'} busy={form.processing} />
-            </form>
-        </details>
-    );
-}
-
-function AccessTab({ access, nasId, canManage }: { access: Access | null; nasId: number; canManage: boolean }) {
-    if (!access) return <p className="hint">Access profiles need database migration 018_subscriber_policy.sql.</p>;
-    const blank: Profile = {
-        id: '', nas_id: nasId, adapter: 'routeros_pppoe', model: '', software_version: '', listener_key: '', dhcp_server: '', expected_interval: '300',
-        grace_seconds: '120', evidence: '', enabled: false, authorization_verified: false, actions_verified: false, forwarding_verified: false,
-    };
-    return (
-        <>
-            {access.paused !== null && (
-                <div className="flash warning" role="status">
-                    Policy publication is paused: profiles are saved, but subscribers are not re-published to RADIUS until the expiry and policy job runs again. <small>{access.paused}</small>
-                </div>
-            )}
-            {!access.profiles.length && <Empty>No access profiles yet. Add one to say which kind of access this router serves.</Empty>}
-            {access.profiles.map((p) => <ProfileCard key={p.id} profile={p} adapters={access.adapters} canManage={canManage} />)}
-            {canManage && <ProfileCard key={`new-${access.profiles.length}`} profile={blank} adapters={access.adapters} canManage={canManage} />}
-        </>
+        <form className="form-grid nas-form" onSubmit={submit}>
+            <div className="span2"><Check label="Enable RouterOS API" disabled={!canManage} {...bindCheck(form, 'api_enabled')} /></div>
+            <p className="span2 hint">{on
+                ? 'Disconnects on this NAS use the RouterOS API instead of RADIUS CoA. The portal reads the session list and removes exactly the matching session.'
+                : 'Off: disconnects use RADIUS CoA from the Device tab, like most RADIUS managers. Turn the API on only if CoA cannot be used on this router.'}</p>
+            <div className="span2 kv nas-endpoint"><span>RouterOS API</span><strong className="mono">tls://{ip}:8729</strong></div>
+            <Field label="API user" disabled={!canManage || !on} autoComplete="off" hint="Dedicated least-privilege RouterOS user (read, write, api)." {...bind(form, 'api_user')} />
+            <Field label="API password" type="password" disabled={!canManage || !on} autoComplete="new-password" hint={values.apiPasswordSaved ? 'Saved. Leave blank to keep it.' : 'Required when the API is on.'} {...bind(form, 'api_password')} />
+            {on && <p className="span2 hint">The portal connects to api-ssl on the NAS IP. The router certificate must be valid for that address and trusted by this server.</p>}
+            <Actions show={canManage} label="Save API settings" busy={form.processing} />
+        </form>
     );
 }
 
@@ -221,14 +163,13 @@ function Summary({ nas }: { nas: NasInfo }) {
 
 const intro = (text: string) => <p className="nas-tab-intro">{text}</p>;
 
-export default function NasForm({ device, vendors, setupSteps, canManage, nas, disconnect, access, snmp, sessions }: {
+export default function NasForm({ device, vendors, setupSteps, canManage, nas, api, snmp, sessions }: {
     device: Device;
     vendors: Record<string, Vendor>;
     setupSteps: Record<string, [string, string][]>;
     canManage: boolean;
     nas: NasInfo | null;
-    disconnect?: Disconnect;
-    access?: Access | null;
+    api?: Api;
     snmp?: Snmp | null;
     sessions?: Session[];
 }) {
@@ -237,7 +178,7 @@ export default function NasForm({ device, vendors, setupSteps, canManage, nas, d
             <AppLayout title="New NAS Device">
                 <div className="toolbar"><Link className="button" href="/nas">Back to NAS devices</Link></div>
                 <Panel title="New NAS device">
-                    <p className="hint">Add the router first. Disconnect, SNMP monitoring and access profiles are set up on its page afterwards.</p>
+                    <p className="hint">Add the router first. The RouterOS API and SNMP monitoring are set up on its page afterwards.</p>
                     <DeviceForm device={device} vendors={vendors} canManage={canManage} />
                 </Panel>
                 <Panel title="Router checklist">
@@ -261,11 +202,7 @@ export default function NasForm({ device, vendors, setupSteps, canManage, nas, d
                 className="tabs nas-tabs"
                 tabs={[
                     { key: 'device', title: 'Device', icon: 'server', content: <>{intro('How FreeRADIUS recognises this router. Changes take effect after the next RADIUS update.')}<DeviceForm device={device} vendors={vendors} canManage={canManage} /></> },
-                    { key: 'disconnect', title: 'Disconnect', icon: 'shield', content: <>{intro('How the portal ends a subscriber session on this router.')}{disconnect && <DisconnectForm values={disconnect} vendor={nas.vendor} ip={nas.ip} canManage={canManage} />}</> },
-                    {
-                        key: 'access', title: 'Access', icon: 'lock', count: access ? access.profiles.length : undefined,
-                        content: <>{intro('Which kind of access this router serves (PPPoE or DHCP) and what has been tested on it. Saving does not change the router or FreeRADIUS.')}<AccessTab access={access ?? null} nasId={nas.id} canManage={canManage} /></>,
-                    },
+                    { key: 'api', title: 'API', icon: 'settings', content: <>{intro('Optional RouterOS API access. When it is on, disconnects use the API instead of RADIUS CoA.')}{api && <ApiForm values={api} vendor={nas.vendor} ip={nas.ip} canManage={canManage} />}</> },
                     { key: 'snmp', title: 'SNMP', icon: 'signal', content: <>{intro('Read-only monitoring for the Monitoring page, live monitor and graphs. Changes here apply immediately; no RADIUS update is needed.')}<SnmpForm snmp={snmp ?? null} nasId={nas.id} ip={nas.ip} canManage={canManage} /></> },
                     {
                         key: 'sessions', title: 'Sessions', icon: 'clients', count: sessions?.length ?? 0,

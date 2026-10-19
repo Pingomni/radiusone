@@ -106,12 +106,8 @@ final class MonitoringData
         if (($nas['applied_revision'] ?? null) === null || (int) $nas['applied_revision'] !== (int) ($nas['config_revision'] ?? 0)) {
             return 'waiting for RADIUS update';
         }
-        $vendor = strtolower((string) ($nas['vendor'] ?: $nas['type']));
-        return match ($vendor) {
-            'mikrotik' => RadiusRepository::mikrotikDisconnectApiStatus($nas)['ok'] ? 'ready' : 'API login missing',
-            'cisco' => (int) $nas['coa_enabled'] === 1 && !empty($nas['secret']) ? 'ready' : 'CoA off',
-            default => 'unsupported platform',
-        };
+        $method = RadiusRepository::disconnectMethod($nas);
+        return $method['ok'] ? 'ready (' . ($method['method'] === 'api' ? 'API' : 'CoA') . ')' : ($method['label'] === 'off' ? 'off' : $method['label']);
     }
 
     /**
@@ -180,7 +176,7 @@ final class MonitoringData
         ];
 
         $nasRows = Db::select('SELECT n.id, n.nasname, n.shortname, n.type, n.secret, COALESCE(m.vendor, n.type) AS vendor, COALESCE(m.enabled, 1) AS enabled, m.pending_delete, m.config_revision, m.applied_revision,
-                COALESCE(m.coa_enabled, 1) AS coa_enabled, m.api_host, m.api_user, (COALESCE(m.api_password, "") <> "") AS api_password_saved
+                COALESCE(m.coa_enabled, 1) AS coa_enabled, m.coa_port, m.api_host, m.api_user, (COALESCE(m.api_password, "") <> "") AS api_password_saved, ' . RadiusRepository::apiEnabledSql('m') . ' AS api_enabled
             FROM nas n LEFT JOIN nas_metadata m ON m.nas_id=n.id WHERE COALESCE(m.pending_delete, 0)=0 ORDER BY n.shortname, n.id');
         $lastAccountingAt = self::lastAccounting($nasRows);
         $snmp = NasMonitor::available() ? array_column(Db::select('SELECT * FROM nas_snmp'), null, 'nas_id') : [];

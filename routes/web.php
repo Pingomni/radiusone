@@ -133,8 +133,8 @@ Route::middleware('frweb.auth')->group(function () {
         Route::get('/nas/health', [NasController::class, 'health']);
         Route::get('/nas/create', [NasController::class, 'form']);
         Route::get('/nas/{id}/edit', [NasController::class, 'form'])->whereNumber('id');
-        Route::get('/nas/{id}/access', [NasController::class, 'accessProfiles'])->whereNumber('id');
-        Route::post('/nas/access/save', [NasController::class, 'accessProfileSave'])->middleware('recent-auth');
+        // The Access tab (access profiles) was removed; old links open the NAS page.
+        Route::get('/nas/{id}/access', fn (string $id) => redirect('/nas/' . (int) $id . '/edit'))->whereNumber('id');
         Route::post('/nas/{id}/snmp', [NasController::class, 'snmpSave'])->whereNumber('id');
         Route::middleware('recent-auth')->group(function () {
             Route::post('/nas/save', [NasController::class, 'save']);

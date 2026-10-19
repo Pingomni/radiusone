@@ -31,19 +31,28 @@ final class NasTest extends TestCase
         $this->get('/nas/' . $id . '/edit')->assertOk()->assertInertia(fn ($page) => $page
             ->where('nas.ip', '10.10.0.1')
             ->where('device.secret', '')
-            ->where('disconnect.apiPasswordSaved', false)
+            ->where('api.apiPasswordSaved', false)
+            ->where('api.api_enabled', false)
+            ->where('device.coa_enabled', true)
+            ->where('device.coa_port', '3799')
+            ->where('nas.stats.2.value', 'CoA ready')
             ->has('nas.stats', 4)
             ->has('sessions', 0));
     }
 
-    public function test_disconnect_tab_keeps_device_fields_and_secret(): void
+    public function test_api_tab_keeps_device_fields_and_secret(): void
     {
         $this->actingAsOperator();
         $id = $this->createNas();
         $secret = Db::value('SELECT secret FROM nas WHERE id=?', [$id]);
+        $revision = (int) Db::value('SELECT config_revision FROM nas_metadata WHERE nas_id=?', [$id]);
 
-        $this->post('/nas/save', ['id' => $id, 'section' => 'disconnect', 'api_user' => 'portal', 'api_password' => 'api-pass-123'])
-            ->assertRedirect('/nas/' . $id . '/edit?tab=disconnect');
+        $this->post('/nas/save', ['id' => $id, 'section' => 'api', 'api_enabled' => true, 'api_user' => 'portal', 'api_password' => 'api-pass-123'])
+            ->assertRedirect('/nas/' . $id . '/edit?tab=api');
+        $this->assertSame(1, (int) Db::value('SELECT api_enabled FROM nas_metadata WHERE nas_id=?', [$id]));
+        // API settings are used by the portal only: no RADIUS update needed.
+        $this->assertSame($revision, (int) Db::value('SELECT config_revision FROM nas_metadata WHERE nas_id=?', [$id]));
+        $this->get('/nas/' . $id . '/edit')->assertInertia(fn ($page) => $page->where('nas.stats.2.value', 'API ready'));
         $this->assertSame('bras-01', Db::value('SELECT shortname FROM nas WHERE id=?', [$id]));
         $this->assertSame($secret, Db::value('SELECT secret FROM nas WHERE id=?', [$id]));
         $this->assertSame('portal', Db::value('SELECT api_user FROM nas_metadata WHERE nas_id=?', [$id]));
@@ -51,9 +60,16 @@ final class NasTest extends TestCase
         $this->assertStringNotContainsString('radius-secret-1', (string) Db::value('SELECT GROUP_CONCAT(COALESCE(after_json,"")) FROM audit_logs'));
 
         // Device tab with the checkbox off disables RADIUS but keeps the API login.
-        $this->post('/nas/save', ['id' => $id, 'section' => 'device', 'vendor' => 'mikrotik', 'shortname' => 'bras-01', 'nasname' => '10.10.0.1', 'secret' => '', 'description' => 'Rack A', 'enabled' => false]);
+        $this->post('/nas/save', ['id' => $id, 'section' => 'device', 'vendor' => 'mikrotik', 'shortname' => 'bras-01', 'nasname' => '10.10.0.1', 'secret' => '', 'description' => 'Rack A', 'enabled' => false, 'coa_enabled' => true, 'coa_port' => '3799']);
         $this->assertSame(0, (int) Db::value('SELECT enabled FROM nas_metadata WHERE nas_id=?', [$id]));
         $this->assertSame('portal', Db::value('SELECT api_user FROM nas_metadata WHERE nas_id=?', [$id]));
+        $this->assertSame($revision + 1, (int) Db::value('SELECT config_revision FROM nas_metadata WHERE nas_id=?', [$id]));
+
+        // Switching the API off keeps the login; disconnects fall back to CoA.
+        $this->post('/nas/save', ['id' => $id, 'section' => 'api', 'api_enabled' => false, 'api_user' => 'portal', 'api_password' => '']);
+        $this->assertSame(0, (int) Db::value('SELECT api_enabled FROM nas_metadata WHERE nas_id=?', [$id]));
+        $this->assertSame('portal', Db::value('SELECT api_user FROM nas_metadata WHERE nas_id=?', [$id]));
+        $this->assertSame(1, (int) Db::value('SELECT coa_enabled FROM nas_metadata WHERE nas_id=?', [$id]));
     }
 
     public function test_invalid_vendor_is_a_field_error(): void
@@ -63,7 +79,7 @@ final class NasTest extends TestCase
             ->assertRedirect('/nas/create')->assertSessionHasErrors('vendor');
     }
 
-    public function test_snmp_settings_and_access_profile(): void
+    public function test_snmp_settings_and_no_access_tab(): void
     {
         $this->actingAsOperator();
         $id = $this->createNas();
@@ -74,14 +90,9 @@ final class NasTest extends TestCase
             ->where('snmp.values.snmp_community', 'ro-community')
             ->where('nas.stats.3.value', 'v2c'));
 
-        $this->post('/nas/access/save', ['id' => '', 'nas_id' => $id, 'adapter' => 'routeros_pppoe', 'model' => '', 'software_version' => '', 'listener_key' => 'routeros_pppoe', 'dhcp_server' => '', 'expected_interval' => '300', 'grace_seconds' => '120', 'evidence' => '', 'enabled' => true, 'authorization_verified' => false, 'actions_verified' => false, 'forwarding_verified' => false])
-            ->assertRedirect('/nas/' . $id . '/edit?tab=access')->assertSessionHas('flash.type', 'success');
-        $this->get('/nas/' . $id . '/edit')->assertOk()->assertInertia(fn ($page) => $page
-            ->has('access.profiles', 1)
-            ->where('access.profiles.0.enabled', true)
-            ->where('access.profiles.0.stale', false));
-
-        $this->get('/nas/' . $id . '/access')->assertRedirect('/nas/' . $id . '/edit?tab=access');
+        // The Access tab was removed: no access props, and old links open the NAS page.
+        $this->get('/nas/' . $id . '/edit')->assertOk()->assertInertia(fn ($page) => $page->missing('access'));
+        $this->get('/nas/' . $id . '/access')->assertRedirect('/nas/' . $id . '/edit');
     }
 
     public function test_view_role_is_read_only_and_delete(): void

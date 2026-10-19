@@ -39,7 +39,6 @@ export default function Services({ services }: { services: Service[] }) {
                     exportRows
                     columns={[
                         { header: 'Name', cell: (s) => s.name },
-                        { header: 'Type', cell: () => 'Access profiles' },
                         { header: 'Download', cell: (s) => s.download },
                         { header: 'Upload', cell: (s) => s.upload },
                         { header: 'Expired service', cell: (s) => s.expired },

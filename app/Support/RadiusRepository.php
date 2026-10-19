@@ -224,13 +224,21 @@ final class RadiusRepository
             $vendor = trim((string) ($input['type'] ?? ''));
         }
         $isMikrotik = strtolower($vendor) === 'mikrotik';
-        $coaEnabled = $isMikrotik ? 0 : self::boolValue($input['coa_enabled'] ?? null);
+        $coaEnabled = self::boolValue($input['coa_enabled'] ?? null);
+        $apiEnabled = $isMikrotik ? self::boolValue($input['api_enabled'] ?? null) : 0;
         SchemaCompatibility::require('policy');
         $pdo = Db::pdo();
         $pdo->beginTransaction();
 
         try {
+            // Only what FreeRADIUS reads (the client list) needs a RADIUS update; CoA and API
+            // settings are used by the portal alone and apply at once.
+            $radiusChanged = true;
             if ($id) {
+                $old = Db::row('SELECT n.nasname, n.shortname, n.type, n.secret, COALESCE(m.enabled, 1) AS enabled FROM nas n LEFT JOIN nas_metadata m ON m.nas_id=n.id WHERE n.id=? FOR UPDATE', [$id]);
+                $radiusChanged = !$old || (string) $old['nasname'] !== (string) $input['nasname'] || (string) $old['shortname'] !== (string) $input['shortname']
+                    || (string) $old['type'] !== (string) $input['type'] || (($input['secret'] ?? '') !== '' && !hash_equals((string) $old['secret'], (string) $input['secret']))
+                    || (int) $old['enabled'] !== self::boolValue($input['enabled'] ?? null);
                 Db::exec(
                     'UPDATE nas SET nasname=?, shortname=?, type=?, ports=?, secret=IF(? = "", secret, ?), server=?, community=?, description=? WHERE id=?',
                     [
@@ -249,13 +257,18 @@ final class RadiusRepository
             Db::exec(
                 'INSERT INTO nas_metadata (nas_id, vendor, enabled, coa_enabled, coa_port, api_host, api_user, api_password, updated_at, created_at)
                  VALUES (?, ?, ?, ?, ?, ?, ?, IF(? = "", NULL, ?), NOW(), NOW())
-                 ON DUPLICATE KEY UPDATE vendor=VALUES(vendor), enabled=VALUES(enabled), coa_enabled=VALUES(coa_enabled), coa_port=VALUES(coa_port), api_host=VALUES(api_host), api_user=VALUES(api_user), api_password=COALESCE(VALUES(api_password), api_password), config_revision=config_revision+1, pending_delete=0, updated_at=NOW()',
+                 ON DUPLICATE KEY UPDATE vendor=VALUES(vendor), enabled=VALUES(enabled), coa_enabled=VALUES(coa_enabled), coa_port=VALUES(coa_port), api_host=VALUES(api_host), api_user=VALUES(api_user), api_password=COALESCE(VALUES(api_password), api_password), config_revision=config_revision+?, pending_delete=0, updated_at=NOW()',
                 [
                     $id, $input['vendor'], self::boolValue($input['enabled'] ?? null), $coaEnabled,
                     (int) ($input['coa_port'] ?: 3799), $input['api_host'], $input['api_user'],
                     Secrets::encrypt((string) ($input['api_password'] ?? '')), Secrets::encrypt((string) ($input['api_password'] ?? '')),
+                    $radiusChanged ? 1 : 0,
                 ]
             );
+
+            if (self::hasApiSwitch()) {
+                Db::exec('UPDATE nas_metadata SET api_enabled=? WHERE nas_id=?', [$apiEnabled, $id]);
+            }
 
             $pdo->commit();SubscriberPolicy::releaseLocks();
             return (int) $id;
@@ -370,7 +383,7 @@ final class RadiusRepository
         if($method==='dhcp'){throw new RuntimeException('DHCP requires a validated forwarding/lease adapter; PPP removal is forbidden.');}
         $session = Db::row(
             'SELECT r.*, n.id AS nas_id, n.secret, n.nasname, n.type AS nas_type,
-                    m.coa_enabled,m.coa_port,COALESCE(m.vendor,n.type) AS vendor,m.api_host,m.api_user,m.api_password,m.enabled,m.config_revision,m.applied_revision,m.pending_delete
+                    m.coa_enabled,m.coa_port,COALESCE(m.vendor,n.type) AS vendor,m.api_host,m.api_user,m.api_password,' . self::apiEnabledSql('m') . ' AS api_enabled,m.enabled,m.config_revision,m.applied_revision,m.pending_delete
              FROM radacct r JOIN nas n ON n.nasname=r.nasipaddress JOIN nas_metadata m ON m.nas_id=n.id
              WHERE ' . ClientQuery::inUsernames('r.username', $ids = ClientQuery::usernames($username)) . ' AND r.acctstoptime IS NULL AND (? IS NULL OR n.id=?) AND (? IS NULL OR r.radacctid=?)
              ORDER BY r.acctstarttime DESC,r.radacctid DESC LIMIT 1',array_merge($ids,[$nasId,$nasId,$accountingId,$accountingId]));
@@ -378,12 +391,13 @@ final class RadiusRepository
         if (empty($session['enabled']) || !empty($session['pending_delete']) || $session['applied_revision']===null || (int)$session['applied_revision']!==(int)$session['config_revision']) { throw new RuntimeException('NAS configuration is disabled or pending deployment.'); }
         $updated=strtotime((string)($session['acctupdatetime'] ?: $session['acctstarttime']));
         if (!$updated || $updated < time()-Accounting::window($session) || $updated > time()+60) { throw new RuntimeException('Accounting is stale; verify the session in a lab/operational workflow before disconnect.'); }
-        if (self::isMikrotikSession($session)) {
+        $method = self::disconnectMethod($session)['method'];
+        if ($method === 'api') {
             $output=self::disconnectUserViaMikrotikApi($session,(string)$session['username']);
             if($output===null){throw new RuntimeException('MikroTik API credentials are required.');}
             return ['command'=>'mikrotik-api-tls','output'=>$output];
         }
-        if (empty($session['coa_enabled']) || empty($session['secret'])) { throw new RuntimeException('CoA/PoD is not configured for this NAS.'); }
+        if ($method !== 'coa') { throw new RuntimeException('No disconnect method is set up for this NAS: turn on RADIUS disconnect (CoA) on its Device tab, or the RouterOS API on its API tab.'); }
         $attrs=['User-Name'=>$session['username'],'Acct-Session-Id'=>$session['acctsessionid'],'NAS-IP-Address'=>$session['nasipaddress']];
         $payload='';
         foreach($attrs as $attribute=>$value){
@@ -400,8 +414,55 @@ final class RadiusRepository
             if(file_put_contents($file,(string)$session['secret']."\n")===false){throw new RuntimeException('Secret file write failed.');}
             $result=BoundedProcess::run([(string)App::env('RADCLIENT_BIN','/usr/bin/radclient'),'-r','1','-t','2','-S',$file,$session['nasipaddress'].':'.(int)$session['coa_port'],'disconnect'],$payload,8);
             if($result['exit']!==0 || !preg_match('/\bDisconnect-ACK\b/',$result['output'])){throw new RuntimeException('Disconnect not acknowledged; verify the same session before retrying.');}
-            return ['command'=>'radclient-disconnect','output'=>'Disconnect-ACK; awaiting accounting reconciliation.'];
+            return ['command'=>'radclient-disconnect','output'=>'The NAS acknowledged the disconnect (Disconnect-ACK).'];
         } finally { unlink($file); }
+    }
+
+    /**
+     * RouterOS 7 lists a PPP session as "0x81000000" while its accounting carries Acct-Session-Id
+     * "81000000": the same session. Compare without the prefix and case; an empty id never matches.
+     */
+    private static function sameSessionId(string $router, string $accounting): bool
+    {
+        $norm = static fn (string $id): string => strtolower(preg_replace('/^0x/i', '', trim($id)) ?? '');
+        return $norm($router) !== '' && $norm($router) === $norm($accounting);
+    }
+
+    /**
+     * How the portal ends a session on this NAS: the RouterOS API when it is switched on (MikroTik
+     * only) and has a login, otherwise a RADIUS Disconnect-Request (CoA) signed with the shared
+     * secret, like most RADIUS managers. Takes a NAS row; secret may be named secret or nas_secret.
+     * @return array{method:?string,label:string,ok:bool,class:string,note:string}
+     */
+    public static function disconnectMethod(array $nas): array
+    {
+        $vendor = strtolower(trim((string) (($nas['vendor'] ?? '') ?: ($nas['nas_vendor'] ?? '') ?: ($nas['nas_type'] ?? '') ?: ($nas['type'] ?? ''))));
+        if ($vendor === 'mikrotik' && !empty($nas['api_enabled'])) {
+            return self::mikrotikDisconnectApiStatus($nas)['ok']
+                ? ['method' => 'api', 'label' => 'API ready', 'ok' => true, 'class' => 'success', 'note' => 'RouterOS API']
+                : ['method' => null, 'label' => 'API login missing', 'ok' => false, 'class' => 'warning', 'note' => 'RouterOS API'];
+        }
+        $secret = (string) (($nas['secret'] ?? '') ?: ($nas['nas_secret'] ?? ''));
+        $hasSecret = $secret !== '' || !empty($nas['secret_saved']);
+        if ((int) ($nas['coa_enabled'] ?? 0) === 1 && $hasSecret) {
+            return ['method' => 'coa', 'label' => 'CoA ready', 'ok' => true, 'class' => 'success', 'note' => 'RADIUS disconnect (CoA) on UDP ' . (int) (($nas['coa_port'] ?? 0) ?: 3799)];
+        }
+        return ['method' => null, 'label' => 'off', 'ok' => false, 'class' => 'warning', 'note' => 'Turn on CoA (Device tab) or the API'];
+    }
+
+    /** Whether migration 028 (nas_metadata.api_enabled) is applied. */
+    public static function hasApiSwitch(): bool
+    {
+        static $has = null;
+        return $has ??= (bool) Db::value("SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'nas_metadata' AND COLUMN_NAME = 'api_enabled'");
+    }
+
+    /** SQL for the API switch; before migration 028 a saved API login counts as switched on (the old behaviour). */
+    public static function apiEnabledSql(string $alias): string
+    {
+        return self::hasApiSwitch()
+            ? "COALESCE($alias.api_enabled, 0)"
+            : "(COALESCE($alias.api_user, '') <> '' AND COALESCE($alias.api_password, '') <> '')";
     }
 
     public static function mikrotikDisconnectApiStatus(array $nas): array
@@ -414,18 +475,6 @@ final class RadiusRepository
         }
 
         return ['ok' => true, 'label' => 'configured', 'class' => 'success'];
-    }
-
-    private static function isMikrotikSession(array $session): bool
-    {
-        $vendor = trim((string) ($session['vendor'] ?? ''));
-        if ($vendor === '') {
-            $vendor = trim((string) ($session['nas_vendor'] ?? ''));
-        }
-        if ($vendor === '') {
-            $vendor = trim((string) ($session['nas_type'] ?? ''));
-        }
-        return strtolower($vendor) === 'mikrotik';
     }
 
     private static function routerUptimeSeconds(string $uptime): int
@@ -462,13 +511,13 @@ final class RadiusRepository
 
             $rows = self::routerApiFindActivePpp($socket, 'name', $username);
             $matches = array_values(array_filter($rows, function(array $row) use ($session,$username): bool {
-                return ($row['name'] ?? '') === $username && ($row['session-id'] ?? '') === (string)$session['acctsessionid']
+                return ($row['name'] ?? '') === $username && self::sameSessionId((string)($row['session-id'] ?? ''), (string)$session['acctsessionid'])
                     && !empty($row['.id']) && (empty($session['callingstationid']) || ($row['caller-id'] ?? '')===$session['callingstationid']);
             }));
             if(count($matches)!==1){throw new RuntimeException('NAS did not verify exactly one matching username/session identity.');}
             // Re-read that handle immediately before removal. A reused address never supplies identity.
             $verified=self::routerApiFindActivePpp($socket,'.id',(string)$matches[0]['.id']);
-            if(count($verified)!==1 || ($verified[0]['name'] ?? '')!==$username || ($verified[0]['session-id'] ?? '')!==$session['acctsessionid']) { throw new RuntimeException('NAS session changed before removal.'); }
+            if(count($verified)!==1 || ($verified[0]['name'] ?? '')!==$username || !self::sameSessionId((string)($verified[0]['session-id'] ?? ''), (string)$session['acctsessionid'])) { throw new RuntimeException('NAS session changed before removal.'); }
             self::routerApiWriteSentence($socket,['/ppp/active/remove','=.id='.$matches[0]['.id']]);
             self::routerApiAssertOk(self::routerApiReadReply($socket),'MikroTik API remove failed');
             return 'MikroTik API removed one verified PPP session; awaiting accounting reconciliation.';

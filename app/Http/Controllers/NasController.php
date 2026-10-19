@@ -7,15 +7,12 @@ namespace App\Http\Controllers;
 use App\Http\Support\Format;
 use App\Http\Support\Nas;
 use App\Http\Support\Present;
-use App\Support\AccessProfiles;
 use App\Support\Accounting;
 use App\Support\Audit;
 use App\Support\Auth;
 use App\Support\Db;
-use App\Support\JobHealth;
 use App\Support\NasMonitor;
 use App\Support\RadiusRepository;
-use App\Support\SchemaCompatibility;
 use App\Support\Secrets;
 use App\Support\Snmp;
 use Illuminate\Http\RedirectResponse;
@@ -25,14 +22,18 @@ use Inertia\Response;
 use RuntimeException;
 use Throwable;
 
-/** NAS devices: list, edit tabs and saves, SNMP settings, access profiles, delete. */
+/** NAS devices: list, edit tabs and saves, SNMP settings, delete. */
 final class NasController extends Controller
 {
-    private const ROW_SQL = 'SELECT n.*, m.config_revision, m.applied_revision, m.pending_delete, m.vendor, m.enabled, m.coa_enabled, m.coa_port, m.api_host, m.api_user, (COALESCE(m.api_password, "") <> "") AS api_password_saved FROM nas n LEFT JOIN nas_metadata m ON m.nas_id=n.id';
+    private static function rowSql(): string
+    {
+        return 'SELECT n.*, m.config_revision, m.applied_revision, m.pending_delete, m.vendor, m.enabled, m.coa_enabled, m.coa_port, m.api_host, m.api_user, (COALESCE(m.api_password, "") <> "") AS api_password_saved, '
+            . RadiusRepository::apiEnabledSql('m') . ' AS api_enabled FROM nas n LEFT JOIN nas_metadata m ON m.nas_id=n.id';
+    }
 
     public function index(): Response
     {
-        $rows = Db::select('SELECT n.*, m.config_revision, m.applied_revision, m.pending_delete, m.vendor, m.enabled, m.coa_enabled, m.coa_port, m.api_host, m.api_user, (COALESCE(m.api_password, "") <> "") AS api_password_saved, COUNT(r.radacctid) AS online_users FROM nas n LEFT JOIN nas_metadata m ON m.nas_id=n.id LEFT JOIN radacct r ON ' . Accounting::freshSql('r') . ' AND (r.nasipaddress=n.nasname OR r.nasipaddress=n.shortname) GROUP BY n.id ORDER BY n.shortname');
+        $rows = Db::select('SELECT n.*, m.config_revision, m.applied_revision, m.pending_delete, m.vendor, m.enabled, m.coa_enabled, m.coa_port, m.api_host, m.api_user, (COALESCE(m.api_password, "") <> "") AS api_password_saved, ' . RadiusRepository::apiEnabledSql('m') . ' AS api_enabled, COUNT(r.radacctid) AS online_users FROM nas n LEFT JOIN nas_metadata m ON m.nas_id=n.id LEFT JOIN radacct r ON ' . Accounting::freshSql('r') . ' AND (r.nasipaddress=n.nasname OR r.nasipaddress=n.shortname) GROUP BY n.id ORDER BY n.shortname');
         return Inertia::render('nas/Index', [
             'devices' => array_map(static function (array $r) {
                 $deployed = $r['applied_revision'] !== null && $r['applied_revision'] == $r['config_revision'];
@@ -59,7 +60,7 @@ final class NasController extends Controller
 
     public function form(?string $id = null): Response
     {
-        $stored = $id ? Db::row(self::ROW_SQL . ' WHERE n.id=?', [$id]) : null;
+        $stored = $id ? Db::row(self::rowSql() . ' WHERE n.id=?', [$id]) : null;
         abort_if($id && !$stored, 404, 'NAS device not found.');
         $vendor = strtolower((string) (($stored['vendor'] ?? '') ?: ($stored['type'] ?? '') ?: 'mikrotik'));
         $vendors = Nas::VENDORS;
@@ -76,6 +77,9 @@ final class NasController extends Controller
             'secret' => '',
             'description' => (string) ($stored['description'] ?? ''),
             'enabled' => $stored ? (bool) ($stored['enabled'] ?? true) : true,
+            // RADIUS disconnect (CoA) is signed with the shared secret above, so it lives on this tab.
+            'coa_enabled' => $stored ? (int) ($stored['coa_enabled'] ?? 1) === 1 : true,
+            'coa_port' => (string) (($stored['coa_port'] ?? '') ?: ($vendor === 'cisco' ? '1700' : '3799')),
         ];
         $props = [
             'device' => $device,
@@ -89,7 +93,6 @@ final class NasController extends Controller
 
         $nasId = (int) $stored['id'];
         $online = Db::select('SELECT username, framedipaddress, acctstarttime, acctsessiontime, acctupdatetime, acctstoptime FROM radacct WHERE acctstoptime IS NULL AND nasipaddress IN (?, ?) ORDER BY acctstarttime DESC', [$stored['nasname'], $stored['shortname']]);
-        $policyReady = !SchemaCompatibility::problems('policy');
         return Inertia::render('nas/Form', $props + [
             'nas' => [
                 'id' => $nasId,
@@ -101,16 +104,14 @@ final class NasController extends Controller
                 'description' => (string) $stored['description'],
                 'stats' => $this->summary($stored, $vendor, count($online)),
             ],
-            'disconnect' => [
+            'api' => [
                 'id' => $nasId,
-                'section' => 'disconnect',
+                'section' => 'api',
+                'api_enabled' => (bool) $stored['api_enabled'],
                 'api_user' => (string) ($stored['api_user'] ?? ''),
                 'api_password' => '',
                 'apiPasswordSaved' => (bool) $stored['api_password_saved'],
-                'coa_enabled' => (bool) ($stored['coa_enabled'] ?? true),
-                'coa_port' => (string) ($stored['coa_port'] ?? '1700'),
             ],
-            'access' => $policyReady ? $this->accessData($stored) : null,
             'snmp' => $this->snmp($stored, $vendor),
             'sessions' => array_map(static fn (array $x) => [
                 'username' => (string) $x['username'],
@@ -126,9 +127,7 @@ final class NasController extends Controller
     private function summary(array $nas, string $vendor, int $sessions): array
     {
         $deployed = $nas['applied_revision'] !== null && $nas['applied_revision'] == $nas['config_revision'];
-        $disconnect = $vendor === 'mikrotik'
-            ? RadiusRepository::mikrotikDisconnectApiStatus($nas)
-            : ((int) ($nas['coa_enabled'] ?? 0) === 1 && !empty($nas['secret']) ? ['label' => 'CoA ready', 'class' => 'success'] : ['label' => 'not configured', 'class' => 'warning']);
+        $disconnect = RadiusRepository::disconnectMethod($nas);
         $snmp = NasMonitor::available() ? NasMonitor::settings((int) $nas['id']) : null;
         $snmpLabel = !NasMonitor::configured($snmp) ? 'Off' : ($snmp['version'] === '3'
             ? 'v3 · ' . (($snmp['v3_priv_protocol'] ?? 'none') !== 'none' ? 'authPriv' : (($snmp['v3_auth_protocol'] ?? 'none') !== 'none' ? 'authNoPriv' : 'noAuthNoPriv'))
@@ -137,35 +136,8 @@ final class NasController extends Controller
         return [
             $stat('RADIUS update', $deployed ? 'Up to date' : 'Waiting', $deployed ? 'RADIUS is using these settings' : 'Saved changes start after the next RADIUS update', $deployed ? '' : 'warning'),
             $stat('Online now', (string) $sessions, 'From RADIUS accounting'),
-            $stat('Disconnect', ucfirst((string) $disconnect['label']), $vendor === 'mikrotik' ? 'RouterOS API' : 'RADIUS disconnect (CoA)', $disconnect['class'] === 'success' ? '' : 'warning'),
+            $stat('Disconnect', ucfirst((string) $disconnect['label']), $disconnect['note'], $disconnect['class'] === 'success' ? '' : 'warning'),
             $stat('SNMP', $snmpLabel, $snmpLabel === 'Off' ? 'Monitoring not set up' : 'Monitoring enabled', $snmpLabel === 'Off' ? 'info' : ''),
-        ];
-    }
-
-    private function accessData(array $nas): array
-    {
-        $publication = JobHealth::all()['expiry'];
-        return [
-            'adapters' => Nas::ADAPTERS,
-            'paused' => $publication['state'] === 'running' ? null : (string) $publication['detail'],
-            'profiles' => array_map(static fn (array $p) => [
-                'id' => (int) $p['id'],
-                'nas_id' => (int) $nas['id'],
-                'adapter' => (string) $p['adapter'],
-                'model' => (string) ($p['model'] ?? ''),
-                'software_version' => (string) ($p['software_version'] ?? ''),
-                'listener_key' => (string) ($p['listener_key'] ?? ''),
-                'dhcp_server' => (string) ($p['dhcp_server'] ?? ''),
-                'expected_interval' => (string) $p['expected_interval'],
-                'grace_seconds' => (string) $p['grace_seconds'],
-                'evidence' => (string) ($p['evidence'] ?? ''),
-                'enabled' => (bool) $p['enabled'],
-                'authorization_verified' => (bool) $p['authorization_verified'],
-                'actions_verified' => (bool) $p['actions_verified'],
-                'forwarding_verified' => (bool) $p['forwarding_verified'],
-                'sourceIp' => (string) $p['source_ip'],
-                'stale' => $p['source_ip'] !== $nas['nasname'],
-            ], Db::select('SELECT * FROM nas_access_profiles WHERE nas_id=? ORDER BY id', [(int) $nas['id']])),
         ];
     }
 
@@ -217,17 +189,18 @@ final class NasController extends Controller
         $post = $this->formInput($request);
         $id = (int) ($post['id'] ?? 0) ?: null;
         $before = $id ? Db::row('SELECT * FROM nas WHERE id=?', [$id]) : null;
-        $section = in_array($post['section'] ?? '', ['device', 'disconnect'], true) ? (string) $post['section'] : 'device';
+        $section = ($post['section'] ?? '') === 'disconnect' ? 'api' : (string) ($post['section'] ?? '');
+        $section = in_array($section, ['device', 'api'], true) ? $section : 'device';
         $back = $id ? '/nas/' . $id . '/edit?tab=' . $section : '/nas/create';
         if ($id) {
             // Each tab posts only its own fields; everything else keeps its stored value.
-            $stored = Db::row('SELECT n.*, m.vendor, m.enabled, m.coa_enabled, m.coa_port, m.api_user FROM nas n LEFT JOIN nas_metadata m ON m.nas_id=n.id WHERE n.id=?', [$id]);
+            $stored = Db::row('SELECT n.*, m.vendor, m.enabled, m.coa_enabled, m.coa_port, m.api_user, ' . RadiusRepository::apiEnabledSql('m') . ' AS api_enabled FROM nas n LEFT JOIN nas_metadata m ON m.nas_id=n.id WHERE n.id=?', [$id]);
             if (!$stored) {
                 return $this->fail('NAS device not found.', '/nas');
             }
             $post = self::tabPost($post, $stored, $section);
         }
-        $post += ['ports' => '0', 'server' => '', 'community' => '', 'description' => '', 'coa_port' => '', 'api_user' => '', 'api_password' => '', 'coa_enabled' => '1'];
+        $post += ['ports' => '0', 'server' => '', 'community' => '', 'description' => '', 'coa_port' => '', 'api_user' => '', 'api_password' => '', 'coa_enabled' => '1', 'api_enabled' => ''];
         if (strlen((string) $post['api_password']) > Secrets::MAX_LENGTH) {
             return $this->failKeepingInput(new RuntimeException('API password must be at most ' . Secrets::MAX_LENGTH . ' characters.'), $back, ['api_password' => '/./']);
         }
@@ -241,11 +214,15 @@ final class NasController extends Controller
         // The RouterOS API is always reached on the NAS IP (tls://<NAS IP>:8729).
         $post['api_host'] = '';
         if ($vendor === 'cisco') {
-            // RouterOS API credentials only apply to MikroTik; Cisco disconnects use CoA/PoD.
+            // The RouterOS API only applies to MikroTik; Cisco disconnects use CoA/PoD.
             $post['api_user'] = '';
-            if (trim((string) $post['coa_port']) === '') {
-                $post['coa_port'] = '1700';
-            }
+            $post['api_enabled'] = '';
+        }
+        if (trim((string) $post['coa_port']) === '') {
+            $post['coa_port'] = $vendor === 'cisco' ? '1700' : '3799';
+        }
+        if (!empty($post['api_enabled']) && trim((string) $post['api_user']) === '') {
+            return $this->failKeepingInput(new RuntimeException('Enter the API user (and its password) before turning the API on.'), $back, ['api_user' => '/./']);
         }
         try {
             $saved = RadiusRepository::saveNas($post, $id);
@@ -253,8 +230,8 @@ final class NasController extends Controller
             return $this->failKeepingInput($e, $back, ['nasname' => '/\bIP\b|address|nasname/i', 'secret' => '/secret/i', 'shortname' => '/name/i']);
         }
         Audit::log($id ? 'update' : 'create', 'nas', (string) $saved, $before, array_diff_key($post, ['secret' => true, 'api_password' => true]));
-        return $this->ok('/nas/' . $saved . '/edit' . ($id ? '?tab=' . $section : ''), $section === 'disconnect'
-            ? 'Disconnect settings saved. They take effect after the next RADIUS update.'
+        return $this->ok('/nas/' . $saved . '/edit' . ($id ? '?tab=' . $section : ''), $section === 'api'
+            ? 'API settings saved. ' . (!empty($post['api_enabled']) ? 'Disconnects on this NAS now use the RouterOS API.' : 'The API is off; disconnects use RADIUS CoA when it is on.')
             : 'NAS saved. Changes take effect after the next RADIUS update.');
     }
 
@@ -265,18 +242,19 @@ final class NasController extends Controller
     private static function tabPost(array $post, array $stored, string $section): array
     {
         $keep = [
-            'device' => ['vendor' => (string) ($stored['vendor'] ?: $stored['type']), 'shortname' => (string) $stored['shortname'], 'nasname' => (string) $stored['nasname'], 'description' => (string) $stored['description'], 'enabled' => (int) $stored['enabled'] === 1 ? '1' : '', 'secret' => ''],
-            'disconnect' => ['coa_enabled' => (int) $stored['coa_enabled'] === 1 ? '1' : '', 'coa_port' => (string) $stored['coa_port'], 'api_user' => (string) $stored['api_user'], 'api_password' => ''],
+            'device' => ['vendor' => (string) ($stored['vendor'] ?: $stored['type']), 'shortname' => (string) $stored['shortname'], 'nasname' => (string) $stored['nasname'], 'description' => (string) $stored['description'], 'enabled' => (int) $stored['enabled'] === 1 ? '1' : '', 'secret' => '',
+                'coa_enabled' => (int) $stored['coa_enabled'] === 1 ? '1' : '', 'coa_port' => (string) $stored['coa_port']],
+            'api' => ['api_enabled' => !empty($stored['api_enabled']) ? '1' : '', 'api_user' => (string) $stored['api_user'], 'api_password' => ''],
         ];
         $posted = $keep[$section];
         foreach (array_keys($posted) as $key) {
-            if (in_array($key, ['enabled', 'coa_enabled'], true)) {
+            if (in_array($key, ['enabled', 'coa_enabled', 'api_enabled'], true)) {
                 $posted[$key] = !empty($post[$key]) ? '1' : '';
             } elseif (array_key_exists($key, $post)) {
                 $posted[$key] = (string) $post[$key];
             }
         }
-        return array_merge($keep['device'], $keep['disconnect'], $posted, ['ports' => (string) $stored['ports'], 'server' => (string) $stored['server'], 'community' => (string) $stored['community'], 'id' => (int) $stored['id']]);
+        return array_merge($keep['device'], $keep['api'], $posted, ['ports' => (string) $stored['ports'], 'server' => (string) $stored['server'], 'community' => (string) $stored['community'], 'id' => (int) $stored['id']]);
     }
 
     public function delete(string $id): RedirectResponse
@@ -309,24 +287,5 @@ final class NasController extends Controller
         $after['v3_passwords_changed'] = ($input['snmp_v3_auth_password'] ?? '') !== '' || ($input['snmp_v3_priv_password'] ?? '') !== '';
         Audit::log('update', 'nas_snmp', (string) $nas['id'], $before, $after);
         return $this->ok('/nas/' . (int) $nas['id'] . '/edit?tab=snmp', 'SNMP settings saved.');
-    }
-
-    /** The access profiles page became the NAS page's Access tab. */
-    public function accessProfiles(string $id): RedirectResponse
-    {
-        return redirect('/nas/' . (int) $id . '/edit?tab=access');
-    }
-
-    public function accessProfileSave(Request $request): RedirectResponse
-    {
-        Auth::requireCan('nas.manage');
-        $input = $this->formInput($request);
-        $back = '/nas/' . (int) ($input['nas_id'] ?? 0) . '/edit?tab=access';
-        try {
-            AccessProfiles::save($input);
-        } catch (RuntimeException $e) {
-            return $this->fail($e->getMessage(), $back);
-        }
-        return $this->ok($back, 'Profile saved. Subscribers using it are re-checked automatically.');
     }
 }

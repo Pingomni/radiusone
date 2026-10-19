@@ -12,7 +12,7 @@ final class Nas
 {
     /** Supported NAS platforms. The key is stored as nas_metadata.vendor and nas.type. */
     public const VENDORS = [
-        'mikrotik' => ['label' => 'MikroTik RouterOS', 'summary' => 'PPPoE or local DHCP. Disconnects use the RouterOS API.', 'disconnect' => 'api'],
+        'mikrotik' => ['label' => 'MikroTik RouterOS', 'summary' => 'PPPoE or local DHCP. Disconnects use RADIUS CoA, or the RouterOS API when switched on.', 'disconnect' => 'coa'],
         'cisco' => ['label' => 'Cisco IOS XE', 'summary' => 'PPPoE or IPoE/ISG. Disconnects are sent as RADIUS disconnect requests (CoA).', 'disconnect' => 'coa'],
     ];
 
@@ -22,14 +22,15 @@ final class Nas
         'mikrotik' => [
             ['RADIUS client', 'Add this server under /radius with the same shared secret and the NAS IP as src-address.'],
             ['Services', 'Turn on RADIUS for PPP and/or local DHCP, each pointing at the RADIUS port set up for it.'],
-            ['Interim accounting', 'Set an interim update (e.g. 5 min) and match it in the access profile.'],
-            ['api-ssl', 'Enable api-ssl on TCP 8729 with a trusted certificate; restrict it to this server.'],
+            ['Interim accounting', 'Set an interim update, e.g. /ppp aaa set interim-update=1m, so Monitoring and disconnects see fresh sessions.'],
+            ['Disconnect (CoA)', 'Accept RADIUS disconnects: /radius incoming set accept=yes port=3799. RouterOS only accepts them from the RADIUS servers listed under /radius, signed with the shared secret.'],
+            ['API (optional)', 'Only if you switch on the API tab: enable api-ssl on TCP 8729 with a trusted certificate and restrict it to this server.'],
             ['SNMP', 'Optional: add a read-only community or v3 user for this server only (see the SNMP tab).'],
         ],
         'cisco' => [
             ['RADIUS server', 'Define this server in the AAA group with the same shared secret, sourced from the NAS IP.'],
             ['Subscriber login (AAA)', 'Point PPPoE or IPoE/ISG login and accounting at the matching RADIUS port.'],
-            ['Interim accounting', 'Enable periodic accounting and match the interval in the access profile.'],
+            ['Interim accounting', 'Enable periodic accounting (e.g. every 1–5 minutes) so Monitoring and disconnects see fresh sessions.'],
             ['Dynamic authorization', 'Allow this server as a CoA client on the CoA port; verify on your IOS XE release.'],
             ['SNMP', 'Optional: add a read-only community or v3 user limited by an ACL to this server (see the SNMP tab).'],
         ],

@@ -260,7 +260,6 @@ export default function ClientForm({ values, draftRestored, draftTab, canEdit, c
             <Section title="Access restrictions" description="Limit where and from which device the account can connect." icon="shield">
                 {binding ? (
                     <>
-                        <Select label="NAS/access profile" disabled={disabled} options={binding.options} {...bind(form, 'access_profile_id')} />
                         {field('DHCP client identifier', 'dhcp_client_id', { hint: 'Optional exact identifier, distinct from MAC. Empty permits any identifier in this trusted context.' })}
                         {field('Trusted NAS access circuit', 'circuit_id', { hint: 'NAS-generated port/interface identifier. Requires an isolated access port/VLAN; never use a customer-supplied circuit claim.' })}
                     </>

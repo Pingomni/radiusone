@@ -9,6 +9,7 @@ use App\Support\Accounting;
 use App\Support\Auth;
 use App\Support\ClientQuery;
 use App\Support\Db;
+use App\Support\RadiusRepository;
 use App\Support\Entitlement;
 use App\Support\SchemaCompatibility;
 use App\Support\StaticIpPool;
@@ -129,7 +130,7 @@ final class Clients
             'SELECT r.*, n.id AS nas_id, n.shortname AS nas_shortname, n.nasname AS nas_name, n.type AS nas_type, n.secret AS nas_secret,
                     m.vendor AS nas_vendor, COALESCE(m.enabled, 1) AS nas_enabled,
                     COALESCE(m.coa_enabled, 1) AS coa_enabled, COALESCE(m.coa_port, 3799) AS coa_port,
-                    m.config_revision, m.applied_revision, m.pending_delete, m.api_host, m.api_user, m.api_password
+                    m.config_revision, m.applied_revision, m.pending_delete, m.api_host, m.api_user, m.api_password, ' . RadiusRepository::apiEnabledSql('m') . ' AS api_enabled
              FROM radacct r
              LEFT JOIN nas n ON n.nasname = r.nasipaddress OR n.shortname = r.nasipaddress
              LEFT JOIN nas_metadata m ON m.nas_id = n.id
@@ -142,7 +143,10 @@ final class Clients
         $nasLabel = $online ? (trim((string) ($online['nas_shortname'] ?: $online['nas_name'] ?: '')) ?: '-') : '-';
         $applied = $online && !empty($online['nas_enabled']) && empty($online['pending_delete']) && $online['applied_revision'] !== null && (int) $online['applied_revision'] === (int) $online['config_revision'];
         $profile = !SchemaCompatibility::problems('policy') ? Db::row('SELECT p.* FROM nas_access_profiles p JOIN subscriptions s ON s.access_profile_id=p.id WHERE s.customer_id=?', [$row['id']]) : null;
-        $capability = AccessPolicy::capability($profile, 'disconnect');
+        // With an access profile the certified network worker disconnects; without one the portal sends
+        // the disconnect itself (RADIUS CoA, or the RouterOS API when it is switched on for the NAS).
+        $capability = $profile ? AccessPolicy::capability($profile, 'disconnect') : null;
+        $method = $online && !$profile ? RadiusRepository::disconnectMethod($online) : null;
         $authMethod = (string) ($row['auth_method'] ?? 'pppoe');
         $state = $online ? Accounting::state($online) : ($last ? Accounting::state($last) : 'unknown');
         $status = self::statusLabel($row);
@@ -175,10 +179,12 @@ final class Clients
         }
         $disconnect = null;
         if ($online && Auth::can('clients.disconnect')) {
-            $disconnect = $applied && $capability === null
+            $reason = !$applied ? 'NAS configuration is pending deployment.' : ($capability ?? ($method && !$method['ok'] ? 'No disconnect method on NAS ' . $nasLabel . ': turn on CoA on its Device tab, or the RouterOS API.' : null));
+            $via = $method ? ($method['method'] === 'api' ? ' through the RouterOS API' : ' as a RADIUS disconnect (CoA)') : '';
+            $disconnect = $reason === null
                 ? ['ready' => true, 'nasId' => (int) $online['nas_id'], 'radacctId' => (int) $online['radacctid'],
-                    'message' => 'Sends a disconnect for session ' . ($online['acctsessionid'] ?? '') . ' on NAS ' . $nasLabel . ' (' . ($online['framedipaddress'] ?? '') . '). The session drops now; most CPEs redial on their own.']
-                : ['ready' => false, 'reason' => $capability ?: 'NAS configuration is pending deployment.'];
+                    'message' => 'Sends a disconnect' . $via . ' for session ' . ($online['acctsessionid'] ?? '') . ' on NAS ' . $nasLabel . ' (' . ($online['framedipaddress'] ?? '') . '). The session drops now; most CPEs redial on their own.']
+                : ['ready' => false, 'reason' => $reason];
         }
         return [
             'items' => array_map(static fn ($i) => ['label' => $i[0], 'value' => $i[1], 'tone' => $i[2] ?? ''], $items),

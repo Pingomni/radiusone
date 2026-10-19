@@ -189,6 +189,7 @@ CREATE TABLE IF NOT EXISTS nas_metadata (
   api_host VARCHAR(190) NULL,
   api_user VARCHAR(120) NULL,
   api_password VARCHAR(255) NULL,
+  api_enabled TINYINT(1) NOT NULL DEFAULT 0,
   config_revision BIGINT UNSIGNED NOT NULL DEFAULT 1,
   applied_revision BIGINT UNSIGNED NULL,
   applied_at DATETIME NULL,
