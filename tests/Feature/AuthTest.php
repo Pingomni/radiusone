@@ -104,15 +104,15 @@ final class AuthTest extends TestCase
         $this->post('/clients/save')->assertForbidden();
     }
 
-    public function test_sensitive_actions_require_recent_reauthentication(): void
+    public function test_signed_in_operators_are_not_asked_for_the_password_again(): void
     {
         $user = $this->createOperator('superadmin', ['password' => 'super-pass-123']);
-        $this->withSession(['user_id' => (int) $user['id'], 'session_version' => (int) $user['session_version'], 'reauth_at' => time() - 600]);
-        $this->get('/profile/2fa/setup')->assertRedirect('/reauth');
-        $this->assertSame('/profile/2fa/setup', session('reauth_return')['path']);
+        // Signed in an hour ago: sensitive pages open without a new password prompt.
+        $this->withSession(['user_id' => (int) $user['id'], 'session_version' => (int) $user['session_version'], 'reauth_at' => time() - 3600]);
+        $this->get('/profile/2fa/setup')->assertOk();
 
+        // The confirmation page still checks the password if someone opens it directly.
         $this->post('/reauth', ['password' => 'nope'])->assertRedirect('/reauth')->assertSessionHasErrors('password');
-        $this->post('/reauth', ['password' => 'super-pass-123'])->assertRedirect('/profile/2fa/setup');
     }
 
     public function test_reauth_return_path_never_leaves_the_site(): void

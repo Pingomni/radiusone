@@ -212,9 +212,14 @@ final class Auth
         return true;
     }
 
+    /**
+     * Sensitive actions no longer ask for the password (+ code) again: the sign-in itself already
+     * required them, so any signed-in operator counts as recently authenticated. To restore the
+     * prompt, check session('reauth_at') against a window here (it was 300 seconds).
+     */
     public static function recentlyAuthenticated(): bool
     {
-        return self::user() !== null && (int) session('reauth_at', 0) >= time() - 300;
+        return self::user() !== null;
     }
 
     public static function internalReturnPath(string $path, string $fallback = '/profile'): string

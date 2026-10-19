@@ -71,15 +71,15 @@ final class RetentionTest extends TestCase
             ->where('retention.stats.lastRun.finished', true));
     }
 
-    public function test_only_listed_periods_recent_sign_in_and_superadmin(): void
+    public function test_only_listed_periods_and_superadmin(): void
     {
         $user = $this->actingAsOperator();
         $this->post('/settings/retention', ['sessions' => '7', 'logins' => '30'])->assertSessionHas('flash.message', 'Choose one of the listed retention periods.');
         $this->assertFalse((bool) Db::value('SELECT COUNT(*) FROM settings WHERE setting_key LIKE "retention_%"'));
 
         $this->withSession(['user_id' => (int) $user['id'], 'session_version' => (int) $user['session_version'], 'reauth_at' => time() - 3600]);
-        $this->post('/settings/retention', ['sessions' => '365', 'logins' => '90'])->assertRedirect('/reauth');
-        $this->assertFalse((bool) Db::value('SELECT COUNT(*) FROM settings WHERE setting_key LIKE "retention_%"'));
+        $this->post('/settings/retention', ['sessions' => '365', 'logins' => '90'])->assertSessionHas('flash.type', 'success');
+        $this->assertTrue((bool) Db::value('SELECT COUNT(*) FROM settings WHERE setting_key LIKE "retention_%"'));
 
         $this->actingAsOperator('admin');
         $this->get('/settings?tab=retention')->assertForbidden();

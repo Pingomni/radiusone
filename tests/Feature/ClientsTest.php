@@ -81,24 +81,18 @@ final class ClientsTest extends TestCase
         $this->assertSame(0, (int) Db::value('SELECT COUNT(*) FROM customer_profiles'));
     }
 
-    public function test_rename_without_recent_sign_in_keeps_a_draft(): void
+    public function test_rename_needs_no_new_password_prompt(): void
     {
         $user = $this->actingAsOperator();
         $this->plan();
         $this->post('/clients/save', $this->client());
 
+        // Signed in an hour ago: the rename saves straight away.
         $this->withSession(['user_id' => (int) $user['id'], 'session_version' => (int) $user['session_version'], 'reauth_at' => time() - 3600]);
         $this->post('/clients/save', $this->client(['old_username' => 'alice', 'username' => 'alice2', 'password' => '', 'city' => 'Durres', '_active_tab' => 'personal']))
-            ->assertRedirect('/reauth');
-        $this->assertNotNull(Db::row('SELECT id FROM customer_profiles WHERE username="alice"'));
-
-        $this->get('/clients/alice/edit')->assertOk()->assertInertia(fn ($page) => $page
-            ->where('draftRestored', true)
-            ->where('draftTab', 'personal')
-            ->where('values.username', 'alice2')
-            ->where('values.city', 'Durres'));
-        // A draft is shown once.
-        $this->get('/clients/alice/edit')->assertOk()->assertInertia(fn ($page) => $page->where('draftRestored', false));
+            ->assertSessionHas('flash.type', 'success');
+        $this->assertNull(Db::row('SELECT id FROM customer_profiles WHERE username="alice"'));
+        $this->assertSame('Durres', Db::value('SELECT city FROM customer_profiles WHERE username="alice2"'));
     }
 
     public function test_reveal_password_bulk_suspend_and_archive(): void

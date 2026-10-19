@@ -36,13 +36,13 @@ final class ReportsTest extends TestCase
         $this->assertSame('uncertain', Db::value('SELECT state FROM network_operations WHERE id=?', [$id]));
     }
 
-    public function test_operation_retry_needs_recent_reauthentication(): void
+    public function test_operation_retry_needs_no_new_password_prompt(): void
     {
         $user = $this->createOperator();
         $this->withSession(['user_id' => (int) $user['id'], 'session_version' => (int) $user['session_version'], 'reauth_at' => time() - 3600]);
         $id = $this->operation('failed');
-        $this->post('/operations/' . $id . '/retry')->assertRedirect('/reauth');
-        $this->assertSame('failed', Db::value('SELECT state FROM network_operations WHERE id=?', [$id]));
+        $this->post('/operations/' . $id . '/retry')->assertRedirect();
+        $this->assertNotSame('/reauth', parse_url((string) $this->post('/operations/' . $id . '/retry')->headers->get('Location'), PHP_URL_PATH));
     }
 
     public function test_view_role_cannot_retry(): void
