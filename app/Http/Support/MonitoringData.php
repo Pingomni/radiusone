@@ -22,7 +22,12 @@ final class MonitoringData
 {
     public static function age(int $seconds): string
     {
-        return $seconds < 90 ? max(0, $seconds) . ' s' : ($seconds < 5400 ? round($seconds / 60) . ' min' : round($seconds / 3600, 1) . ' h');
+        return match (true) {
+            $seconds < 90 => max(0, $seconds) . ' s',
+            $seconds < 5400 => round($seconds / 60) . ' min',
+            $seconds < 172800 => round($seconds / 3600, 1) . ' h',
+            default => round($seconds / 86400) . ' days',
+        };
     }
 
     /** Colour marks problems only; a normal value stays plain text. */
@@ -144,9 +149,9 @@ final class MonitoringData
         foreach (Db::select('SELECT r.nasipaddress, COUNT(*) AS n FROM radacct r WHERE ' . Accounting::freshSql('r') . ' GROUP BY r.nasipaddress') as $row) {
             $fresh[(string) $row['nasipaddress']] = (int) $row['n'];
         }
-        $alerts = 0;
-        $responding = 0;
-        $configured = 0;
+        // What needs attention; the Alerts figure is their count. [text, link]
+        $problems = [];
+        $reachable = 0;
 
         // The RADIUS server: services and live system figures, CPU from the latest minute sample.
         $sample = $latest[ServerMonitor::ID] ?? null;
@@ -160,7 +165,14 @@ final class MonitoringData
         $down = array_values(array_filter($services, static fn ($s) => $s['state'] !== 'active'));
         $auth = ServerMonitor::authStats(15);
         $tones = [self::tone($cpu, 75, 90), self::tone($memPct, 85, 95), self::tone($diskPct, 80, 90)];
-        $alerts += count($down) + count(array_filter($tones, static fn ($t) => $t === 'danger'));
+        foreach ($down as $service) {
+            $problems[] = [$service['label'] . ' is ' . $service['state'], '/monitoring/server'];
+        }
+        foreach (['CPU' => [$tones[0], $cpu], 'Memory' => [$tones[1], $memPct], 'Disk /' => [$tones[2], $diskPct]] as $what => [$tone, $value]) {
+            if ($tone === 'danger') {
+                $problems[] = ['Server ' . strtolower($what) . ' at ' . self::pct($value), '/monitoring/server'];
+            }
+        }
         $server = [
             'host' => (string) gethostname(),
             'running' => array_values(array_column(array_filter($services, static fn ($s) => $s['state'] === 'active'), 'label')),
@@ -189,58 +201,81 @@ final class MonitoringData
             $id = (int) $nas['id'];
             $sample = $latest[$id] ?? null;
             $isConfigured = NasMonitor::configured($snmp[$id] ?? null);
-            $configured += $isConfigured ? 1 : 0;
             $age = $sample && $sample['at'] > 0 ? time() - $sample['at'] : null;
             $ping = $isConfigured ? null : ($pings[trim((string) $nas['nasname'])] ?? null);
             [$state, $stateTone] = match (true) {
                 $ping !== null && !$ping['ok'] => ['ping: ' . $ping['label'], 'danger'],
-                !$isConfigured => ['SNMP off', ''],
+                !$isConfigured => ['reachable (ping)', ''],
                 $age === null => ['waiting for first poll', ''],
                 $age > NasTraffic::STALE_SECONDS => ['no data for ' . self::age($age), 'danger'],
-                default => ['polling', ''],
+                default => ['reachable (SNMP)', ''],
             };
-            $responding += $isConfigured && $age !== null && $age <= NasTraffic::STALE_SECONDS ? 1 : 0;
+            $reachable += $stateTone === 'danger' || $state === 'waiting for first poll' ? 0 : 1;
+            $name = (string) ($nas['shortname'] ?: $nas['nasname']);
             $lastAt = $lastAccountingAt[(int) $nas['id']] ?? null;
             $lastAccounting = $lastAt ? max(0, time() - (int) strtotime($lastAt)) : null;
             $nasTones = [self::tone($sample['cpu'] ?? null, 75, 90), self::tone($sample['mem'] ?? null, 85, 95), self::tone($sample['hottest'] ?? null, 65, 80)];
-            $alerts += ($stateTone === 'danger' ? 1 : 0) + count(array_filter($nasTones, static fn ($t) => $t === 'danger'));
-            $disconnect = self::disconnectLabel($nas);
-            $items = $isConfigured
-                ? [
-                    self::item('CPU', self::pct($sample['cpu'] ?? null), $nasTones[0]),
-                    self::item('Memory', self::pct($sample['mem'] ?? null), $nasTones[1]),
-                    self::item('Temperature', isset($sample['hottest']) ? self::trim($sample['hottest']) . ' °C' : '-', $nasTones[2]),
-                    self::item('Busiest interface' . (($sample['if_name'] ?? null) ? ' (' . $sample['if_name'] . ')' : ''), $sample && $sample['if_name'] !== null ? self::bpsOrDash($sample['in_bps']) . ' in · ' . self::bpsOrDash($sample['out_bps']) . ' out' : '-'),
-                ]
-                : [self::item('Ping', $ping['label'] ?? '-', ($ping['ok'] ?? true) ? '' : 'danger')];
-            $items[] = self::item('Disconnect', $disconnect, $disconnect === 'ready' ? '' : 'warning');
-            $items[] = self::item('Online now', (string) (($fresh[(string) $nas['nasname']] ?? 0) + ($nas['shortname'] !== $nas['nasname'] ? ($fresh[(string) $nas['shortname']] ?? 0) : 0)));
-            $items[] = self::item('Last accounting', $lastAccounting === null ? 'never' : self::age($lastAccounting) . ' ago');
-            if ($isConfigured) {
-                $items[] = self::item('Last sample', $age === null ? '-' : self::age($age) . ' ago');
+            if ($stateTone === 'danger' && !empty($nas['enabled'])) {
+                $problems[] = [$name . ': ' . $state, '/nas/' . $id . '/monitor'];
             }
+            foreach (['CPU' => [$nasTones[0], self::pct($sample['cpu'] ?? null)], 'memory' => [$nasTones[1], self::pct($sample['mem'] ?? null)], 'temperature' => [$nasTones[2], isset($sample['hottest']) ? self::trim($sample['hottest']) . ' °C' : '-']] as $what => [$tone, $value]) {
+                if ($tone === 'danger') {
+                    $problems[] = [$name . ': ' . $what . ' at ' . $value, '/nas/' . $id . '/monitor'];
+                }
+            }
+            $disconnect = self::disconnectLabel($nas);
+            // The same four facts on every card; SNMP readings, when there are any, in a line of their own.
+            $items = [
+                self::item('Reachable', match (true) {
+                    $stateTone === 'danger' => $state,
+                    $isConfigured => $age === null ? 'waiting for first poll' : 'yes · SNMP ' . self::age($age) . ' ago',
+                    default => 'yes · ping',
+                }, $stateTone),
+                self::item('Online now', (string) (($fresh[(string) $nas['nasname']] ?? 0) + ($nas['shortname'] !== $nas['nasname'] ? ($fresh[(string) $nas['shortname']] ?? 0) : 0))),
+                self::item('Last accounting', $lastAccounting === null ? 'never' : self::age($lastAccounting) . ' ago'),
+                self::item('Disconnect', $disconnect, str_starts_with($disconnect, 'ready') ? '' : 'warning'),
+            ];
+            $readings = $isConfigured && $sample ? array_values(array_filter([
+                self::item('CPU', self::pct($sample['cpu'] ?? null), $nasTones[0]),
+                self::item('Memory', self::pct($sample['mem'] ?? null), $nasTones[1]),
+                isset($sample['hottest']) ? self::item('Temp', self::trim($sample['hottest']) . ' °C', $nasTones[2]) : null,
+                ($sample['if_name'] ?? null) !== null ? self::item((string) $sample['if_name'], '↓ ' . self::bpsOrDash($sample['in_bps']) . '  ↑ ' . self::bpsOrDash($sample['out_bps'])) : null,
+            ])) : [];
             $cards[] = [
                 'id' => $id,
-                'name' => (string) ($nas['shortname'] ?: $nas['nasname']),
+                'name' => $name,
                 'ip' => (string) $nas['nasname'],
                 'vendor' => Nas::VENDORS[strtolower((string) $nas['vendor'])]['label'] ?? (string) $nas['vendor'],
                 'state' => Present::tag($state, $stateTone),
                 'danger' => $stateTone === 'danger',
                 'radiusDisabled' => empty($nas['enabled']),
                 'items' => $items,
+                'readings' => $readings,
                 'setupSnmp' => !$isConfigured && $canManage,
             ];
         }
 
         $jobs = JobHealth::all();
-        $alerts += count(array_filter($jobs, static fn ($j) => $j['state'] === 'stuck'));
+        // The legacy reminder sender is replaced by Customer messages: hide it until it has ever run.
+        if (($jobs['notifications']['state'] ?? '') === 'never') {
+            unset($jobs['notifications']);
+        }
+        foreach ($jobs as $job) {
+            if ($job['state'] === 'stuck') {
+                $problems[] = [$job['label'] . ': ' . $job['detail'], '/operations'];
+            }
+        }
+        // Problems first, then jobs that are not running, then the rest in their usual order.
+        uasort($jobs, static fn (array $a, array $b) => (['stuck' => 0, 'not_running' => 1][$a['state']] ?? 2) <=> (['stuck' => 0, 'not_running' => 1][$b['state']] ?? 2));
+        $enabledNas = count(array_filter($nasRows, static fn ($n) => !empty($n['enabled'])));
         return [
             'metrics' => [
-                Present::metric('NAS responding', $configured ? $responding . ' of ' . $configured : 'SNMP not set up', 'server', $configured && $responding < $configured ? 'danger' : ''),
+                Present::metric('NAS reachable', $nasRows ? $reachable . ' of ' . count($nasRows) : 'none yet', 'server', $reachable < $enabledNas ? 'danger' : ''),
                 Present::metric('RADIUS services', $down ? count($down) . ' down' : 'All running', 'shield', $down ? 'danger' : ''),
-                Present::metric('Alerts', $alerts, 'signal', $alerts ? 'danger' : ''),
+                Present::metric('Alerts', count($problems), 'signal', $problems ? 'danger' : ''),
                 Present::metric('Online now', array_sum($fresh), 'user'),
             ],
+            'problems' => array_map(static fn (array $p) => ['text' => $p[0], 'href' => $p[1]], $problems),
             'server' => $server,
             'nas' => $cards,
             'jobs' => array_values(array_map(static function (array $job) {

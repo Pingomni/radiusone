@@ -24,6 +24,10 @@ final class MonitoringTest extends TestCase
             ->has('overview.metrics', 4)
             ->where('overview.nas.0.id', $id)
             ->where('overview.nas.0.setupSnmp', false)
+            // Summary that adds up, what needs attention, and the same four facts on every card.
+            ->where('overview.metrics.0.label', 'NAS reachable')
+            ->has('overview.problems')
+            ->where('overview.nas.0.items', fn ($items) => array_column(is_array($items) ? $items : $items->all(), 'label') === ['Reachable', 'Online now', 'Last accounting', 'Disconnect'])
             ->has('overview.jobs')
             ->where('lastPoll', null)
             // Every page carries the server clock, so the browser shows server time in the server timezone.
@@ -85,5 +89,10 @@ final class MonitoringTest extends TestCase
     {
         $this->actingAsOperator('view');
         $this->post('/monitoring/poll', ['target' => 'all', 'return' => 'https://evil.example/'])->assertRedirect('/monitoring');
+    }
+
+    public function test_ages_read_in_days_after_two_days(): void
+    {
+        $this->assertSame(['45 s', '30 min', '26 h', '98 days'], array_map([\App\Http\Support\MonitoringData::class, 'age'], [45, 1800, 93600, 98 * 86400]));
     }
 }

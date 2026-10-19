@@ -1842,14 +1842,34 @@ td .list-menu > summary:hover { border-color: var(--line); background: var(--sur
 .access-meta { color: var(--text-muted); font-size: var(--fs-sm); font-weight: 400; }
 .access-checks { display: grid; gap: var(--sp-1); }
 /* Monitoring: background jobs in plain words. */
-.monitor-jobs { display: grid; gap: 0; padding: var(--sp-2) var(--sp-3); border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+/* Monitoring overview: summary, what needs attention, one card per device, background jobs. */
+.monitor-body { display: grid; gap: var(--sp-4); }
+.monitor-attention { padding: var(--sp-3); border: 1px solid var(--danger-line); border-left: 4px solid var(--danger); border-radius: var(--radius); background: var(--danger-bg); }
+.monitor-attention h3 { display: flex; align-items: center; gap: var(--sp-2); margin: 0 0 var(--sp-2); font-size: var(--fs-md); color: var(--danger); }
+.monitor-attention ul { display: grid; gap: 4px; margin: 0; padding-left: 22px; }
+.monitor-attention a { color: var(--text-strong); }
+.monitor-services { display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 0; color: var(--text-muted); font-size: var(--fs-sm); }
+.monitor-service::before { content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 6px; border-radius: 50%; background: var(--success); vertical-align: 1px; }
+.monitor-service.down { color: var(--danger); font-weight: 600; }
+.monitor-service.down::before { background: var(--danger); }
+.monitor-readings { display: flex; flex-wrap: wrap; gap: 4px var(--sp-3); margin: 0; padding: var(--sp-2) var(--sp-3); border-top: 1px solid var(--line); color: var(--text-strong); font-size: var(--fs-sm); font-variant-numeric: tabular-nums; }
+.health-card > .monitor-readings { margin: 0; }
+.monitor-readings small { color: var(--text-muted); font-size: var(--fs-sm); }
+.monitor-readings .tone-danger { color: var(--danger); font-weight: 600; }
+.monitor-readings .tone-warning { color: var(--warning); font-weight: 600; }
+/* Cards in a row are equally tall; their buttons line up along the bottom. */
+.monitor-card { display: flex; flex-direction: column; }
+.monitor-card > .health-card-actions { margin-top: auto; padding-top: var(--sp-3); }
+.health-card > .monitor-services { margin: var(--sp-2) var(--sp-3) 0; }
+/* The four facts are short: two per row even on a phone. */
+@media (max-width: 760px) { .monitor-card .health-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.monitor-jobs { display: grid; padding: var(--sp-2) var(--sp-3); border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
 .monitor-jobs > h3 { margin: 0 0 var(--sp-1); font-size: var(--fs-md); color: var(--text-strong); }
-.monitor-job { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--sp-1) var(--sp-3); padding: 6px 0; border-top: 1px solid var(--line); }
-.monitor-job > div { display: grid; gap: 2px; min-width: 0; }
+.monitor-job { display: grid; grid-template-columns: minmax(180px, 1fr) 120px minmax(0, 2fr); align-items: center; gap: var(--sp-1) var(--sp-3); padding: 7px 0; border-top: 1px solid var(--line); }
 .monitor-job small { color: var(--text-muted); font-size: var(--fs-sm); }
-.monitor-job-state { justify-items: start; }
+.monitor-job-ok { color: var(--text-muted); font-size: var(--fs-sm); }
 .monitor-jobs > .hint { margin: var(--sp-2) 0 0; }
-@media (max-width: 760px) { .monitor-job { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 760px) { .monitor-job { grid-template-columns: minmax(0, 1fr) auto; } .monitor-job small { grid-column: 1 / -1; } }
 
 /* Settings → Backups: one block per remote destination. */
 .backup-destination { display: grid; gap: var(--sp-3); padding: var(--sp-3); border: 1px solid var(--line); border-radius: var(--radius); margin-bottom: var(--sp-3); }
