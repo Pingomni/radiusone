@@ -144,6 +144,10 @@ final class BackupsTest extends TestCase
         }
         $this->assertCount(5, BackupDestinations::all());
 
+        // A new key ID with the old (blank) secret is refused: they would not match.
+        $this->post('/settings/backups/destinations', ['id' => BackupDestinations::all()[0]['id'], 'enabled' => true, 'access_key' => '0055aaaabbbbcccc0000000009', 'secret_key' => ''])
+            ->assertSessionHas('flash.message', fn (string $m) => str_contains($m, 'You changed the key ID'));
+
         // Editing without the address keeps the bucket; a blank secret keeps the saved one.
         $id = BackupDestinations::all()[0]['id'];
         $this->post('/settings/backups/destinations', ['id' => $id, 'name' => 'Offsite', 'keep' => '30', 'enabled' => false, 'access_key' => '6d1e2f3a4b5c6d7e8f9a0b1c', 'secret_key' => ''])

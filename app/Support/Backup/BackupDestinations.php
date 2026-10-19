@@ -62,6 +62,10 @@ final class BackupDestinations
         foreach (self::FIELDS[$type] as $field) {
             $destination[$field] = trim((string) ($input[$field] ?? ($current[$field] ?? self::DEFAULTS[$field] ?? '')));
         }
+        // A blank secret keeps the saved one, which only belongs to the saved key.
+        if ($current !== null && $type === 's3' && $destination['access_key'] !== $current['access_key'] && (string) ($input['secret_key'] ?? '') === '') {
+            throw new InvalidArgumentException('You changed the key ID: paste the secret that belongs to it as well (for Backblaze, the applicationKey shown with the new keyID).');
+        }
         foreach (self::SECRETS[$type] as $field) {
             $typed = (string) ($input[$field] ?? '');
             if ($field !== 'private_key' && $typed !== '') {
