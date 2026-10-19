@@ -145,6 +145,7 @@ Route::middleware('frweb.auth')->group(function () {
         Route::get('/monitoring/live', [MonitoringController::class, 'live']);
         Route::get('/monitoring/server', [MonitoringController::class, 'server']);
         Route::get('/monitoring/server/live', [MonitoringController::class, 'serverLive']);
+        Route::post('/monitoring/server/restart', [MonitoringController::class, 'restartService'])->middleware(['permission:settings.manage', 'recent-auth']);
         Route::post('/monitoring/poll', [MonitoringController::class, 'poll']);
         Route::get('/nas/{id}/monitor', [MonitoringController::class, 'nas'])->whereNumber('id');
         Route::get('/nas/{id}/monitor/live', [MonitoringController::class, 'nasLive'])->whereNumber('id');

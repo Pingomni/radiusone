@@ -825,6 +825,11 @@ form.list-filterbar { padding: var(--sp-2) var(--sp-3); }
   font-size: var(--fs-md);
 }
 .kv:last-child { border-bottom: 0; }
+.kv > .service-state { display: inline-flex; align-items: center; gap: var(--sp-2); }
+.kv > .service-state > strong { color: var(--text-strong); font-weight: 600; }
+.service-uptime { color: var(--text-muted); font-weight: 400; white-space: nowrap; }
+.service-state > button { min-height: var(--control-h-sm); padding: 0 8px; font-size: var(--fs-sm); }
+.service-state > button svg.icon { width: 13px; height: 13px; }
 .kv > span:first-child { color: var(--text-muted); }
 .kv > strong { color: var(--text-strong); font-weight: 600; text-align: right; overflow-wrap: anywhere; }
 /* Short values (sizes, dates, IPs) never split across lines; the label wraps instead. */

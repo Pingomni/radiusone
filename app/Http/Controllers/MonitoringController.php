@@ -6,6 +6,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Support\MonitoringData;
 use App\Http\Support\Nas;
+use App\Support\Audit;
 use App\Support\Auth;
 use App\Support\Db;
 use App\Support\NasMonitor;
@@ -65,7 +66,23 @@ final class MonitoringController extends Controller
             'status' => MonitoringData::serverStatus(),
             'history' => MonitoringData::history(ServerMonitor::pseudoNas(), $request->query('range'), $request->query('if')),
             'serverId' => ServerMonitor::ID,
+            'restartable' => Auth::can('settings.manage') ? ServerMonitor::restartable() : [],
         ]);
+    }
+
+    /** Restart button: hands one service to the root helper (config check first, restart two seconds later). */
+    public function restartService(Request $request): RedirectResponse
+    {
+        $unit = (string) $request->input('unit');
+        $label = ServerMonitor::restartable()[$unit] ?? $unit;
+        try {
+            ServerMonitor::restart($unit);
+        } catch (RuntimeException $e) {
+            Audit::log('service_restart_failed', 'server_service', $unit, null, ['error' => mb_substr($e->getMessage(), 0, 300)]);
+            return $this->fail($e->getMessage(), '/monitoring/server');
+        }
+        Audit::log('service_restart', 'server_service', $unit);
+        return $this->ok('/monitoring/server', "$label is restarting. Its status updates here within about 15 seconds.");
     }
 
     public function serverLive(): JsonResponse

@@ -269,7 +269,9 @@ final class MonitoringData
         $hour = ServerMonitor::authStats(60);
         $services = [];
         foreach (ServerMonitor::services() as $unit => $service) {
-            $services[] = ['label' => (string) $service['label'], 'unit' => (string) $unit, 'state' => (string) $service['state'], 'running' => $service['state'] === 'active'];
+            $running = $service['state'] === 'active';
+            $services[] = ['label' => (string) $service['label'], 'unit' => (string) $unit, 'state' => (string) $service['state'], 'running' => $running,
+                'uptime' => $running && $service['since'] ? Present::uptime(max(0, time() - $service['since'])) : null];
         }
         $uptime = ServerMonitor::uptime();
         return [

@@ -146,7 +146,7 @@ final class ServerMonitor
         return [$rows, $counters, $now];
     }
 
-    /** @return array<string, array{label:string,state:string}> systemd state per service */
+    /** @return array<string, array{label:string,state:string,since:?int}> systemd state per service and when it last became active */
     public static function services(): array
     {
         // Several browsers refresh Monitoring at once; five systemctl calls each are not needed.
@@ -159,16 +159,50 @@ final class ServerMonitor
         $fpm = glob('/lib/systemd/system/php*-fpm.service') ?: [];
         rsort($fpm, SORT_NATURAL);
         if ($fpm) { $units = array_slice($units, 0, 3, true) + [basename($fpm[0], '.service') => 'PHP-FPM'] + array_slice($units, 3, null, true); }
+        // One systemctl call for all units; blocks come back in argument order.
+        $blocks = [];
+        try {
+            $output = BoundedProcess::run(['systemctl', 'show', '--timestamp=unix', '-p', 'ActiveState,ActiveEnterTimestamp', ...array_keys($units)], '', 3, 4096)['output'];
+            $blocks = preg_split('/\n\s*\n/', trim($output)) ?: [];
+        } catch (RuntimeException) {
+        }
         $result = [];
-        foreach ($units as $unit => $label) {
-            try {
-                $state = trim(BoundedProcess::run(['systemctl', 'is-active', $unit], '', 3, 512)['output']) ?: 'unknown';
-            } catch (RuntimeException) {
-                $state = 'unknown';
-            }
-            $result[$unit] = ['label' => $label, 'state' => $state];
+        foreach (array_keys($units) as $i => $unit) {
+            preg_match('/^ActiveState=(\S+)/m', $blocks[$i] ?? '', $state);
+            preg_match('/^ActiveEnterTimestamp=@(\d+)/m', $blocks[$i] ?? '', $since);
+            $result[$unit] = ['label' => $units[$unit], 'state' => $state[1] ?? 'unknown', 'since' => isset($since[1]) ? (int) $since[1] : null];
         }
         return $result;
+    }
+
+    public const RESTART_HELPER = '/usr/local/sbin/frweb-service-restart';
+
+    /** @return array<string, string> unit => label of the services the portal may restart (ops/apply-service-control.sh) */
+    public static function restartable(): array
+    {
+        return array_diff_key(array_map(static fn (array $s) => $s['label'], self::services()), ['cron' => true]);
+    }
+
+    /**
+     * Asks the root helper to restart one service. It checks the configuration first and starts the
+     * restart two seconds later, so this request still completes when it restarts the web stack itself.
+     */
+    public static function restart(string $unit): void
+    {
+        if (!array_key_exists($unit, self::restartable())) {
+            throw new RuntimeException('This service cannot be restarted from the portal.');
+        }
+        if (!is_executable(self::RESTART_HELPER)) {
+            throw new RuntimeException('Service restarts are not enabled on this server. Run ops/apply-service-control.sh as root first.');
+        }
+        $result = BoundedProcess::run(['sudo', '-n', self::RESTART_HELPER, $unit], '', 30, 8192);
+        if ($result['exit'] !== 0) {
+            $detail = trim($result['error']) ?: trim($result['output']);
+            if (str_contains($detail, 'password is required') || str_contains($detail, 'not allowed')) {
+                $detail = 'www-data is not allowed to run the restart helper. Run ops/apply-service-control.sh as root.';
+            }
+            throw new RuntimeException($detail !== '' ? $detail : 'The restart could not be started.');
+        }
     }
 
     /** RADIUS outcomes in the last minutes, from the redacted post-auth log. */
