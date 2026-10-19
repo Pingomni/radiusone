@@ -64,8 +64,8 @@ final class SettingsController extends Controller
             'notifications' => $tab === 'notifications' ? $this->notifications($request) : null,
             'backups' => $tab === 'backups' ? BackupSettingsController::props() : null,
             'documents' => $tab === 'documents' ? [
-                'values' => BillingDocuments::saved(),
-                'defaults' => array_map(static fn (array $f) => $f[1], BillingDocuments::FIELDS) + ['company_name' => (string) config('app.name', 'RadiusWeb')],
+                'values' => BillingDocuments::settings(),
+                'defaults' => BillingDocuments::defaults(),
                 'labels' => array_map(static fn (array $f) => $f[0], BillingDocuments::FIELDS),
                 'lines' => array_map(static fn (array $f) => $f[3], BillingDocuments::FIELDS),
                 'placeholders' => BillingDocuments::PLACEHOLDERS,

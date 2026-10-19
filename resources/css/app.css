@@ -333,6 +333,10 @@ input, select, textarea {
   font-weight: 400;
 }
 textarea { min-height: 96px; padding: 6px 8px; line-height: var(--lh); resize: vertical; }
+/* Template fields: as tall as their rows, not the 96px default. */
+.template-fields textarea { min-height: 0; }
+.template-field { display: grid; gap: 2px; }
+.template-fields .link { justify-self: start; font-size: var(--fs-sm); }
 select { padding-right: 24px; cursor: pointer; }
 input::placeholder, textarea::placeholder { color: var(--text-faint); }
 input:hover, select:hover, textarea:hover { border-color: var(--text-faint); }

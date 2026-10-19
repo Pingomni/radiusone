@@ -38,14 +38,20 @@ final class BillingDocuments
         return $values;
     }
 
+    /** @return array<string, string> the default wording (the company name defaults to the portal name) */
+    public static function defaults(): array
+    {
+        return ['company_name' => (string) config('app.name', 'RadiusWeb')] + array_map(static fn (array $f) => $f[1], self::FIELDS);
+    }
+
     /** @return array<string, string> the wording in use (saved, or the default) */
     public static function settings(): array
     {
+        $defaults = self::defaults();
         $values = self::saved();
-        foreach (self::FIELDS as $key => [, $default]) {
-            $values[$key] = $values[$key] !== '' ? $values[$key] : $default;
+        foreach ($values as $key => $value) {
+            $values[$key] = $value !== '' ? $value : $defaults[$key];
         }
-        $values['company_name'] = $values['company_name'] !== '' ? $values['company_name'] : (string) config('app.name', 'RadiusWeb');
         return $values;
     }
 
@@ -66,8 +72,10 @@ final class BillingDocuments
             }
             $clean[$key] = $value;
         }
+        $defaults = self::defaults();
         foreach ($clean as $key => $value) {
-            Settings::save(self::PREFIX . $key, $value);
+            // The default text, shown pre-filled, stays "the default" so a later change of default applies.
+            Settings::save(self::PREFIX . $key, $value === $defaults[$key] ? '' : $value);
         }
     }
 

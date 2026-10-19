@@ -61,7 +61,8 @@ final class AdminAlerts
             'checks' => $checks,
             'report_enabled' => Settings::value('notification_admin_report_enabled', '0') === '1',
             'report_time' => Settings::value('notification_admin_report_time', '07:00'),
-            'templates' => array_map(static fn (string $key) => Settings::value('notification_admin_tpl_' . $key, ''), array_combine(array_keys(self::TEMPLATES), array_keys(self::TEMPLATES))),
+            // The text in use: the saved template, or the default.
+            'templates' => array_map(static fn (string $key) => Settings::value('notification_admin_tpl_' . $key, '') ?: self::TEMPLATES[$key][1], array_combine(array_keys(self::TEMPLATES), array_keys(self::TEMPLATES))),
         ];
     }
 
@@ -140,7 +141,8 @@ final class AdminAlerts
         Settings::save('notification_admin_report_enabled', !empty($input['report_enabled']) ? '1' : '0');
         Settings::save('notification_admin_report_time', $time);
         foreach ($templates as $key => $value) {
-            Settings::save('notification_admin_tpl_' . $key, $value);
+            // The default text, shown pre-filled, stays "the default" so a later change of default applies.
+            Settings::save('notification_admin_tpl_' . $key, $value === self::TEMPLATES[$key][1] ? '' : $value);
         }
     }
 

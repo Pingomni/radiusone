@@ -30,7 +30,9 @@ final class DocumentTemplatesTest extends TestCase
     {
         $this->actingAsOperator();
         $this->get('/settings?tab=documents')->assertOk()->assertInertia(fn ($page) => $page
-            ->where('documents.values.draft_title', '')
+            // Fields come pre-filled with the text in use, to edit rather than retype.
+            ->where('documents.values.draft_title', 'DRAFT PAYMENT REQUEST')
+            ->where('documents.values.company_name', config('app.name'))
             ->where('documents.defaults.draft_title', 'DRAFT PAYMENT REQUEST')
             ->where('documents.lines.company_details', 4));
 
@@ -63,8 +65,10 @@ final class DocumentTemplatesTest extends TestCase
         // The euro sign survives (Windows-1252 0x80).
         $this->post('/settings/documents', ['draft_note' => 'Totali: 20 €'])->assertSessionHas('flash.type', 'success');
         $this->assertStringContainsString('Totali: 20 €', $this->pdfText((string) $this->get('/settings/documents/preview/request')->getContent()));
-        // Saving with a field empty brings back its default.
+        // Saving with a field empty brings back its default; saving the default text keeps "the default".
         $this->assertSame('', BillingDocuments::saved()['company_name']);
+        $this->post('/settings/documents', ['draft_title' => 'DRAFT PAYMENT REQUEST', 'draft_footer' => 'This document is a payment request, not a receipt.'])->assertSessionHas('flash.type', 'success');
+        $this->assertSame(['', ''], [BillingDocuments::saved()['draft_title'], BillingDocuments::saved()['draft_footer']]);
     }
 
     public function test_invalid_wording_is_refused(): void
@@ -105,6 +109,9 @@ final class DocumentTemplatesTest extends TestCase
             'report_intro' => 'Raport automatik nga {host}.',
         ]]);
         $this->assertSame('ALARM {app}: {summary}', AdminAlerts::settings()['templates']['alert_subject']);
+        // Unchanged templates show (and keep) the default text.
+        $this->assertSame('{app}: {events_short}', AdminAlerts::settings()['templates']['alert_sms']);
+        $this->assertSame('', Db::value('SELECT setting_value FROM settings WHERE setting_key="notification_admin_tpl_alert_sms"'));
 
         // A stuck network worker, seen on two checks in a row.
         Db::exec('SET FOREIGN_KEY_CHECKS=0');

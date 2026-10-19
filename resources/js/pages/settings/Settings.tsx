@@ -471,6 +471,26 @@ function BackupsTab({ b }: { b: Backups }) {
 /** Days of history a period keeps; "Keep forever" (0) keeps everything. */
 const keeps = (days: number) => (days === 0 ? Infinity : days);
 
+/** Rows for a template box: its current lines plus one to type in, within limits. */
+const templateRows = (value: string, max: number) => Math.max(2, Math.min(max, value.split('\n').length + 1));
+
+/** One template field, pre-filled with the text in use; "Use default" puts the default back. */
+function TemplateField({ label, name, value, fallback, multiline, maxRows = 8, hint, error, onChange }: {
+    label: string; name: string; value: string; fallback: string; multiline: boolean; maxRows?: number; hint?: string; error?: string; onChange: (value: string) => void;
+}) {
+    const reset = value !== fallback && fallback !== '' && (
+        <button type="button" className="link" onClick={() => onChange(fallback)}>Use default</button>
+    );
+    return (
+        <div className="span2 template-field">
+            {multiline
+                ? <TextArea className="span2" label={label} name={name} rows={templateRows(value, maxRows)} hint={hint} value={value} error={error} onChange={(e) => onChange(e.target.value)} />
+                : <Field className="span2" label={label} name={name} hint={hint} value={value} error={error} onChange={(e) => onChange(e.target.value)} />}
+            {reset}
+        </div>
+    );
+}
+
 type Documents = {
     values: Record<string, string>; defaults: Record<string, string>; labels: Record<string, string>; lines: Record<string, number>; placeholders: string[];
 };
@@ -485,17 +505,17 @@ const DOCUMENT_HINTS: Record<string, string> = {
 function DocumentsTab({ d }: { d: Documents }) {
     const form = useForm({ ...d.values });
     const field = (key: string) => (
-        <TextArea
+        <TemplateField
             key={key}
-            className="span2"
             label={d.labels[key]}
             name={key}
-            rows={d.lines[key] > 1 ? Math.min(d.lines[key], 6) : 1}
-            placeholder={d.defaults[key] || 'Optional'}
-            hint={DOCUMENT_HINTS[key]}
             value={form.data[key] ?? ''}
+            fallback={d.defaults[key]}
+            multiline={d.lines[key] > 1}
+            maxRows={d.lines[key] + 1}
+            hint={DOCUMENT_HINTS[key]}
             error={form.errors[key]}
-            onChange={(e) => form.setData(key, e.target.value)}
+            onChange={(v) => form.setData(key, v)}
         />
     );
     const preview = (kind: 'request' | 'receipt', label: string) => (
@@ -503,15 +523,15 @@ function DocumentsTab({ d }: { d: Documents }) {
     );
     return (
         <form onSubmit={(e) => { e.preventDefault(); form.post('/settings/documents', { preserveScroll: true }); }}>
-            <Sheet title="Invoices & receipts" description="The wording of the payment request (draft PDF) and payment receipt your customers get. Leave a field empty to use the default shown in it." icon="billing">
-                <div className="form-grid">
+            <Sheet title="Invoices & receipts" description="The wording of the payment request (draft PDF) and payment receipt your customers get. Edit the text in use; an empty field goes back to the default." icon="billing">
+                <div className="form-grid template-fields">
                     {field('company_name')}
                     {field('company_details')}
                     <p className="span2 hint">Titles, notes and footers can use: {d.placeholders.map((p) => `{${p}}`).join(' ')}</p>
                 </div>
             </Sheet>
             <Sheet title="Payment request" description="The PDF sent before payment (Billing → invoice → Draft PDF)." icon="billing">
-                <div className="form-grid">
+                <div className="form-grid template-fields">
                     {field('draft_title')}
                     {field('draft_note')}
                     {field('draft_footer')}
@@ -519,7 +539,7 @@ function DocumentsTab({ d }: { d: Documents }) {
                 </div>
             </Sheet>
             <Sheet title="Payment receipt" description="The PDF that confirms a payment (Billing → invoice → Payment receipt)." icon="billing">
-                <div className="form-grid">
+                <div className="form-grid template-fields">
                     {field('receipt_title')}
                     {field('receipt_partial_title')}
                     {field('receipt_note')}
@@ -1134,26 +1154,21 @@ function AdminAlerts({ admin, ready }: { admin: NonNullable<Notifications['admin
 
                     <details className="span2">
                         <summary>Message templates</summary>
-                        <p className="hint">Leave a field empty to use the default shown in it. Placeholders are filled in when the message is sent.</p>
-                        <div className="form-grid">
-                            {Object.entries(admin.templates).map(([key, t]) => {
-                                const kind = key.startsWith('report') ? 'report' : 'alert';
-                                const long = key === 'alert_body' || key === 'report_intro';
-                                return (
-                                    <TextArea
-                                        key={key}
-                                        className="span2"
-                                        label={t.label}
-                                        name={`templates[${key}]`}
-                                        rows={long ? 5 : 1}
-                                        placeholder={t.default || 'Optional'}
-                                        hint={`Placeholders: ${admin.placeholders[kind].map((p) => `{${p}}`).join(' ')}`}
-                                        value={form.data.templates[key] ?? ''}
-                                        error={(form.errors as Record<string, string>)[`templates.${key}`]}
-                                        onChange={(e) => form.setData('templates', { ...form.data.templates, [key]: e.target.value })}
-                                    />
-                                );
-                            })}
+                        <p className="hint">Edit the text in use. Placeholders in braces are filled in when the message is sent; an empty field goes back to the default.</p>
+                        <div className="form-grid template-fields">
+                            {Object.entries(admin.templates).map(([key, t]) => (
+                                <TemplateField
+                                    key={key}
+                                    label={t.label}
+                                    name={`templates[${key}]`}
+                                    value={form.data.templates[key] ?? ''}
+                                    fallback={t.default}
+                                    multiline={key === 'alert_body' || key === 'report_intro'}
+                                    hint={`Placeholders: ${admin.placeholders[key.startsWith('report') ? 'report' : 'alert'].map((p) => `{${p}}`).join(' ')}`}
+                                    error={(form.errors as Record<string, string>)[`templates.${key}`]}
+                                    onChange={(v) => form.setData('templates', { ...form.data.templates, [key]: v })}
+                                />
+                            ))}
                         </div>
                     </details>
 
