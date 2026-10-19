@@ -8,7 +8,7 @@ use App\Support\ProviderHttp;
 use RuntimeException;
 
 /**
- * S3-compatible object storage (Backblaze B2, Cloudflare R2, Wasabi, Hetzner, DigitalOcean Spaces…)
+ * S3-compatible object storage (Backblaze B2 or Cloudflare R2)
  * with Signature V4 and path-style URLs on the provider's endpoint. The key needs to write, list
  * and delete objects in the bucket.
  */
@@ -22,32 +22,23 @@ final class S3Target implements BackupTarget
     public const PROVIDERS = [
         'b2' => 'Backblaze B2',
         'r2' => 'Cloudflare R2',
-        'wasabi' => 'Wasabi',
-        'hetzner' => 'Hetzner Object Storage',
-        'spaces' => 'DigitalOcean Spaces',
     ];
 
     /** Each provider's endpoints live under its own domain. */
     private const DOMAINS = [
         'b2' => '.backblazeb2.com',
         'r2' => '.r2.cloudflarestorage.com',
-        'wasabi' => '.wasabisys.com',
-        'hetzner' => '.your-objectstorage.com',
-        'spaces' => '.digitaloceanspaces.com',
     ];
 
     /** Each provider's endpoint host (without the bucket), as a regular expression. */
     private const ENDPOINTS = [
         'b2' => 's3\.[a-z0-9-]+\.backblazeb2\.com',
         'r2' => '[a-f0-9]{32}(?:\.eu|\.fedramp)?\.r2\.cloudflarestorage\.com',
-        'wasabi' => 's3(?:\.[a-z0-9-]+)?\.wasabisys\.com',
-        'hetzner' => '[a-z0-9]+\.your-objectstorage\.com',
-        'spaces' => '[a-z0-9]+\.digitaloceanspaces\.com',
     ];
 
     /**
      * Reads the bucket address the provider shows, in either style:
-     * https://s3.eu-central-003.backblazeb2.com/my-bucket/folder or https://my-bucket.fra1.digitaloceanspaces.com.
+     * https://s3.eu-central-003.backblazeb2.com/my-bucket/folder or https://my-bucket.s3.eu-central-003.backblazeb2.com.
      * @return array{provider:string,endpoint:string,bucket:string,prefix:string}
      */
     public static function fromUrl(string $url): array
@@ -65,7 +56,7 @@ final class S3Target implements BackupTarget
                 return ['provider' => $provider, 'endpoint' => $m[2], 'bucket' => $bucket, 'prefix' => implode('/', $segments)];
             }
         }
-        throw new \InvalidArgumentException('Paste the bucket address from Backblaze, Cloudflare R2, Wasabi, Hetzner or DigitalOcean, for example https://s3.eu-central-003.backblazeb2.com/my-bucket.');
+        throw new \InvalidArgumentException('Paste the bucket address from Backblaze B2 or Cloudflare R2, for example https://s3.eu-central-003.backblazeb2.com/my-bucket.');
     }
 
     /**
@@ -134,8 +125,7 @@ final class S3Target implements BackupTarget
         }
         return match (true) {
             str_ends_with($host, '.r2.cloudflarestorage.com') => 'auto',
-            (bool) preg_match('/^s3\.([a-z0-9-]+)\.(backblazeb2\.com|wasabisys\.com)$/', $host, $m) => $m[1],
-            (bool) preg_match('/^([a-z0-9-]+)\.(your-objectstorage\.com|digitaloceanspaces\.com)$/', $host, $m) => $m[1],
+            (bool) preg_match('/^s3\.([a-z0-9-]+)\.backblazeb2\.com$/', $host, $m) => $m[1],
             default => 'us-east-1',
         };
     }

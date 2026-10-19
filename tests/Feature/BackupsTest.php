@@ -127,9 +127,7 @@ final class BackupsTest extends TestCase
         foreach ([
             ['https://s3.eu-central-003.backblazeb2.com/isp-backups', 'b2', 's3.eu-central-003.backblazeb2.com', 'isp-backups', 'eu-central-003', 'freeradius-web'],
             ['https://0123abcd4567ef890123abcd4567ef89.r2.cloudflarestorage.com/radius/nightly', 'r2', '0123abcd4567ef890123abcd4567ef89.r2.cloudflarestorage.com', 'radius', 'auto', 'nightly'],
-            ['s3.eu-central-1.wasabisys.com/isp', 'wasabi', 's3.eu-central-1.wasabisys.com', 'isp', 'eu-central-1', 'freeradius-web'],
-            ['https://isp-backups.fsn1.your-objectstorage.com/', 'hetzner', 'fsn1.your-objectstorage.com', 'isp-backups', 'fsn1', 'freeradius-web'],
-            ['https://my-space.fra1.digitaloceanspaces.com', 'spaces', 'fra1.digitaloceanspaces.com', 'my-space', 'fra1', 'freeradius-web'],
+            ['https://radius.s3.us-east-005.backblazeb2.com', 'b2', 's3.us-east-005.backblazeb2.com', 'radius', 'us-east-005', 'freeradius-web'],
         ] as [$url, $provider, $endpoint, $bucket, $region, $prefix]) {
             // The chosen provider is only a starting point: the address decides.
             $this->post('/settings/backups/destinations', $key + ['provider' => 'b2', 'url' => $url])->assertSessionHas('flash.type', 'success');
@@ -139,10 +137,11 @@ final class BackupsTest extends TestCase
             $this->assertStringEndsWith(' · ' . $bucket, $saved['name']);
         }
 
-        foreach (['https://evil.example.com/bucket', 'https://s3.eu-central-003.backblazeb2.com/'] as $bad) {
+        // Other providers (Wasabi, Hetzner, DigitalOcean…) are not offered.
+        foreach (['https://evil.example.com/bucket', 'https://s3.eu-central-003.backblazeb2.com/', 'https://s3.eu-central-1.wasabisys.com/isp', 'https://isp.fra1.digitaloceanspaces.com'] as $bad) {
             $this->post('/settings/backups/destinations', $key + ['provider' => 'r2', 'url' => $bad])->assertSessionHas('flash.type', 'danger');
         }
-        $this->assertCount(5, BackupDestinations::all());
+        $this->assertCount(3, BackupDestinations::all());
 
         // A new key ID with the old (blank) secret is refused: they would not match.
         $this->post('/settings/backups/destinations', ['id' => BackupDestinations::all()[0]['id'], 'enabled' => true, 'access_key' => '0055aaaabbbbcccc0000000009', 'secret_key' => ''])

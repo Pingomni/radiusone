@@ -360,7 +360,7 @@ const SECTIONS: Section[] = [
                 <Steps>
                     <li>Set the <strong>backup passphrase</strong> (at least 12 characters). Store it somewhere safe outside this server: without it no backup can be opened. Changing it affects only new backups.</li>
                     <li>Choose how long <strong>local copies</strong> stay on the server. The newest three of each kind are always kept.</li>
-                    <li>Add destinations: <a href="#b2">Backblaze B2</a>, <a href="#r2">Cloudflare R2</a>, Wasabi, Hetzner Object Storage or DigitalOcean Spaces (the bucket address and a key; for Backblaze the key alone; guides below), or <strong>My own server (SFTP)</strong> as <code>user@host</code> (add the shown public key to its authorized keys). Name, folder and copies to keep (default 7) are under <strong>More options</strong>. Then press <strong>Test</strong>.</li>
+                    <li>Add destinations: <a href="#b2">Backblaze B2</a>, <a href="#r2">Cloudflare R2</a> (the bucket address and a key; for Backblaze the key alone; guides below), or <strong>My own server (SFTP)</strong> as <code>user@host</code> (add the shown public key to its authorized keys). Name, folder and copies to keep (default 7) are under <strong>More options</strong>. Then press <strong>Test</strong>.</li>
                     <li>The page shows the last run and the result per destination.</li>
                 </Steps>
                 <h3 id="b2">Backblaze B2 setup</h3>
@@ -386,9 +386,6 @@ const SECTIONS: Section[] = [
                     <li><strong>In the portal</strong>: <em>Settings → Backups → Add destination</em>, <strong>Store backups in</strong> <strong>Cloudflare R2</strong>. Paste the bucket address and both keys, and save.</li>
                     <li>Press <strong>Test</strong>.</li>
                 </Steps>
-
-                <h3>Wasabi, Hetzner and DigitalOcean</h3>
-                <p>Wasabi, Hetzner Object Storage and DigitalOcean Spaces work the same way: create a private bucket and an access key limited to it, choose the provider under <strong>Store backups in</strong>, then paste the bucket address the provider shows and the key. The form shows where each provider displays the address.</p>
 
                 <h3>Backup storage problems</h3>
                 <Table

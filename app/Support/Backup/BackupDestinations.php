@@ -14,7 +14,7 @@ use InvalidArgumentException;
  */
 final class BackupDestinations
 {
-    public const TYPES = ['s3' => 'S3-compatible storage (Backblaze B2, Cloudflare R2, …)', 'sftp' => 'SFTP server'];
+    public const TYPES = ['s3' => 'Backblaze B2 or Cloudflare R2', 'sftp' => 'SFTP server'];
     public const KEEP = [1 => '1 copy', 3 => '3 copies', 5 => '5 copies', 7 => '7 copies', 14 => '14 copies', 30 => '30 copies', 60 => '60 copies', 90 => '90 copies'];
     public const LOCAL_DAYS = [7 => '7 days', 14 => '14 days', 30 => '30 days', 60 => '60 days', 90 => '90 days'];
 
@@ -29,8 +29,9 @@ final class BackupDestinations
     public static function all(): array
     {
         $saved = json_decode(Settings::value('backup_destinations', '[]'), true);
-        // Retired types (Google Drive, and Amazon-only S3 without an endpoint) are dropped.
-        return is_array($saved) ? array_values(array_filter($saved, static fn ($d) => isset(self::TYPES[$d['type'] ?? '']) && ($d['type'] !== 's3' || ($d['endpoint'] ?? '') !== ''))) : [];
+        // Retired types and providers (Google Drive, Amazon-only S3, Wasabi, Hetzner, DigitalOcean) are dropped.
+        return is_array($saved) ? array_values(array_filter($saved, static fn ($d) => isset(self::TYPES[$d['type'] ?? ''])
+            && ($d['type'] !== 's3' || (($d['endpoint'] ?? '') !== '' && isset(S3Target::PROVIDERS[$d['provider'] ?? '']))))) : [];
     }
 
     public static function find(string $id): ?array

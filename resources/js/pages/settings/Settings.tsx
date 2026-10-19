@@ -93,7 +93,7 @@ function OverviewTab({ overview, usersSummary, branding }: { overview: Overview;
                 <Destination title="Users & access" description="Manage operators, roles, and two-factor authentication." href="/settings?tab=users" icon="clients" status={<Badge tone="success">{usersSummary.enabled} enabled</Badge>} />
                 <Destination title="Notifications" description="Connect a gateway, customize templates and send customer updates." href="/settings?tab=notifications" icon="mail" status={<Badge>Email + SMS</Badge>} />
                 <Destination title="Branding" description="Give your workspace and invoices a familiar identity." href="/settings?tab=branding" icon="image" status={<Badge>{branding.custom ? 'Custom logo' : 'Default logo'}</Badge>} />
-                <Destination title="Backups" description="Encrypted copies to Backblaze B2, Cloudflare R2, other S3-compatible storage or your own server." href="/settings?tab=backups" icon="server" status={<Badge>Remote copies</Badge>} />
+                <Destination title="Backups" description="Encrypted copies to Backblaze B2, Cloudflare R2 or your own server." href="/settings?tab=backups" icon="server" status={<Badge>Remote copies</Badge>} />
                 <Destination title="Data retention" description="Choose how long session and login records are kept." href="/settings?tab=retention" icon="logs" status={<Badge>History</Badge>} />
             </div>
             <Sheet title="System information" description="Environment, operator access, and backup locations for this workspace." icon="server" meta={<Tag tag={overview.engine} />}>
@@ -338,9 +338,6 @@ function BackupPassphrase({ set }: { set: boolean }) {
 const S3_HELP: Record<string, { url: string; where: string; key: string; secret: string }> = {
     b2: { url: 'https://s3.eu-central-003.backblazeb2.com/my-bucket', where: 'Optional: leave empty and it is found from the key.', key: 'keyID', secret: 'applicationKey' },
     r2: { url: 'https://<account id>.r2.cloudflarestorage.com/my-bucket', where: 'Cloudflare → R2 → your bucket → Settings → S3 API.', key: 'Access Key ID', secret: 'Secret Access Key' },
-    wasabi: { url: 'https://s3.eu-central-1.wasabisys.com/my-bucket', where: 'Wasabi → Buckets → your bucket → Settings → Properties.', key: 'Access key', secret: 'Secret key' },
-    hetzner: { url: 'https://my-bucket.fsn1.your-objectstorage.com', where: 'Hetzner Console → Object Storage → your bucket (URL).', key: 'Access key', secret: 'Secret key' },
-    spaces: { url: 'https://my-space.fra1.digitaloceanspaces.com', where: 'DigitalOcean → Spaces → your Space (Origin Endpoint).', key: 'Access Key', secret: 'Secret' },
 };
 
 function DestinationForm({ d, b, onDone }: { d: BackupDestination | null; b: Backups; onDone: () => void }) {
@@ -354,7 +351,7 @@ function DestinationForm({ d, b, onDone }: { d: BackupDestination | null; b: Bac
     const help = S3_HELP[form.data.provider] ?? S3_HELP.b2;
     return (
         <form className="form-grid" onSubmit={(e) => { e.preventDefault(); form.post('/settings/backups/destinations', { preserveScroll: true, onSuccess: onDone, onFinish: () => form.setData((v) => ({ ...v, secret_key: '' })) }); }}>
-            {/* One list for both: S3-compatible providers, then SFTP. An existing destination keeps its kind. */}
+            {/* One list for both: Backblaze B2 and Cloudflare R2, then SFTP. An existing destination keeps its kind. */}
             {!d && (
                 <Select
                     label="Store backups in"
