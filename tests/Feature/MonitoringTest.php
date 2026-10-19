@@ -68,7 +68,10 @@ final class MonitoringTest extends TestCase
             ->where('history.selected', 2)
             ->where('history.traffic.data.chart.title', 'ether1')
             ->where('history.health.data.chart.unit', 'pct')
-            ->has('oids'));
+            ->has('oids')
+            // No SNMP: no tables, and the facts known anyway (ping, accounting, disconnect method).
+            ->where('tables', null)
+            ->where('basics', fn ($items) => array_column(is_array($items) ? $items : $items->all(), 'label') === ['Reachable', 'Online now', 'Last accounting', 'Disconnect']));
 
         $this->getJson('/nas/' . $id . '/monitor/graph?range=1h&if=2')->assertOk()
             ->assertJsonPath('chart.series.0.key', 'in')

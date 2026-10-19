@@ -3,7 +3,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { LivePanel } from '@/components/LivePanel';
 import { Gauges, HistorySection, Kv, PollButton, ToneValue, type Gauge, type History } from '@/components/monitoring';
 import { DataTable } from '@/components/table';
-import { Badge, Empty, Panel, Tag, type TagData } from '@/components/ui';
+import { Badge, Empty, HealthItem, Panel, Tag, type TagData } from '@/components/ui';
+import Icon from '@/components/Icon';
 import AppLayout from '@/layouts/AppLayout';
 
 type Interface = { name: string; alias: string; status: TagData; speed: string; in: string; out: string; totals: string; errors: number };
@@ -121,6 +122,7 @@ function NetworkTables({ nasId, tables }: { nasId: number; tables: Record<string
                 : 'error' in data ? <p className="field-error">{data.error}</p>
                 : (
                     <>
+                        <div className="nas-tables-table">
                         <DataTable
                             rows={rows}
                             exportRows
@@ -134,6 +136,7 @@ function NetworkTables({ nasId, tables }: { nasId: number; tables: Record<string
                                 },
                             }))}
                         />
+                        </div>
                         <p className="hint">
                             {data.rows.length} row{data.rows.length === 1 ? '' : 's'}{filter && rows.length !== data.rows.length ? `, ${rows.length} shown` : ''}, read live over SNMP.
                             {data.truncated && ' Only the first 2,000 are shown.'}{data.note && ` ${data.note}`}
@@ -144,7 +147,30 @@ function NetworkTables({ nasId, tables }: { nasId: number; tables: Record<string
     );
 }
 
-export default function NasMonitor({ nas, snapshot, history, vendorLabel, oids, canManage, tables }: {
+/** No SNMP yet: what is known anyway, and one clear way to set it up. */
+function SetupSnmp({ nas, basics, setup, canManage }: { nas: { id: number; name: string; ip: string }; basics: { label: string; value: string; tone: string }[]; setup: string | null; canManage: boolean }) {
+    return (
+        <Panel title={`${nas.name} ${nas.ip}`}>
+            {basics.length > 0 && <div className="health-grid nas-basics">{basics.map((i) => <HealthItem key={i.label} {...i} />)}</div>}
+            <div className="snmp-setup">
+                <span className="snmp-setup-icon"><Icon name="signal" /></span>
+                <div>
+                    <h3>Set up SNMP to monitor this NAS</h3>
+                    <p>
+                        SNMP adds CPU, memory and temperature, interface traffic, history graphs, and the network tables
+                        (IP addresses, ARP, MAC table, BGP and OSPF). It is read-only: give the router a v2c community or an SNMPv3 user
+                        that can only read, and allow this server to reach it on UDP 161.
+                    </p>
+                    {setup
+                        ? <Link className="button primary" href={setup}><Icon name="settings" />Set up SNMP</Link>
+                        : <p className="hint">{canManage ? 'Apply the SNMP migration first.' : 'Ask an administrator to set up SNMP for this NAS.'}</p>}
+                </div>
+            </div>
+        </Panel>
+    );
+}
+
+export default function NasMonitor({ nas, snapshot, history, vendorLabel, oids, canManage, tables, basics }: {
     nas: { id: number; name: string; ip: string };
     snapshot: Snapshot;
     history: History;
@@ -152,17 +178,30 @@ export default function NasMonitor({ nas, snapshot, history, vendorLabel, oids, 
     oids: { group: string; metric: string; oid: string; notes: string }[];
     canManage: boolean;
     tables: Record<string, string> | null;
+    basics: { label: string; value: string; tone: string }[] | null;
 }) {
+    const noSnmp = snapshot.status === 'off';
+    // A NAS whose SNMP was switched off may still have recorded history worth showing.
+    const recorded = history.available && [history.health?.data, history.temperature?.data, history.traffic.data].some((d) => d !== undefined && 'chart' in d);
     return (
         <AppLayout title="NAS Monitor">
             <div className="toolbar">
                 <Link className="button" href="/monitoring">Back to monitoring</Link>
                 <Link className="button" href={`/nas/${nas.id}/edit`}>{canManage ? 'Edit NAS and SNMP' : 'NAS details'}</Link>
-                <PollButton target={String(nas.id)} back={`/nas/${nas.id}/monitor`} label="Poll this NAS now" />
+                {!noSnmp && <PollButton target={String(nas.id)} back={`/nas/${nas.id}/monitor`} label="Poll this NAS now" />}
             </div>
-            <LivePanel title={`${nas.name} ${nas.ip}`} url={`/nas/${nas.id}/monitor/live`} interval={15} initial={snapshot} className="nas-monitor" render={(s) => <SnapshotBody snap={s} />} />
-            {tables && <NetworkTables nasId={nas.id} tables={tables} />}
-            <HistorySection history={history} pageUrl={`/nas/${nas.id}/monitor`} />
+            {noSnmp ? (
+                <>
+                    <SetupSnmp nas={nas} basics={basics ?? []} setup={snapshot.status === 'off' ? snapshot.setup : null} canManage={canManage} />
+                    {recorded && <HistorySection history={history} pageUrl={`/nas/${nas.id}/monitor`} />}
+                </>
+            ) : (
+                <>
+                    <LivePanel title={`${nas.name} ${nas.ip}`} url={`/nas/${nas.id}/monitor/live`} interval={15} initial={snapshot} className="nas-monitor" render={(s) => <SnapshotBody snap={s} />} />
+                    {tables && <NetworkTables nasId={nas.id} tables={tables} />}
+                    <HistorySection history={history} pageUrl={`/nas/${nas.id}/monitor`} />
+                </>
+            )}
             <Panel title="SNMP OID reference">
                 <details className="nas-oid-reference">
                     <summary>OIDs polled for {vendorLabel}</summary>

@@ -136,7 +136,7 @@ export function LivePanel<T>({ title, url, interval, initial, render, headerLink
                 </div>
             </div>
             <span className="sr-only" aria-live="polite">{announce}</span>
-            <div>{render(data)}</div>
+            <div className="live-body">{render(data)}</div>
         </section>
     );
 }

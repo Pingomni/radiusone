@@ -99,6 +99,7 @@ final class MonitoringController extends Controller
         }
         $nas = Nas::monitorRow($id);
         $vendor = strtolower((string) (($nas['vendor'] ?? '') ?: ($nas['type'] ?? '')));
+        $snmp = NasMonitor::configured(NasMonitor::settings((int) $nas['id']));
         return Inertia::render('monitoring/Nas', [
             'nas' => ['id' => (int) $nas['id'], 'name' => (string) ($nas['shortname'] ?: $nas['nasname']), 'ip' => (string) $nas['nasname']],
             'snapshot' => MonitoringData::nasSnapshot($nas),
@@ -106,7 +107,9 @@ final class MonitoringController extends Controller
             'vendorLabel' => Nas::VENDORS[$vendor]['label'] ?? 'this device',
             'oids' => array_map(static fn (array $r) => ['group' => (string) $r[0], 'metric' => (string) $r[1], 'oid' => (string) $r[2], 'notes' => (string) $r[3]], NasMonitor::oidReference($vendor)),
             'canManage' => Auth::can('nas.manage'),
-            'tables' => NasMonitor::configured(NasMonitor::settings((int) $nas['id'])) ? NasTables::TABLES : null,
+            'tables' => $snmp ? NasTables::TABLES : null,
+            // Without SNMP: what is known anyway (ping, accounting, disconnect method), as on the overview card.
+            'basics' => $snmp ? null : (array_values(array_filter(MonitoringData::overview()['nas'], static fn (array $c) => $c['id'] === (int) $nas['id']))[0]['items'] ?? []),
         ]);
     }
 
