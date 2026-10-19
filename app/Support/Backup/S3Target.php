@@ -108,7 +108,8 @@ final class S3Target implements BackupTarget
     }
 
     private const B2_MASTER_KEY = 'This is the Backblaze master application key (its keyID is your 12-character account ID). Backblaze does not accept it for S3 uploads: '
-        . 'create an application key under Application Keys → Add a New Application Key (this bucket only, Read and Write) and paste its keyID and applicationKey.';
+        . 'create an application key under Application Keys → Add a New Application Key (this bucket only, Read and Write), then replace BOTH fields here: '
+        . 'keyID (25 characters, starts with 00) and applicationKey.';
 
     /** The master key's ID is the 12-hex-digit account ID; application key IDs are 25 characters. */
     private static function isB2MasterKey(string $keyId): bool
