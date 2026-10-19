@@ -78,6 +78,9 @@ final class S3Target implements BackupTarget
         if ($keyId === '' || $secret === '') {
             throw new \InvalidArgumentException('Enter the Backblaze keyID and applicationKey.');
         }
+        if (self::isB2MasterKey($keyId)) {
+            throw new \InvalidArgumentException(self::B2_MASTER_KEY);
+        }
         [$status, $body] = ProviderHttp::request('GET', 'https://api.backblazeb2.com/b2api/v2/b2_authorize_account', ['api.backblazeb2.com'],
             ['Authorization' => 'Basic ' . base64_encode($keyId . ':' . $secret)], null, 20);
         $auth = ProviderHttp::json($body);
@@ -102,6 +105,15 @@ final class S3Target implements BackupTarget
             $bucket = (string) $names[0];
         }
         return ['endpoint' => $endpoint, 'bucket' => $bucket];
+    }
+
+    private const B2_MASTER_KEY = 'This is the Backblaze master application key (its keyID is your 12-character account ID). Backblaze does not accept it for S3 uploads: '
+        . 'create an application key under Application Keys → Add a New Application Key (this bucket only, Read and Write) and paste its keyID and applicationKey.';
+
+    /** The master key's ID is the 12-hex-digit account ID; application key IDs are 25 characters. */
+    private static function isB2MasterKey(string $keyId): bool
+    {
+        return (bool) preg_match('/^[0-9a-f]{12}$/D', $keyId);
     }
 
     /** Accepts "https://host/" or "host"; returns the bare host name. */
@@ -129,6 +141,9 @@ final class S3Target implements BackupTarget
 
     public static function validate(array $c): void
     {
+        if (($c['provider'] ?? '') === 'b2' && self::isB2MasterKey((string) ($c['access_key'] ?? ''))) {
+            throw new \InvalidArgumentException(self::B2_MASTER_KEY);
+        }
         $host = self::endpointHost((string) ($c['endpoint'] ?? ''));
         if (!preg_match('/^(?=.{4,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/D', $host)) {
             throw new \InvalidArgumentException('Enter the S3 endpoint host, for example s3.eu-central-003.backblazeb2.com or <account id>.r2.cloudflarestorage.com (without a path).');
@@ -151,7 +166,11 @@ final class S3Target implements BackupTarget
         $hash = hash_file('sha256', $file) ?: throw new RuntimeException('Cannot read ' . basename($file) . '.');
         [$status, $body] = $this->call('PUT', $this->key($name), [], ['file' => $file], $hash, 900);
         if ($status !== 200) {
-            throw new RuntimeException('Upload failed (HTTP ' . $status . '): ' . self::error($body));
+            $error = self::error($body);
+            if (($this->c['provider'] ?? '') === 'b2' && self::isB2MasterKey((string) $this->c['access_key']) && str_contains($error, 'InvalidAccessKeyId')) {
+                throw new RuntimeException(self::B2_MASTER_KEY);
+            }
+            throw new RuntimeException('Upload failed (HTTP ' . $status . '): ' . $error);
         }
     }
 

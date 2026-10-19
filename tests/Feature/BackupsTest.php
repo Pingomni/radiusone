@@ -178,6 +178,14 @@ final class BackupsTest extends TestCase
         $this->assertSame('https://api003.backblazeb2.com/b2api/v2/b2_list_buckets', $this->sent[2]['url']);
         $this->assertSame('tok', $this->sent[2]['headers']['Authorization']);
 
+        // The master key (keyID = 12-character account ID) passes Backblaze's own API but not S3 uploads.
+        $calls = count($this->sent);
+        $this->post('/settings/backups/destinations', ['type' => 's3', 'provider' => 'b2', 'access_key' => 'b771a2c3d4e5', 'secret_key' => 'master-key'])
+            ->assertSessionHas('flash.message', fn (string $m) => str_contains($m, 'master application key'));
+        $this->post('/settings/backups/destinations', ['type' => 's3', 'provider' => 'b2', 'url' => 'https://s3.us-east-005.backblazeb2.com/radiusweb-gn', 'access_key' => 'b771a2c3d4e5', 'secret_key' => 'master-key'])
+            ->assertSessionHas('flash.message', fn (string $m) => str_contains($m, 'master application key'));
+        $this->assertCount($calls, $this->sent);
+
         $responses = [[401, json_encode(['message' => 'bad key'])]];
         $this->post('/settings/backups/destinations', ['type' => 's3', 'provider' => 'b2', 'access_key' => '0035f1c2a3b4c5d0000000003', 'secret_key' => 'wrong'])
             ->assertSessionHas('flash.message', fn (string $m) => str_contains($m, 'Backblaze did not accept this key'));
