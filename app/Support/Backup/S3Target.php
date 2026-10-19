@@ -167,7 +167,7 @@ final class S3Target implements BackupTarget
         $hash = hash_file('sha256', $file) ?: throw new RuntimeException('Cannot read ' . basename($file) . '.');
         [$status, $body] = $this->call('PUT', $this->key($name), [], ['file' => $file], $hash, 900);
         if ($status !== 200) {
-            $error = self::error($body);
+            $error = $this->explain($body);
             if (($this->c['provider'] ?? '') === 'b2' && self::isB2MasterKey((string) $this->c['access_key']) && str_contains($error, 'InvalidAccessKeyId')) {
                 throw new RuntimeException(self::B2_MASTER_KEY);
             }
@@ -183,7 +183,7 @@ final class S3Target implements BackupTarget
             $query = ['list-type' => '2', 'prefix' => $this->key('frweb-')] + ($token !== null ? ['continuation-token' => $token] : []);
             [$status, $body] = $this->call('GET', '', $query);
             if ($status !== 200) {
-                throw new RuntimeException('Listing failed (HTTP ' . $status . '): ' . self::error($body));
+                throw new RuntimeException('Listing failed (HTTP ' . $status . '): ' . $this->explain($body));
             }
             $xml = @simplexml_load_string($body);
             if ($xml === false) {
@@ -202,7 +202,7 @@ final class S3Target implements BackupTarget
     {
         [$status, $body] = $this->call('DELETE', $id);
         if ($status !== 204 && $status !== 200) {
-            throw new RuntimeException('Delete failed (HTTP ' . $status . '): ' . self::error($body));
+            throw new RuntimeException('Delete failed (HTTP ' . $status . '): ' . $this->explain($body));
         }
     }
 
@@ -238,6 +238,20 @@ final class S3Target implements BackupTarget
             'x-amz-content-sha256' => $payloadHash, 'x-amz-date' => $now, 'Authorization' => $authorization,
         ], $body, $timeout, 4194304);
         return [$status, $response];
+    }
+
+    /** The provider's error, plus what usually causes it when the provider's wording does not say. */
+    private function explain(string $body): string
+    {
+        $error = self::error($body);
+        if (str_contains($error, 'SignatureDoesNotMatch') || str_contains($error, 'Signature validation failed')) {
+            $error .= '. The secret does not belong to this key ID: paste the secret shown together with it';
+            if (($this->c['provider'] ?? '') === 'b2' && !str_starts_with((string) $this->c['secret_key'], 'K')) {
+                $error .= ' (a Backblaze applicationKey for a bucket key starts with K; one starting with 0 is a master key secret)';
+            }
+            $error .= '.';
+        }
+        return $error;
     }
 
     private static function error(string $body): string
