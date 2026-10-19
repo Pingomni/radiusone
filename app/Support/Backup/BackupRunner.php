@@ -119,7 +119,7 @@ final class BackupRunner
     private static function documents(string $dir): string
     {
         $source = rtrim((string) App::env('DOCUMENT_STORAGE', '/var/lib/freeradius-web/documents'), '/');
-        $file = $dir . '/documents-' . gmdate('Ymd-His') . '.tar.gz';
+        $file = $dir . '/documents-' . date('Ymd-His') . '.tar.gz';
         $args = is_dir($source) ? ['-C', dirname($source), basename($source)] : ['--files-from', '/dev/null'];
         $result = BoundedProcess::run(['tar', '-czf', $file, ...$args], '', 600);
         if ($result['exit'] !== 0) {

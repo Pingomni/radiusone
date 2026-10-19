@@ -16,7 +16,20 @@ final class Backup extends FrwebCommand
 
     public function handle(): int
     {
-        $status = BackupRunner::run(rtrim((string) App::env('BACKUP_PATH', App::root('var/backups')), '/'), DatabaseBackup::settings(), !$this->option('no-upload'));
+        $dir = rtrim((string) App::env('BACKUP_PATH', App::root('var/backups')), '/');
+        // The nightly run and "Back up now" must not write the same files at once.
+        @mkdir($dir, 0750, true);
+        $lock = @fopen($dir . '/.backup.lock', 'c');
+        if ($lock === false || !flock($lock, LOCK_EX | LOCK_NB)) {
+            $this->line('Another backup is still running.');
+            return self::BUSY;
+        }
+        try {
+            $status = BackupRunner::run($dir, DatabaseBackup::settings(), !$this->option('no-upload'));
+        } finally {
+            flock($lock, LOCK_UN);
+            fclose($lock);
+        }
         $this->json($status, true);
         if (!$status['ok']) {
             $this->getOutput()->getErrorStyle()->writeln('Backup incomplete: ' . ($status['error'] ?? 'a destination failed; see above.'));

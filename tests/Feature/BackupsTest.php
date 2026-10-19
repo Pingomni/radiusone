@@ -204,6 +204,44 @@ final class BackupsTest extends TestCase
         $this->assertSame([], BackupDestinations::all());
     }
 
+    public function test_back_up_now_starts_the_root_helper_and_shows_it_running(): void
+    {
+        $this->actingAsOperator();
+        $page = '/settings?tab=backups';
+        $this->get($page)->assertInertia(fn ($p) => $p->where('backups.manualReady', false)->where('backups.running', false));
+        $this->post('/settings/backups/run')->assertRedirect($page)
+            ->assertSessionHas('flash.message', fn (string $m) => str_contains($m, 'apply-service-control.sh'));
+
+        $dir = (string) getenv('FRWEB_TEST_DIR');
+        file_put_contents($dir . '/backup-helper', "#!/bin/sh\ntouch " . escapeshellarg($dir . '/backup-started') . "\necho 'Backup started.'\n");
+        chmod($dir . '/backup-helper', 0755);
+        \App\Support\Backup\BackupNow::$command = [$dir . '/backup-helper'];
+        $this->post('/settings/backups/run')->assertSessionHas('flash.type', 'success');
+        $this->assertFileExists($dir . '/backup-started');
+
+        \App\Support\Backup\BackupNow::$isActive = ['true'];
+        $this->get($page)->assertInertia(fn ($p) => $p->where('backups.manualReady', true)->where('backups.running', true));
+
+        file_put_contents($dir . '/backup-helper', "#!/bin/sh\necho 'A backup is already running.' >&2\nexit 3\n");
+        $this->post('/settings/backups/run')->assertSessionHas('flash.message', 'A backup is already running.');
+
+        $this->actingAsOperator('view');
+        $this->post('/settings/backups/run')->assertForbidden();
+    }
+
+    public function test_a_second_backup_waits_for_the_first(): void
+    {
+        $_ENV['BACKUP_PATH'] = $_SERVER['BACKUP_PATH'] = $this->work . '/local';
+        $lock = fopen($this->work . '/local/.backup.lock', 'c');
+        flock($lock, LOCK_EX);
+        try {
+            $this->artisan('frweb:backup --no-upload')->expectsOutputToContain('Another backup is still running.')->assertExitCode(75);
+        } finally {
+            flock($lock, LOCK_UN);
+            fclose($lock);
+        }
+    }
+
     public function test_retired_google_drive_and_amazon_only_destinations_are_dropped(): void
     {
         $this->actingAsOperator();

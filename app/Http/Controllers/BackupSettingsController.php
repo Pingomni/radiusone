@@ -7,6 +7,7 @@ namespace App\Http\Controllers;
 use App\Support\App;
 use App\Support\Audit;
 use App\Support\Backup\BackupDestinations;
+use App\Support\Backup\BackupNow;
 use App\Support\Backup\BackupRunner;
 use App\Support\Backup\S3Target;
 use Illuminate\Http\RedirectResponse;
@@ -40,6 +41,8 @@ final class BackupSettingsController extends Controller
             'local' => array_slice($local, 0, 12),
             'localCount' => count($local),
             's3Providers' => S3Target::PROVIDERS,
+            'manualReady' => BackupNow::ready(),
+            'running' => BackupNow::running(),
         ];
     }
 
@@ -91,6 +94,18 @@ final class BackupSettingsController extends Controller
         BackupDestinations::remove($id);
         Audit::log('delete', 'backup_destination', $id, ['name' => $destination['name'], 'type' => $destination['type']]);
         return $this->ok(self::PAGE, 'Destination removed. Backups already stored there were not deleted.');
+    }
+
+    /** "Back up now": the nightly backup, started at once by the root helper. */
+    public function runNow(): RedirectResponse
+    {
+        try {
+            BackupNow::start();
+        } catch (RuntimeException $e) {
+            return $this->fail($e->getMessage(), self::PAGE);
+        }
+        Audit::log('run', 'backup', 'manual');
+        return $this->ok(self::PAGE, 'Backup started. It takes about a minute; this page shows the result when it finishes.');
     }
 
     public function test(string $id): RedirectResponse

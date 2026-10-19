@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# Root helper behind Settings → Backups → Back up now. Starts the same backup as the nightly cron line
+# (frweb:backup with the read-only backup identity) in a transient systemd unit, so the web request
+# answers at once; the page shows "running" while frweb-backup-now.service is active, then the result
+# from status.json. frweb:backup itself refuses to run twice at the same time.
+# Installed by ops/apply-service-control.sh as /usr/local/sbin/frweb-backup-now.
+set -euo pipefail
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+
+if systemctl is-active --quiet frweb-backup-now.service; then
+  echo 'A backup is already running.' >&2
+  exit 3
+fi
+systemctl reset-failed frweb-backup-now.service 2>/dev/null || true
+# LOG_CHANNEL=stderr: a root process must not create Laravel log files that www-data then cannot write.
+systemd-run --quiet --collect --unit=frweb-backup-now --working-directory=/opt/freeradius-web-laravel \
+  --setenv=FRWEB_OPERATOR_ENV_FILE=/etc/freeradius-web/backup.env --setenv=LOG_CHANNEL=stderr \
+  /bin/sh -c '/usr/bin/php artisan frweb:backup >/var/log/freeradius-web-backup.log 2>&1'
+echo 'Backup started.'

@@ -63,6 +63,7 @@ type Backups = {
     passphraseSet: boolean; localDays: number; localDaysOptions: Record<string, string>; destinations: BackupDestination[];
     types: Record<string, string>; keepOptions: Record<string, string>; status: BackupRun | null;
     local: { name: string; size: number; at: string }[]; localCount: number; s3Providers: Record<string, string>;
+    manualReady: boolean; running: boolean;
 };
 type RetentionRun = { sessions: number; logins: number; finished: boolean; at: string };
 type Retention = {
@@ -267,13 +268,29 @@ function BrandingTab({ branding }: { branding: Branding }) {
 
 function BackupStatus({ b }: { b: Backups }) {
     const run = b.status;
+    // While a backup runs, check every 5 seconds and show its result when it ends.
+    useEffect(() => {
+        if (!b.running) return;
+        const timer = window.setInterval(() => router.reload({ only: ['backups'] }), 5000);
+        return () => window.clearInterval(timer);
+    }, [b.running]);
     return (
         <Sheet
             title="Last backup"
             description="Every night at 02:15 (server time) the database and customer documents are backed up, encrypted and uploaded to each enabled destination."
             icon="server"
-            meta={run ? <Badge tone={run.ok ? 'success' : 'danger'}>{run.ok ? 'completed' : 'needs attention'}</Badge> : <Badge>not run yet</Badge>}
+            meta={b.running ? <Badge tone="warning">running…</Badge> : run ? <Badge tone={run.ok ? 'success' : 'danger'}>{run.ok ? 'completed' : 'needs attention'}</Badge> : <Badge>not run yet</Badge>}
         >
+            <div className="form-actions">
+                <PostButton
+                    action="/settings/backups/run"
+                    label={b.running ? 'Backing up…' : 'Back up now'}
+                    className="primary"
+                    disabled={b.running || !b.manualReady}
+                    confirm={{ title: 'Back up now?', message: 'Backs up the database and customer documents now, encrypts them and uploads them to each enabled destination, like the nightly backup. It takes about a minute.', confirmLabel: 'Back up now' }}
+                />
+                {!b.manualReady && <span className="hint">To start backups from here, run <code>sudo bash ops/apply-service-control.sh</code> on the server once.</span>}
+            </div>
             {run ? (
                 <>
                     <SettingsRows rows={[
@@ -289,7 +306,7 @@ function BackupStatus({ b }: { b: Backups }) {
                     {Object.keys(run.destinations).length === 0 && !run.error && <p className="hint">No remote destination was enabled, so this backup exists only on this server.</p>}
                 </>
             ) : (
-                <p className="hint">No backup has run with remote copies yet. To run one now, see <Link href="/docs#backups">Documentation → Backups</Link>.</p>
+                <p className="hint">No backup has run yet. Use <strong>Back up now</strong>, or wait for the nightly run.</p>
             )}
         </Sheet>
     );
