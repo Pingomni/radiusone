@@ -56,6 +56,7 @@ Route::middleware('frweb.auth')->group(function () {
         Route::get('/settings', [SettingsController::class, 'settings']);
         Route::get('/docs', [SettingsController::class, 'docs']);
         Route::get('/settings/notifications/{channel}', [SettingsController::class, 'legacyNotificationPage'])->whereIn('channel', ['general', 'sms', 'email']);
+        Route::post('/settings/branding/name', [SettingsController::class, 'saveCompanyName']);
         Route::post('/settings/branding/logo', [SettingsController::class, 'saveLogo']);
         Route::post('/settings/branding/logo/delete', [SettingsController::class, 'deleteLogo']);
         Route::post('/settings/branding/logo/url', [SettingsController::class, 'saveLogoUrl']);

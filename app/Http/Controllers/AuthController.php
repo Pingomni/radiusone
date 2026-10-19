@@ -6,6 +6,7 @@ namespace App\Http\Controllers;
 
 use App\Support\App;
 use App\Support\Auth;
+use App\Support\Branding;
 use App\Support\Security;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -64,7 +65,7 @@ final class AuthController extends Controller
         $secret = (string) $pending['two_factor_secret'];
         return Inertia::render('auth/TwoFactor', ['setup' => [
             'secret' => $secret,
-            'uri' => Security::twoFactorUri((string) App::env('APP_NAME', 'FreeRADIUS Web'), (string) $pending['username'], $secret),
+            'uri' => Security::twoFactorUri(Branding::name(), (string) $pending['username'], $secret),
         ]]);
     }
 

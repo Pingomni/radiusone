@@ -59,6 +59,8 @@ final class SettingsController extends Controller
                 'remote' => $remoteLogo,
                 'url' => $remoteLogo ? $logoPath : '',
                 'hasSetting' => $logoPath !== '',
+                'name' => Settings::value('company_name', ''),
+                'product' => Branding::PRODUCT,
             ],
             // Only the active tab's notification data is built: it may query many customers.
             'notifications' => $tab === 'notifications' ? $this->notifications($request) : null,
@@ -257,6 +259,20 @@ final class SettingsController extends Controller
     public function legacyNotificationPage(string $channel): RedirectResponse
     {
         return redirect('/settings?tab=notifications&view=gateways' . ($channel === 'general' ? '' : '&gateway=' . $channel));
+    }
+
+    public function saveCompanyName(Request $request): RedirectResponse
+    {
+        $before = Settings::value('company_name', '');
+        try {
+            Branding::saveName((string) $request->input('company_name', ''));
+        } catch (InvalidArgumentException $e) {
+            return $this->failKeepingInput($e, '/settings?tab=branding');
+        }
+        Audit::log('update', 'setting', 'company_name', ['company_name' => $before], ['company_name' => Settings::value('company_name', '')]);
+        return $this->ok('/settings?tab=branding', Settings::value('company_name', '') === ''
+            ? 'Company name removed: the portal is called ' . Branding::PRODUCT . ' again.'
+            : 'Company name saved. The sidebar, sign-in page, emails, alerts and PDFs now use ' . Branding::name() . '.');
     }
 
     public function saveLogo(Request $request): RedirectResponse
@@ -488,7 +504,7 @@ final class SettingsController extends Controller
         if ($channel === 'email' ? !filter_var($to, FILTER_VALIDATE_EMAIL) : !preg_match('/^\+?[0-9][0-9 ()-]{5,24}$/D', $to)) {
             return $this->fail($channel === 'email' ? 'Enter the email address to send the test to.' : 'Enter the phone number to send the test to.', $back);
         }
-        $app = (string) config('app.name');
+        $app = Branding::name();
         try {
             NotificationService::withSettings(static function () use ($channel, $to, $app): void {
                 if (!CustomerNotifications::ready($channel)) {

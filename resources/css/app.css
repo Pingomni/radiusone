@@ -1633,6 +1633,8 @@ td .list-menu > summary:hover { border-color: var(--line); background: var(--sur
 .brand-preview-stage > strong { color: #fff; }
 .brand-preview-stage > span:last-child { color: var(--sidebar-muted); font-size: var(--fs-sm); }
 .branding-methods { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: var(--sp-3); }
+/* The company name gets a row of its own above the two logo options. */
+.branding-methods > .branding-name { grid-column: 1 / -1; }
 .branding-method { display: grid; gap: var(--sp-3); align-content: start; padding: var(--sp-3); border: 1px solid var(--line); border-radius: var(--radius); }
 .branding-method-title { display: flex; align-items: center; gap: var(--sp-2); }
 .branding-method-title p { color: var(--text-muted); font-size: var(--fs-sm); }

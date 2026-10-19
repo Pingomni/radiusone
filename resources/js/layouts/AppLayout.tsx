@@ -113,7 +113,7 @@ function useMobileNav() {
 
 /** Workspace shell: sidebar, topbar and page feedback (legacy render()). */
 export default function AppLayout({ title, children }: { title: string; children: ReactNode }) {
-    const { auth, flash, clock } = useShared();
+    const { auth, flash, clock, appName } = useShared();
     const time = useServerClock();
     const can = useCan();
     const { url } = usePage();
@@ -166,7 +166,7 @@ export default function AppLayout({ title, children }: { title: string; children
 
     return (
         <>
-            <Head title={title} />
+            <Head title={`${title} - ${appName}`} />
             <a className="skip-link" href="#workspace-content">Skip to content</a>
             <aside
                 className="sidebar"
@@ -181,7 +181,8 @@ export default function AppLayout({ title, children }: { title: string; children
                 <button type="button" className="nav-close" onClick={() => { setOpen(false); toggle.current?.focus(); }}>Close navigation</button>
                 <div className="brand">
                     <BrandLogo />
-                    <div><strong>RadiusWeb</strong><small>Client management</small></div>
+                    {/* A company name keeps the product name underneath, so people still know what this is. */}
+                    <div><strong>{appName}</strong><small>{appName === 'RadiusWeb' ? 'Client management' : 'RadiusWeb'}</small></div>
                 </div>
                 <nav aria-label="Primary">
                     {NAV.filter(([, , permission]) => can(permission)).map(([href, label, , icon, navGroup]) => {

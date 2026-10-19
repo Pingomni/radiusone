@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Support\Auth;
+use App\Support\Branding;
 use App\Support\Currency;
 use App\Support\Settings;
 use Illuminate\Http\Request;
@@ -24,7 +25,7 @@ class HandleInertiaRequests extends Middleware
 
         return [
             ...parent::share($request),
-            'appName' => config('app.name'),
+            'appName' => fn () => Branding::name(),
             'auth' => [
                 'user' => $user ? [
                     'id' => (int) $user['id'],

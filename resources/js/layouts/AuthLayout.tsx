@@ -6,9 +6,10 @@ import { useShared } from '@/lib/auth';
 
 /** Centered sign-in shell: one focused card on a soft backdrop. */
 export function AuthLayout({ title, children }: { title: string; children: ReactNode }) {
+    const { appName } = useShared();
     return (
         <>
-            <Head title={title} />
+            <Head title={`${title} - ${appName}`} />
             <main className="login">
                 <div className="login-shell">
                     {children}
@@ -21,7 +22,7 @@ export function AuthLayout({ title, children }: { title: string; children: React
 
 /** The card form with brand, heading and flash; focuses the error when sign-in fails. */
 export function AuthCard({ heading, lead, onSubmit, children }: { heading: string; lead: string; onSubmit: (event: FormEvent<HTMLFormElement>) => void; children: ReactNode }) {
-    const { flash } = useShared();
+    const { flash, appName } = useShared();
     const card = useRef<HTMLFormElement>(null);
     useEffect(() => {
         if (flash) card.current?.querySelector<HTMLElement>('[data-feedback-focus]')?.focus();
@@ -29,7 +30,7 @@ export function AuthCard({ heading, lead, onSubmit, children }: { heading: strin
     return (
         <form method="post" className="login-card" onSubmit={onSubmit} ref={card} noValidate={false}>
             <div className="login-card-head">
-                <div className="login-brand"><BrandLogo /><strong>RadiusWeb</strong></div>
+                <div className="login-brand"><BrandLogo /><strong>{appName}</strong></div>
                 <h1>{heading}</h1>
                 <p>{lead}</p>
             </div>

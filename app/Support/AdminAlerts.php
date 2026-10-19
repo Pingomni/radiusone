@@ -493,6 +493,6 @@ final class AdminAlerts
 
     private static function appName(): string
     {
-        return (string) (config('app.name') ?: 'RadiusWeb');
+        return Branding::name();
     }
 }

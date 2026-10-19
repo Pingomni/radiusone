@@ -1,10 +1,9 @@
 import { createInertiaApp } from '@inertiajs/react';
 import { ConfirmProvider } from '@/components/confirm';
 
-const appName = import.meta.env.VITE_APP_NAME || 'FreeRADIUS Web';
-
 void createInertiaApp({
-    title: (title) => (title ? `${title} - ${appName}` : appName),
+    // The layouts add the company name (Settings → Branding), which comes with each page.
+    title: (title) => title,
     strictMode: true,
     withApp(app) {
         return <ConfirmProvider>{app}</ConfirmProvider>;

@@ -9,6 +9,7 @@ use App\Http\Support\Present;
 use App\Support\App;
 use App\Support\Audit;
 use App\Support\Auth;
+use App\Support\Branding;
 use App\Support\Db;
 use App\Support\Security;
 use Illuminate\Http\RedirectResponse;
@@ -102,7 +103,7 @@ final class ProfileController extends Controller
         }
         return Inertia::render('profile/TwoFactorSetup', [
             'secret' => $secret,
-            'uri' => Security::twoFactorUri((string) App::env('APP_NAME', 'FreeRADIUS Web'), (string) $user['username'], $secret),
+            'uri' => Security::twoFactorUri(Branding::name(), (string) $user['username'], $secret),
         ]);
     }
 

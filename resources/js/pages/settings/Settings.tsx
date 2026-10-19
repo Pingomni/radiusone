@@ -13,7 +13,7 @@ import { bytes } from '@/lib/format';
 
 type Overview = { engine: TagData; rows: [string, string][] };
 type Operator = { id: number; name: string; email: string; username: string; role: string; enabled: boolean; twoFactor: TagData; lastLogin: string; self: boolean };
-type Branding = { custom: boolean; remote: boolean; url: string; hasSetting: boolean };
+type Branding = { custom: boolean; remote: boolean; url: string; hasSetting: boolean; name: string; product: string };
 type Template = { subject: string; email_body: string; sms_body: string; email_enabled: string; sms_enabled: string };
 type Bulk = { channel: 'email' | 'sms'; q: string; rows: { id: number; username: string; recipient: string; eligibility: string }[]; more: boolean; selected: number[]; audience: string; subject: string; body: string };
 type PreviewItem = { username: string; recipient: string; reason: string; subject: string; body: string };
@@ -178,6 +178,8 @@ function LogoPreview({ src, label }: { src: string; label: string }) {
 function BrandingTab({ branding }: { branding: Branding }) {
     const upload = useForm<{ portal_logo: File | null }>({ portal_logo: null });
     const link = useForm({ portal_logo_url: branding.url });
+    const company = useForm({ company_name: branding.name });
+    const shown = company.data.company_name.trim() || branding.product;
     const [filePreview, setFilePreview] = useState('');
     const [urlPreview, setUrlPreview] = useState('');
     useEffect(() => () => { if (filePreview) URL.revokeObjectURL(filePreview); }, [filePreview]);
@@ -185,7 +187,7 @@ function BrandingTab({ branding }: { branding: Branding }) {
     return (
         <Sheet
             title="Workspace branding"
-            description="Choose the logo your team and customers see."
+            description="Your company name and logo, as your team and customers see them."
             icon="image"
             className="branding-card"
             meta={<Badge tone={branding.custom ? 'success' : ''}>{branding.custom ? (branding.remote ? 'HTTPS logo' : 'Uploaded logo') : 'Default logo'}</Badge>}
@@ -193,15 +195,22 @@ function BrandingTab({ branding }: { branding: Branding }) {
             <div className="branding-layout">
                 <div className="branding-preview-panel">
                     <span className="workspace-eyebrow">YOUR WORKSPACE</span>
-                    <div className="brand-preview-stage"><BrandLogo className="preview-logo" /><strong>RadiusWeb</strong><span>Client management</span></div>
-                    <h3>One logo. A familiar workspace.</h3>
-                    <p>Your logo appears on the sign-in screen and sidebar for everyone on your team.</p>
+                    <div className="brand-preview-stage"><BrandLogo className="preview-logo" /><strong>{shown}</strong><span>{shown === branding.product ? 'Client management' : branding.product}</span></div>
+                    <h3>Your name. A familiar workspace.</h3>
+                    <p>Your company name and logo appear on the sign-in screen and sidebar for everyone on your team.</p>
                     <p className="hint">Uploaded logos also appear on PDF invoices. Use an upload if you need your logo on invoices.</p>
                     {branding.hasSetting && (
                         <PostButton action="/settings/branding/logo/delete" label="Reset to default logo" confirm={{ message: 'Remove custom logo and use the default mark?', confirmLabel: 'Reset logo' }} />
                     )}
                 </div>
                 <div className="branding-methods">
+                    <section className="branding-method branding-name">
+                        <div className="branding-method-title"><span className="method-number"><Icon name="clients" /></span><div><h3>Company name</h3><p>Shown in the sidebar, on the sign-in page and in the browser tab, and used in emails, alerts, invoices and authenticator apps.</p></div></div>
+                        <form className="branding-form" onSubmit={(event) => { event.preventDefault(); company.post('/settings/branding/name', { preserveScroll: true }); }}>
+                            <Field label="Company name" name="company_name" maxLength={60} placeholder={branding.product} hint={`Leave empty to use ${branding.product}.`} value={company.data.company_name} error={company.errors.company_name} onChange={(e) => company.setData('company_name', e.target.value)} />
+                            <div className="form-actions"><button className="primary" disabled={company.processing || !company.isDirty}>Save name</button></div>
+                        </form>
+                    </section>
                     <section className="branding-method">
                         <div className="branding-method-title"><span className="method-number">01</span><div><h3>Upload your logo</h3><p>Keep a copy in your workspace.</p></div></div>
                         <form

@@ -3,6 +3,29 @@ declare(strict_types=1);
 namespace App\Support;
 final class Branding
 {
+    /** The product name, shown when no company name is set. */
+    public const PRODUCT = 'RadiusWeb';
+
+    /**
+     * The name the portal goes by (Settings → Branding → Company name): sidebar, sign-in page, browser
+     * tab, emails, alerts, PDFs and authenticator apps. The product name when none is set.
+     */
+    public static function name(): string
+    {
+        $name = trim(Settings::value('company_name', ''));
+        return $name !== '' ? $name : self::PRODUCT;
+    }
+
+    /** Saves the company name; empty goes back to the product name. */
+    public static function saveName(string $name): void
+    {
+        $name = trim(preg_replace('/\s+/', ' ', $name) ?? '');
+        if (mb_strlen($name) > 60 || preg_match('/[\x00-\x1f\x7f<>]/', $name)) {
+            throw new \InvalidArgumentException('Enter a company name of up to 60 characters, without < or >.');
+        }
+        Settings::save('company_name', $name);
+    }
+
     /** Validate a browser-loaded logo URL; never fetch remote URLs on the server. */
     public static function httpsUrl(string $value): string
     {

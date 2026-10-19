@@ -67,7 +67,7 @@ final class NotificationService
             'username' => self::setting('email_gateway_username', ''),
             'password' => self::setting('email_gateway_password', ''),
             'from_email' => self::setting('email_gateway_from_email', ''),
-            'from_name' => self::setting('email_gateway_from_name', App::env('APP_NAME', 'FreeRADIUS Web')),
+            'from_name' => self::setting('email_gateway_from_name', Branding::name()),
             'reply_to' => self::setting('email_gateway_reply_to', ''),
             'timeout' => self::setting('email_gateway_timeout', '12'),
             'mailgun_domain' => self::setting('email_gateway_mailgun_domain', ''),
@@ -427,7 +427,7 @@ final class NotificationService
             'service' => (string) (($client['service_name'] ?? '') ?: ($client['service_group'] ?? '')),
             'expiry' => (string) ($client['expiry_date'] ?? ''),
             'days_before' => self::setting('notification_expiry_days_before', '3'),
-            'app_name' => (string) App::env('APP_NAME', 'FreeRADIUS Web'),
+            'app_name' => Branding::name(),
         ], $extra);
     }
 

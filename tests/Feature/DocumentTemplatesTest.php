@@ -32,7 +32,7 @@ final class DocumentTemplatesTest extends TestCase
         $this->get('/settings?tab=documents')->assertOk()->assertInertia(fn ($page) => $page
             // Fields come pre-filled with the text in use, to edit rather than retype.
             ->where('documents.values.draft_title', 'DRAFT PAYMENT REQUEST')
-            ->where('documents.values.company_name', config('app.name'))
+            ->where('documents.values.company_name', 'RadiusWeb')
             ->where('documents.defaults.draft_title', 'DRAFT PAYMENT REQUEST')
             ->where('documents.lines.company_details', 4));
 

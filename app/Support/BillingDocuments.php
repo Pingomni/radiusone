@@ -41,7 +41,7 @@ final class BillingDocuments
     /** @return array<string, string> the default wording (the company name defaults to the portal name) */
     public static function defaults(): array
     {
-        return ['company_name' => (string) config('app.name', 'RadiusWeb')] + array_map(static fn (array $f) => $f[1], self::FIELDS);
+        return ['company_name' => Branding::name()] + array_map(static fn (array $f) => $f[1], self::FIELDS);
     }
 
     /** @return array<string, string> the wording in use (saved, or the default) */
