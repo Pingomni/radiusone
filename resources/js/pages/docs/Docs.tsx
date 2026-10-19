@@ -1,5 +1,5 @@
 import { Link } from '@inertiajs/react';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react';
 import Icon from '@/components/Icon';
 import AppLayout from '@/layouts/AppLayout';
 
@@ -474,20 +474,83 @@ const SECTIONS: Section[] = [
     },
 ];
 
+/** Where a heading should sit after a jump: just under the top bar (and the contents row on narrow screens). */
+function stickyOffset(): number {
+    const bar = document.querySelector('.topbar')?.getBoundingClientRect().bottom ?? 0;
+    const toc = document.querySelector<HTMLElement>('.docs-toc');
+    const row = toc && getComputedStyle(toc).display === 'flex' ? toc.getBoundingClientRect().height : 0;
+    return bar + row + 16;
+}
+
+/** The section being read: the last one whose top has passed the reading line; the last one at the very bottom. */
+function sectionInView(): string {
+    if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2) return SECTIONS[SECTIONS.length - 1].id;
+    const line = stickyOffset() + 24;
+    let current = SECTIONS[0].id;
+    for (const s of SECTIONS) {
+        const el = document.getElementById(s.id);
+        if (el && el.getBoundingClientRect().top <= line) current = s.id;
+    }
+    return current;
+}
+
 export default function Docs() {
     const [active, setActive] = useState(SECTIONS[0].id);
-    // Highlight the section being read in the contents list.
-    useEffect(() => {
-        const observer = new IntersectionObserver((entries) => {
-            const visible = entries.filter((e) => e.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
-            if (visible[0]) setActive(visible[0].target.id);
-        }, { rootMargin: '-15% 0px -70% 0px' });
-        SECTIONS.forEach((s) => { const el = document.getElementById(s.id); if (el) observer.observe(el); });
-        return () => observer.disconnect();
+    // After a jump the clicked section stays highlighted (one near the end may not reach the top) until the reader scrolls.
+    const pinned = useRef<string | null>(null);
+
+    const jump = useCallback((id: string, smooth: boolean) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        const section = el.closest<HTMLElement>('.docs-section')?.id ?? id;
+        window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - stickyOffset(), behavior: smooth ? 'smooth' : 'auto' });
+        // Keep the Inertia history entry; only the hash changes, so the browser does not jump again.
+        history.replaceState(history.state, '', `#${id}`);
+        pinned.current = section;
+        setActive(section);
     }, []);
+
+    useEffect(() => {
+        let frame = 0;
+        const update = () => { frame = 0; if (!pinned.current) setActive(sectionInView()); };
+        const onScroll = () => { if (!frame) frame = requestAnimationFrame(update); };
+        const unpin = () => { pinned.current = null; };
+        window.addEventListener('scroll', onScroll, { passive: true });
+        window.addEventListener('resize', onScroll);
+        for (const type of ['wheel', 'touchstart', 'keydown', 'mousedown']) window.addEventListener(type, unpin, { passive: true });
+        // Arriving with #section (e.g. from Settings → "Setup guide"): go there once the page has laid out.
+        const hash = decodeURIComponent(window.location.hash.slice(1));
+        const timer = window.setTimeout(() => (hash ? jump(hash, false) : update()), 50);
+        return () => {
+            window.clearTimeout(timer);
+            if (frame) cancelAnimationFrame(frame);
+            window.removeEventListener('scroll', onScroll);
+            window.removeEventListener('resize', onScroll);
+            for (const type of ['wheel', 'touchstart', 'keydown', 'mousedown']) window.removeEventListener(type, unpin);
+        };
+    }, [jump]);
+
+    // On narrow screens the contents are one scrolling row: keep the current entry in sight.
+    useEffect(() => {
+        const link = document.querySelector<HTMLElement>(`.docs-toc a[href="#${active}"]`);
+        const toc = link?.parentElement;
+        if (link && toc && getComputedStyle(toc).display === 'flex') {
+            toc.scrollTo({ left: link.offsetLeft - toc.clientWidth / 2 + link.clientWidth / 2, behavior: 'smooth' });
+        }
+    }, [active]);
+
+    // Every #link on the page (contents and links inside the text) scrolls with the right offset.
+    const onClick = (event: MouseEvent<HTMLDivElement>) => {
+        const link = (event.target as HTMLElement).closest('a');
+        const href = link?.getAttribute('href') ?? '';
+        if (!href.startsWith('#') || event.metaKey || event.ctrlKey || event.shiftKey) return;
+        event.preventDefault();
+        jump(decodeURIComponent(href.slice(1)), true);
+    };
+
     return (
         <AppLayout title="Documentation">
-            <div className="docs">
+            <div className="docs" onClick={onClick}>
                 <nav className="docs-toc" aria-label="Documentation contents">
                     <strong>Contents</strong>
                     {SECTIONS.map((s) => (

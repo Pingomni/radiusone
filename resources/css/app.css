@@ -1896,7 +1896,8 @@ td .list-menu > summary:hover { border-color: var(--line); background: var(--sur
 .docs-toc a:hover { background: var(--surface-hover); text-decoration: none; }
 .docs-toc a[aria-current="true"] { background: var(--accent-bg); color: var(--accent); font-weight: 600; }
 .docs-toc svg.icon { width: 14px; height: 14px; flex: none; }
-.docs-body { display: grid; gap: var(--sp-4); max-width: 860px; }
+/* minmax(0, 1fr): a wide table scrolls inside its own box instead of widening the whole page. */
+.docs-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-4); max-width: 860px; }
 .docs-intro h2 { font-size: 22px; }
 .docs-intro p { margin-top: var(--sp-1); color: var(--text-muted); }
 .docs-section { padding: var(--sp-5); border: 1px solid var(--line); border-radius: 10px; background: var(--surface); box-shadow: var(--shadow-sm); scroll-margin-top: calc(var(--topbar-h) + var(--sp-4)); line-height: 1.6; }
@@ -1911,13 +1912,19 @@ td .list-menu > summary:hover { border-color: var(--line); background: var(--sur
 .docs-note-warning > svg.icon { color: var(--warning); }
 .docs-table { margin-top: var(--sp-2); overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); }
 .docs-table table { width: 100%; border-collapse: collapse; }
-.docs-table th, .docs-table td { padding: 8px var(--sp-3); border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+.docs-table th, .docs-table td { padding: 8px var(--sp-3); border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; white-space: normal; }  /* prose: wrap, unlike data tables */
 .docs-table th { background: var(--surface-2); font-size: var(--fs-sm); font-weight: 600; }
 .docs-table tr:last-child td { border-bottom: 0; }
 @media (max-width: 900px) {
   .docs { grid-template-columns: minmax(0, 1fr); }
-  .docs-toc { position: static; max-height: none; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
-  .docs-toc strong { grid-column: 1 / -1; }
+  /* One row of contents that stays under the top bar and scrolls sideways. */
+  .docs-toc {
+    position: sticky; top: var(--topbar-h); z-index: 20;
+    display: flex; gap: 4px; max-height: none; overflow-x: auto; overflow-y: hidden;
+    padding: var(--sp-2) 0; background: var(--bg); border-bottom: 1px solid var(--line); scrollbar-width: thin;
+  }
+  .docs-toc strong { display: none; }
+  .docs-toc a { flex: none; white-space: nowrap; }
   .docs-section { padding: var(--sp-4); }
 }
 
