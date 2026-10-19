@@ -253,8 +253,6 @@ const SECTIONS: Section[] = [
                     head={['Provider', 'What you need']}
                     rows={[
                         ['Custom SMTP', 'Host, port, encryption (TLS/SSL), username and password from your mail provider.'],
-                        ['Google (Gmail / Workspace)', 'The account address and an app password (Google account → Security → App passwords; needs 2-step verification).'],
-                        ['Microsoft 365', 'Tenant ID, application (client) ID and client secret of an app registration allowed to send mail.'],
                         ['Mailgun', 'Sending domain, API key and region (US or EU).'],
                     ]}
                 />

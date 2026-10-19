@@ -58,7 +58,8 @@ final class NotificationService
     {
         return [
             'enabled' => self::setting('email_gateway_enabled', '0'),
-            'provider' => self::setting('email_gateway_provider', 'smtp') ?: 'smtp',
+            // A retired provider (Google, Microsoft 365) reads as custom SMTP.
+            'provider' => isset(EmailProviders::PROVIDERS[self::setting('email_gateway_provider', 'smtp')]) ? self::setting('email_gateway_provider', 'smtp') : 'smtp',
             'transport' => self::setting('email_gateway_transport', 'smtp'),
             'host' => self::setting('email_gateway_host', ''),
             'port' => self::setting('email_gateway_port', '587'),
@@ -69,9 +70,6 @@ final class NotificationService
             'from_name' => self::setting('email_gateway_from_name', App::env('APP_NAME', 'FreeRADIUS Web')),
             'reply_to' => self::setting('email_gateway_reply_to', ''),
             'timeout' => self::setting('email_gateway_timeout', '12'),
-            'ms_tenant_id' => self::setting('email_gateway_ms_tenant_id', ''),
-            'ms_client_id' => self::setting('email_gateway_ms_client_id', ''),
-            'ms_client_secret' => self::setting('email_gateway_ms_client_secret', ''),
             'mailgun_domain' => self::setting('email_gateway_mailgun_domain', ''),
             'mailgun_api_key' => self::setting('email_gateway_mailgun_api_key', ''),
             'mailgun_region' => self::setting('email_gateway_mailgun_region', 'us') ?: 'us',
@@ -190,8 +188,6 @@ final class NotificationService
             'from_name' => trim((string) ($input['email_gateway_from_name'] ?? '')),
             'reply_to' => trim((string) ($input['email_gateway_reply_to'] ?? '')),
             'timeout' => (string) max(3, min(60, (int) ($input['email_gateway_timeout'] ?? 12))),
-            'ms_tenant_id' => trim((string) ($input['email_gateway_ms_tenant_id'] ?? '')),
-            'ms_client_id' => trim((string) ($input['email_gateway_ms_client_id'] ?? '')),
             'mailgun_domain' => strtolower(trim((string) ($input['email_gateway_mailgun_domain'] ?? ''))),
             'mailgun_region' => in_array($region, ['us', 'eu'], true) ? $region : 'us',
         ];

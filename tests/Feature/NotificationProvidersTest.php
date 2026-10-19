@@ -42,39 +42,20 @@ final class NotificationProvidersTest extends TestCase
         $this->post('/settings/notifications/sms-gateway', $values + ['sms_gateway_enabled' => true, 'sms_gateway_country_code' => '355'])->assertSessionHas('flash.type', 'success');
     }
 
-    public function test_microsoft_365_sends_through_graph_and_credentials_never_reach_the_page(): void
-    {
-        $this->actingAsOperator();
-        $this->email(['email_gateway_provider' => 'microsoft', 'email_gateway_ms_tenant_id' => 'example.onmicrosoft.com',
-            'email_gateway_ms_client_id' => '11111111-2222-3333-4444-555555555555', 'email_gateway_ms_client_secret' => 'ms-secret-value']);
-
-        $this->get('/settings?tab=notifications&view=gateways&gateway=email')->assertOk()->assertInertia(fn ($page) => $page
-            ->where('notifications.email.provider', 'microsoft')
-            ->where('notifications.email.ms_client_secret_saved', true)
-            ->missing('notifications.email.ms_client_secret')
-            ->missing('notifications.email.password')
-            ->where('notifications.ready.email', true));
-        // A blank secret keeps the saved one.
-        $this->email(['email_gateway_provider' => 'microsoft', 'email_gateway_ms_tenant_id' => 'example.onmicrosoft.com',
-            'email_gateway_ms_client_id' => '11111111-2222-3333-4444-555555555555', 'email_gateway_ms_client_secret' => '']);
-
-        $this->provider([200, '{"access_token":"tok"}'], [202, '']);
-        $this->post('/settings/notifications/email-test', ['to' => 'alice@example.test'])->assertSessionHas('flash.type', 'success');
-        $this->assertSame('https://login.microsoftonline.com/example.onmicrosoft.com/oauth2/v2.0/token', $this->sent[0]['url']);
-        $this->assertStringContainsString('client_secret=ms-secret-value', $this->sent[0]['body']);
-        $this->assertSame('https://graph.microsoft.com/v1.0/users/billing%40example.test/sendMail', $this->sent[1]['url']);
-        $this->assertSame('Bearer tok', $this->sent[1]['headers']['Authorization']);
-        $this->assertSame('alice@example.test', json_decode($this->sent[1]['body'], true)['message']['toRecipients'][0]['emailAddress']['address']);
-
-        $this->provider([401, '{"error":"invalid_client","error_description":"Invalid client secret provided."}']);
-        $this->post('/settings/notifications/email-test', ['to' => 'alice@example.test'])
-            ->assertSessionHas('flash.message', 'Test not sent: Microsoft sign-in failed: Invalid client secret provided.');
-    }
-
-    public function test_mailgun_and_google(): void
+    public function test_mailgun_sends_through_its_api_and_the_key_never_reaches_the_page(): void
     {
         $this->actingAsOperator();
         $this->email(['email_gateway_provider' => 'mailgun', 'email_gateway_mailgun_domain' => 'mg.example.test', 'email_gateway_mailgun_region' => 'eu', 'email_gateway_mailgun_api_key' => 'key-123']);
+        $this->get('/settings?tab=notifications&view=gateways&gateway=email')->assertOk()->assertInertia(fn ($page) => $page
+            ->where('notifications.email.provider', 'mailgun')
+            ->where('notifications.email.mailgun_api_key_saved', true)
+            ->missing('notifications.email.mailgun_api_key')
+            ->missing('notifications.email.password')
+            ->where('notifications.providers', ['smtp' => 'Custom SMTP', 'mailgun' => 'Mailgun'])
+            ->where('notifications.ready.email', true));
+        // A blank key keeps the saved one.
+        $this->email(['email_gateway_provider' => 'mailgun', 'email_gateway_mailgun_domain' => 'mg.example.test', 'email_gateway_mailgun_region' => 'eu', 'email_gateway_mailgun_api_key' => '']);
+
         $this->provider([200, '{"id":"<1@mg>","message":"Queued. Thank you."}']);
         NotificationService::sendEmail(['email' => 'bob@example.test'], 'Hi', 'Body', true);
         $this->assertSame('https://api.eu.mailgun.net/v3/mg.example.test/messages', $this->sent[0]['url']);
@@ -82,11 +63,19 @@ final class NotificationProvidersTest extends TestCase
         parse_str($this->sent[0]['body'], $fields);
         $this->assertSame(['Example ISP <billing@example.test>', 'bob@example.test', 'Hi'], [$fields['from'], $fields['to'], $fields['subject']]);
 
-        // Google needs the account and an app password; the SMTP host is built in.
-        $this->post('/settings/notifications/email-gateway', ['email_gateway_enabled' => true, 'email_gateway_provider' => 'google', 'email_gateway_from_email' => 'isp@gmail.test', 'email_gateway_username' => 'isp@gmail.test'])
-            ->assertSessionHas('flash.message', 'Enter the Google account address and an app password (Google Account → Security → App passwords).');
-        $this->email(['email_gateway_provider' => 'google', 'email_gateway_username' => 'isp@gmail.test', 'email_gateway_password' => 'abcd efgh ijkl mnop']);
-        $this->assertSame('google', NotificationService::emailGatewaySettings()['provider']);
+        $this->provider([401, '{"message":"Invalid private key"}']);
+        $this->post('/settings/notifications/email-test', ['to' => 'alice@example.test'])
+            ->assertSessionHas('flash.message', 'Test not sent: Mailgun did not accept the message (HTTP 401): Invalid private key');
+    }
+
+    public function test_only_custom_smtp_and_mailgun_are_offered(): void
+    {
+        $this->actingAsOperator();
+        // Google and Microsoft 365 are no longer providers: such a choice is saved as custom SMTP.
+        $this->email(['email_gateway_provider' => 'microsoft', 'email_gateway_host' => 'smtp.example.test']);
+        $this->assertSame('smtp', NotificationService::emailGatewaySettings()['provider']);
+        \App\Support\Settings::save('email_gateway_provider', 'google');
+        $this->assertSame('smtp', NotificationService::emailGatewaySettings()['provider']);
     }
 
     public function test_twilio_and_infobip_numbers_and_errors(): void

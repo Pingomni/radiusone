@@ -25,7 +25,7 @@ type SmsGateway = {
 };
 type EmailGateway = {
     enabled: string; provider: string; transport: string; host: string; port: string; encryption: string; username: string; from_email: string; from_name: string;
-    reply_to: string; timeout: string; password_saved: boolean; ms_tenant_id: string; ms_client_id: string; ms_client_secret_saved: boolean;
+    reply_to: string; timeout: string; password_saved: boolean;
     mailgun_domain: string; mailgun_region: string; mailgun_api_key_saved: boolean;
 };
 type AdminSettings = {
@@ -790,16 +790,13 @@ function EmailGatewayForm({ g, providers, ready }: { g: EmailGateway; providers:
         email_gateway_from_email: g.from_email,
         email_gateway_from_name: g.from_name,
         email_gateway_reply_to: g.reply_to,
-        email_gateway_ms_tenant_id: g.ms_tenant_id,
-        email_gateway_ms_client_id: g.ms_client_id,
-        email_gateway_ms_client_secret: '',
         email_gateway_mailgun_domain: g.mailgun_domain,
         email_gateway_mailgun_region: g.mailgun_region,
         email_gateway_mailgun_api_key: '',
     });
     const provider = form.data.email_gateway_provider;
-    const clearSecrets = () => form.setData((d) => ({ ...d, email_gateway_password: '', email_gateway_ms_client_secret: '', email_gateway_mailgun_api_key: '' }));
-    const secret = (label: string, key: 'email_gateway_password' | 'email_gateway_ms_client_secret' | 'email_gateway_mailgun_api_key', saved: boolean, hint?: string) => (
+    const clearSecrets = () => form.setData((d) => ({ ...d, email_gateway_password: '', email_gateway_mailgun_api_key: '' }));
+    const secret = (label: string, key: 'email_gateway_password' | 'email_gateway_mailgun_api_key', saved: boolean, hint?: string) => (
         <SecretField label={label} name={key} saved={saved} value={form.data[key]} error={form.errors[key]} onChange={(v) => form.setData(key, v)} hint={hint} />
     );
     return (
@@ -807,20 +804,6 @@ function EmailGatewayForm({ g, providers, ready }: { g: EmailGateway; providers:
             <form className="form-grid" onSubmit={(event) => { event.preventDefault(); form.post('/settings/notifications/email-gateway', { preserveScroll: true, onFinish: clearSecrets }); }}>
                 <Check className="check span2" label="Enable email gateway" name="email_gateway_enabled" checked={form.data.email_gateway_enabled} onChange={(e) => form.setData('email_gateway_enabled', e.target.checked)} />
                 <Select label="Provider" options={providers} {...bind(form, 'email_gateway_provider')} />
-                {provider === 'google' && (
-                    <>
-                        <Field label="Google account" type="email" hint="The Gmail or Google Workspace address that signs in." {...bind(form, 'email_gateway_username')} />
-                        {secret('App password', 'email_gateway_password', g.password_saved, 'Google Account → Security → 2-Step Verification → App passwords. Your normal password does not work.')}
-                    </>
-                )}
-                {provider === 'microsoft' && (
-                    <>
-                        <p className="span2 hint">In Microsoft Entra (Azure), register an app, add the Microsoft Graph application permission Mail.Send, grant admin consent, and create a client secret. The From email below must be a mailbox in your organisation.</p>
-                        <Field label="Tenant ID or domain" placeholder="contoso.onmicrosoft.com" {...bind(form, 'email_gateway_ms_tenant_id')} />
-                        <Field label="Application (client) ID" {...bind(form, 'email_gateway_ms_client_id')} />
-                        {secret('Client secret', 'email_gateway_ms_client_secret', g.ms_client_secret_saved, 'The secret value, not its ID. Secrets expire; set a reminder to renew it.')}
-                    </>
-                )}
                 {provider === 'mailgun' && (
                     <>
                         <Field label="Sending domain" placeholder="mg.example.com" {...bind(form, 'email_gateway_mailgun_domain')} />
