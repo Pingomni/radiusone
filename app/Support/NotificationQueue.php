@@ -6,7 +6,7 @@ final class NotificationQueue
     public static function due(string $expiry, int $days, string $clock): string
     {
         if(!preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/D',$clock)){throw new \RuntimeException('Invalid reminder time.');}
-        return (new \DateTimeImmutable($expiry.' '.$clock,new \DateTimeZone('Europe/Tirane')))->modify('-'.max(0,min(365,$days)).' days')->setTimezone(new \DateTimeZone('UTC'))->format('Y-m-d H:i:s');
+        return (new \DateTimeImmutable($expiry.' '.$clock))->modify('-'.max(0,min(365,$days)).' days')->format('Y-m-d H:i:s');
     }
     public static function enqueue(array $settings): int
     {
@@ -26,9 +26,9 @@ final class NotificationQueue
     public static function claim(): ?array
     {
         // A crashed/timed-out sender may have delivered. Do not automatically reclaim it.
-        Db::exec('UPDATE notification_jobs SET state="uncertain",error_class="InterruptedSender" WHERE state="sending" AND claimed_at<DATE_SUB(UTC_TIMESTAMP(),INTERVAL 10 MINUTE)');
+        Db::exec('UPDATE notification_jobs SET state="uncertain",error_class="InterruptedSender" WHERE state="sending" AND claimed_at<DATE_SUB(NOW(),INTERVAL 10 MINUTE)');
         $token=bin2hex(random_bytes(24));
-        Db::exec('UPDATE notification_jobs SET state="sending",claim_token=?,claimed_at=UTC_TIMESTAMP(),attempts=attempts+1 WHERE state="pending" AND attempts<3 AND next_attempt_at<=UTC_TIMESTAMP() ORDER BY due_at,id LIMIT 1',[$token]);
+        Db::exec('UPDATE notification_jobs SET state="sending",claim_token=?,claimed_at=NOW(),attempts=attempts+1 WHERE state="pending" AND attempts<3 AND next_attempt_at<=NOW() ORDER BY due_at,id LIMIT 1',[$token]);
         return Db::row('SELECT * FROM notification_jobs WHERE claim_token=? AND state="sending"',[$token]);
     }
     public static function process(array $settings, ?\Closure $deliver=null, int $limit=100): array
@@ -59,9 +59,9 @@ final class NotificationQueue
             // Keep the claim until outcome + historical log commit together.
             $pdo=Db::pdo();$pdo->beginTransaction();
             try{
-                $changed=Db::exec('UPDATE notification_jobs SET state=?,error_class=?,next_attempt_at=DATE_ADD(UTC_TIMESTAMP(),INTERVAL 5 MINUTE),completed_at=IF(?="pending",NULL,UTC_TIMESTAMP()) WHERE id=? AND state="sending" AND claim_token=?',[$state,$error,$state,$job['id'],$job['claim_token']]);
+                $changed=Db::exec('UPDATE notification_jobs SET state=?,error_class=?,next_attempt_at=DATE_ADD(NOW(),INTERVAL 5 MINUTE),completed_at=IF(?="pending",NULL,NOW()) WHERE id=? AND state="sending" AND claim_token=?',[$state,$error,$state,$job['id'],$job['claim_token']]);
                 if($changed!==1){throw new \RuntimeException('Notification claim changed; delivery requires review.');}
-                if($client){Db::exec('INSERT INTO notification_logs(username,channel,event_type,expiry_date,status,message,error,sent_at) VALUES(?,?,"expiry_reminder",?,?,"",?,UTC_TIMESTAMP())',[$client['username'],$job['channel'],$job['expiry_date'],$state==='sent'?'sent':($state==='cancelled'?'skipped':'failed'),$error]);}
+                if($client){Db::exec('INSERT INTO notification_logs(username,channel,event_type,expiry_date,status,message,error,sent_at) VALUES(?,?,"expiry_reminder",?,?,"",?,NOW())',[$client['username'],$job['channel'],$job['expiry_date'],$state==='sent'?'sent':($state==='cancelled'?'skipped':'failed'),$error]);}
                 $pdo->commit();
             }catch(\Throwable $e){if($pdo->inTransaction()){$pdo->rollBack();}throw $e;}
         }

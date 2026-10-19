@@ -32,6 +32,8 @@ abstract class TestCase extends BaseTestCase
             self::$schemaReady = true;
         }
         $this->withHeader('X-Forwarded-Proto', 'https');
+        // Never the real root helper: a test must not switch this server's time zone.
+        \App\Support\TimeZone::$command = [$dir . '/no-timezone-helper'];
     }
 
     protected function tearDown(): void

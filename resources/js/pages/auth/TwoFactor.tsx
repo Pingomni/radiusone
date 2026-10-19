@@ -10,26 +10,11 @@ export default function TwoFactor({ setup }: { setup: { secret: string; uri: str
     const form = useForm({ code: '' });
     const failed = flash?.type === 'danger';
 
-    const intro = setup ? (
-        <>
-            <h1>Set up two-factor authentication</h1>
-            <p>Your account now requires an authenticator app before you can continue.</p>
-            <div className="login-points"><span><Icon name="shield" />Required by admin</span><span><Icon name="lock" />One-time setup</span></div>
-        </>
-    ) : (
-        <>
-            <h1>Two-factor check</h1>
-            <p>Enter the 6-digit code from your authenticator app to finish signing in.</p>
-            <div className="login-points"><span><Icon name="shield" />Extra account protection</span><span><Icon name="lock" />Time-based code</span></div>
-        </>
-    );
-
     return (
-        <AuthLayout title={setup ? 'Set Up Two-Factor Authentication' : 'Two-Factor Verification'} intro={intro}>
+        <AuthLayout title={setup ? 'Set Up Two-Factor Authentication' : 'Two-Factor Verification'}>
             <AuthCard
-                icon="shield"
-                heading={setup ? 'Connect your app' : 'Verification code'}
-                lead={setup ? 'Add this setup key to your authenticator app, then enter the current 6-digit code.' : 'Open your authenticator app and enter the current code.'}
+                heading={setup ? 'Set up two-factor' : 'Two-factor check'}
+                lead={setup ? 'Your account requires an authenticator app. Add this setup key to your authenticator app, then enter the current 6-digit code.' : 'Enter the 6-digit code from your authenticator app to finish signing in.'}
                 onSubmit={(event) => {
                     event.preventDefault();
                     form.post(setup ? '/two-factor/setup' : '/two-factor', { onFinish: () => form.reset('code') });

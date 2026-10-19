@@ -24,7 +24,7 @@ final class BackupRunner
     /** @return array<string, mixed> the status that was written */
     public static function run(string $dir, array $db, bool $upload = true): array
     {
-        $status = ['at' => gmdate('Y-m-d H:i:s'), 'ok' => true, 'destinations' => []];
+        $status = ['at' => date('Y-m-d H:i:s'), 'ok' => true, 'destinations' => []];
         $staged = [];
         try {
             $dbFile = DatabaseBackup::backup($dir, $db);

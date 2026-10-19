@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Support\Auth;
+use App\Support\Currency;
 use App\Support\Settings;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
@@ -37,7 +38,9 @@ class HandleInertiaRequests extends Middleware
             ],
             'flash' => fn () => $request->session()->get('flash'),
             'logo' => fn () => Settings::logo(),
-            'clock' => fn () => ['time' => date('H:i'), 'timezone' => date_default_timezone_get()],
+            // The browser shows times in this clock and timezone (resources/js/lib/clock.ts).
+            'currency' => fn () => Currency::code(),
+            'clock' => fn () => ['time' => date('H:i'), 'now' => time(), 'timezone' => date_default_timezone_get()],
         ];
     }
 }

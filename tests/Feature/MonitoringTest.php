@@ -25,7 +25,10 @@ final class MonitoringTest extends TestCase
             ->where('overview.nas.0.id', $id)
             ->where('overview.nas.0.setupSnmp', false)
             ->has('overview.jobs')
-            ->where('lastPoll', null));
+            ->where('lastPoll', null)
+            // Every page carries the server clock, so the browser shows server time in the server timezone.
+            ->where('clock.timezone', date_default_timezone_get())
+            ->where('clock.now', fn ($now) => abs($now - time()) <= 5));
 
         $this->getJson('/monitoring/live')->assertOk()
             ->assertHeader('Cache-Control', 'no-store, private')

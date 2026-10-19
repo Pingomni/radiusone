@@ -96,7 +96,7 @@ final class CustomerNotifications
         self::requireTransaction();
         $s = Db::row('SELECT s.customer_id FROM subscriptions s JOIN access_policies p ON p.subscription_id=s.id AND p.revision=s.policy_revision WHERE s.id=? AND s.provisioning_state="verified" AND s.applied_revision=s.policy_revision AND p.allowed=1 AND (p.valid_until IS NULL OR p.valid_until>UNIX_TIMESTAMP())',[$subscriptionId]);
         if (!$s) return;
-        $changed = Db::exec('UPDATE notification_onboarding SET activated_at=UTC_TIMESTAMP() WHERE customer_id=? AND activated_at IS NULL',[$s['customer_id']]);
+        $changed = Db::exec('UPDATE notification_onboarding SET activated_at=NOW() WHERE customer_id=? AND activated_at IS NULL',[$s['customer_id']]);
         if ($changed) self::automatic('welcome',(int)$s['customer_id'],'welcome:'.$s['customer_id']);
     }
 
@@ -141,7 +141,7 @@ final class CustomerNotifications
 
     private static function insert(int $event,array $item,?string $reason): void
     {
-        Db::exec('INSERT INTO notification_deliveries(event_id,customer_id,channel,recipient,subject,body,expiry_date,state,reason,completed_at) VALUES (?,?,?,?,?,?,?,?,?,IF(? IS NULL,NULL,UTC_TIMESTAMP()))',[$event,$item['customer_id'],$item['channel'],$item['recipient'],$item['subject'],$item['body'],$item['expiry_date'],$reason?'skipped':'pending',$reason,$reason]);
+        Db::exec('INSERT INTO notification_deliveries(event_id,customer_id,channel,recipient,subject,body,expiry_date,state,reason,completed_at) VALUES (?,?,?,?,?,?,?,?,?,IF(? IS NULL,NULL,NOW()))',[$event,$item['customer_id'],$item['channel'],$item['recipient'],$item['subject'],$item['body'],$item['expiry_date'],$reason?'skipped':'pending',$reason,$reason]);
     }
 
     /** Server-owned preview; confirmation never accepts a message or recipient list from the browser. */
@@ -189,10 +189,10 @@ final class CustomerNotifications
     {
         SchemaCompatibility::require('notifications');
         $counts=['sent'=>0,'skipped'=>0,'uncertain'=>0]; $deadline=microtime(true)+40;
-        $counts['uncertain'] += Db::exec('UPDATE notification_deliveries SET state="uncertain",reason="Worker interrupted; check provider",completed_at=UTC_TIMESTAMP() WHERE state="sending" AND claimed_at<DATE_SUB(UTC_TIMESTAMP(),INTERVAL 10 MINUTE)');
+        $counts['uncertain'] += Db::exec('UPDATE notification_deliveries SET state="uncertain",reason="Worker interrupted; check provider",completed_at=NOW() WHERE state="sending" AND claimed_at<DATE_SUB(NOW(),INTERVAL 10 MINUTE)');
         for ($i=0;$i<min(100,max(0,$limit)) && microtime(true)<$deadline;$i++) {
             $token=bin2hex(random_bytes(16));
-            $changed=Db::exec('UPDATE notification_deliveries SET state="sending",claim_token=?,claimed_at=UTC_TIMESTAMP() WHERE state="pending" ORDER BY id LIMIT 1',[$token]);
+            $changed=Db::exec('UPDATE notification_deliveries SET state="sending",claim_token=?,claimed_at=NOW() WHERE state="pending" ORDER BY id LIMIT 1',[$token]);
             if (!$changed) break;
             $job=Db::row('SELECT d.*,e.template_key FROM notification_deliveries d JOIN notification_events e ON e.id=d.event_id WHERE d.claim_token=?',[$token]);
             $state='skipped'; $reason=null;
@@ -215,7 +215,7 @@ final class CustomerNotifications
                     $state='sent';
                 }
             } catch (\Throwable $e) { $state='uncertain';$reason='Provider outcome unknown; check provider'; }
-            Db::exec('UPDATE notification_deliveries SET state=?,reason=?,completed_at=UTC_TIMESTAMP() WHERE id=? AND state="sending" AND claim_token=?',[$state,$reason,$job['id'],$token]);
+            Db::exec('UPDATE notification_deliveries SET state=?,reason=?,completed_at=NOW() WHERE id=? AND state="sending" AND claim_token=?',[$state,$reason,$job['id'],$token]);
             $counts[$state]++;
         }
         return $counts;

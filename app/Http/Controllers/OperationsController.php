@@ -52,7 +52,7 @@ final class OperationsController extends Controller
         Auth::requireCan('operations.manage');
         SchemaCompatibility::require('policy');
         // Preserve session snapshot and attempt budget. Every retry observes before sending.
-        Db::exec('UPDATE network_operations SET state="uncertain",available_at=UTC_TIMESTAMP(),updated_at=UTC_TIMESTAMP() WHERE id=? AND state IN ("blocked","nak","failed") AND attempts<5', [(int) $id]);
+        Db::exec('UPDATE network_operations SET state="uncertain",available_at=NOW(),updated_at=NOW() WHERE id=? AND state IN ("blocked","nak","failed") AND attempts<5', [(int) $id]);
         Audit::log('retry_network_operation', 'network_operation', $id);
         return $this->ok('/operations', 'Reconciliation queued. The original session must be verified before retry.');
     }

@@ -72,7 +72,20 @@ return [
     'schedule_expiry_sync' => (bool) filter_var(env('FRWEB_SCHEDULE_EXPIRY_SYNC', false), FILTER_VALIDATE_BOOL),
     'schedule_expiry_notifications' => (bool) filter_var(env('FRWEB_SCHEDULE_EXPIRY_NOTIFICATIONS', false), FILTER_VALIDATE_BOOL),
 
-    'timezone' => env('APP_TIMEZONE', 'UTC'),
+    // The server's time zone (timedatectl), so the portal, MariaDB and FreeRADIUS share one clock.
+    // APP_TIMEZONE in .env overrides it; UTC if the server's zone cannot be read.
+    'timezone' => env('APP_TIMEZONE') ?: (static function (): string {
+        // /etc/localtime is what timedatectl changes; /etc/timezone is only a Debian copy of it.
+        $zone = is_link('/etc/localtime') ? (string) preg_replace('#^.*/zoneinfo/#', '', (string) readlink('/etc/localtime')) : '';
+        if ($zone === '') {
+            $zone = trim((string) @file_get_contents('/etc/timezone'));
+        }
+        try {
+            return (new DateTimeZone($zone))->getName();
+        } catch (Throwable) {
+            return 'UTC';
+        }
+    })(),
 
     /*
     |--------------------------------------------------------------------------

@@ -6,10 +6,12 @@ namespace App\Http\Controllers;
 
 use App\Http\Support\Operators;
 use App\Http\Support\Present;
+use App\Support\AdminAlerts;
 use App\Support\App;
 use App\Support\Audit;
 use App\Support\Auth;
 use App\Support\Branding;
+use App\Support\Currency;
 use App\Support\CustomerNotifications;
 use App\Support\Db;
 use App\Support\EmailProviders;
@@ -18,6 +20,7 @@ use App\Support\Retention;
 use App\Support\SchemaCompatibility;
 use App\Support\Settings;
 use App\Support\SmsProviders;
+use App\Support\TimeZone;
 use App\Support\Security;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -36,7 +39,7 @@ final class SettingsController extends Controller
     {
         $tab = (string) $request->query('tab', 'overview');
         $tab = $tab === 'custom' ? 'branding' : $tab;
-        $tab = in_array($tab, ['overview', 'users', 'notifications', 'branding', 'retention', 'backups'], true) ? $tab : 'overview';
+        $tab = in_array($tab, ['overview', 'users', 'notifications', 'branding', 'regional', 'retention', 'backups'], true) ? $tab : 'overview';
 
         $userCount = (int) Db::value('SELECT COUNT(*) FROM portal_users');
         $enabledUsers = (int) Db::value('SELECT COUNT(*) FROM portal_users WHERE enabled = 1');
@@ -59,6 +62,15 @@ final class SettingsController extends Controller
             // Only the active tab's notification data is built: it may query many customers.
             'notifications' => $tab === 'notifications' ? $this->notifications($request) : null,
             'backups' => $tab === 'backups' ? BackupSettingsController::props() : null,
+            'regional' => $tab === 'regional' ? [
+                'timezone' => TimeZone::current(),
+                'timezones' => TimeZone::options(),
+                'timezoneLog' => TimeZone::log(),
+                'timezoneReady' => TimeZone::ready(),
+                'currency' => Currency::code(),
+                'currencies' => Currency::OPTIONS,
+                'issuedOther' => (int) Db::value('SELECT COUNT(*) FROM billing_invoices WHERE status NOT IN ("draft","void") AND currency<>?', [Currency::code()]),
+            ] : null,
             'retention' => $tab === 'retention' ? [
                 'periods' => Retention::settings(),
                 'stats' => Retention::stats(),
@@ -113,12 +125,23 @@ final class SettingsController extends Controller
             $anyReady = $ready['email'] || $ready['sms'];
             $legacy = (string) $request->query('channel', '');
             $view = (string) $request->query('view', in_array($legacy, ['sms', 'email'], true) ? 'gateways' : ($anyReady ? 'templates' : 'gateways'));
-            if (!in_array($view, ['templates', 'gateways', 'bulk', 'preview', 'history'], true)) {
+            if (!in_array($view, ['templates', 'gateways', 'bulk', 'preview', 'history', 'admin'], true)) {
                 $view = $anyReady ? 'templates' : 'gateways';
             }
             $data = ['view' => $view, 'ready' => $ready];
 
-            if ($view === 'gateways') {
+            if ($view === 'admin') {
+                $data['admin'] = [
+                    'settings' => NotificationService::withoutSecrets(AdminAlerts::settings(), ['telegram_token']),
+                    'checks' => AdminAlerts::CHECKS,
+                    'recent' => array_map(static fn (array $e) => [
+                        'at' => date('Y-m-d H:i', (int) $e['at']),
+                        'kind' => Present::tag(ucfirst((string) $e['kind']), match ($e['kind']) { 'problem' => 'danger', 'resolved' => 'success', default => '' }),
+                        'text' => (string) $e['text'],
+                        'sent' => (string) $e['sent'],
+                    ], AdminAlerts::recent()),
+                ];
+            } elseif ($view === 'gateways') {
                 $gateway = (string) $request->query('gateway', in_array($legacy, ['email', 'sms'], true) ? $legacy : '');
                 $data['gateway'] = in_array($gateway, ['email', 'sms'], true) ? $gateway : null;
                 if ($data['gateway'] === 'sms') {
@@ -213,6 +236,12 @@ final class SettingsController extends Controller
                 'reason' => (string) ($log['reason'] ?: '—'),
             ], array_slice($logs, 0, 50)),
         ];
+    }
+
+    /** Administrator guide (static content in resources/js/pages/docs/Docs.tsx). */
+    public function docs(): Response
+    {
+        return Inertia::render('docs/Docs');
     }
 
     public function legacyNotificationPage(string $channel): RedirectResponse
@@ -318,6 +347,46 @@ final class SettingsController extends Controller
         return $this->ok(self::NOTICES . '&view=history', 'Messages queued. Follow their progress in History.');
     }
 
+    public function saveAdminAlerts(Request $request): RedirectResponse
+    {
+        $back = self::NOTICES . '&view=admin';
+        try {
+            AdminAlerts::save($this->formInput($request));
+        } catch (InvalidArgumentException $e) {
+            return $this->fail($e->getMessage(), $back);
+        }
+        Audit::log('update', 'settings', 'admin_alerts', null, array_diff_key(AdminAlerts::settings(), ['emails' => 1, 'phones' => 1, 'telegram_token' => 1, 'telegram_chats' => 1]));
+        return $this->ok($back, 'Admin alerts saved.');
+    }
+
+    /** "Send test alert" and "Send report now": both report the provider's answer per recipient. */
+    public function sendAdminAlert(string $kind): RedirectResponse
+    {
+        $back = self::NOTICES . '&view=admin';
+        try {
+            $sent = $kind === 'report' ? AdminAlerts::sendReport() : AdminAlerts::test();
+        } catch (RuntimeException $e) {
+            return $this->fail($e->getMessage(), $back);
+        }
+        Audit::log($kind === 'report' ? 'send_report' : 'test', 'settings', 'admin_alerts');
+        $message = ($kind === 'report' ? 'Report ' : 'Test alert ') . $sent . '.';
+        return str_contains($sent, 'failed:') ? $this->warn($back, $message) : $this->ok($back, $message);
+    }
+
+    /** Lists the chats that wrote to the bot, so their IDs can be copied into the recipients. */
+    public function telegramChats(): RedirectResponse
+    {
+        $back = self::NOTICES . '&view=admin';
+        try {
+            $chats = AdminAlerts::telegramChats();
+        } catch (RuntimeException $e) {
+            return $this->fail($e->getMessage(), $back);
+        }
+        return $chats
+            ? $this->ok($back, 'Chats that wrote to your bot: ' . implode('; ', $chats) . '. Copy the number before " · " into Telegram chat IDs.')
+            : $this->warn($back, 'No chats found yet. Send any message to your bot (or add it to a group and write there), then try again.');
+    }
+
     public function notificationLegacy(): RedirectResponse
     {
         return $this->fail('Notifications have moved. Use Templates for automatic messages or Send bulk message to review a send.', self::NOTICES);
@@ -332,7 +401,35 @@ final class SettingsController extends Controller
             return $this->failKeepingInput($e, '/settings?tab=retention');
         }
         Audit::log('update', 'setting', 'retention', $before, Retention::settings());
-        return $this->ok('/settings?tab=retention', 'Retention saved. Older records are deleted in the nightly cleanup at 03:45 UTC.');
+        return $this->ok('/settings?tab=retention', 'Retention saved. Older records are deleted in the nightly cleanup at 03:45.');
+    }
+
+    public function saveCurrency(Request $request): RedirectResponse
+    {
+        $before = Currency::code();
+        try {
+            $counts = Currency::change((string) $request->input('currency'));
+        } catch (InvalidArgumentException $e) {
+            return $this->fail($e->getMessage(), '/settings?tab=regional');
+        }
+        Audit::log('update', 'setting', 'currency', ['currency' => $before], ['currency' => Currency::code()] + $counts);
+        $relabelled = $counts['services'] + $counts['pools'] + $counts['drafts'];
+        return $this->ok('/settings?tab=regional', 'The system now bills in ' . Currency::OPTIONS[Currency::code()] . '.'
+            . ($relabelled ? " {$counts['services']} service plans, {$counts['pools']} IP pools and {$counts['drafts']} draft invoices now use it: check their prices, amounts were not converted." : ''));
+    }
+
+    /** Starts the server-wide switch (ops/frweb-set-timezone); the portal is in maintenance for about a minute. */
+    public function saveTimezone(Request $request): RedirectResponse
+    {
+        $zone = (string) $request->input('timezone');
+        $before = TimeZone::current();
+        try {
+            TimeZone::change($zone);
+        } catch (InvalidArgumentException | RuntimeException $e) {
+            return $this->fail($e->getMessage(), '/settings?tab=regional');
+        }
+        Audit::log('update', 'setting', 'timezone', ['timezone' => $before], ['timezone' => $zone]);
+        return $this->ok('/settings?tab=regional', "Switching to $zone. In a few seconds the portal pauses for about a minute while stored times are converted; then reload this page.");
     }
 
     public function saveSmsGateway(Request $request): RedirectResponse

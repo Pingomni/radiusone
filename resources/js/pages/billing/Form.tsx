@@ -92,7 +92,7 @@ export default function InvoiceForm({ values, customers, services, staticPools, 
                     />
                     <Select label="Billing period" options={periods} {...bind(form, 'billing_period')} />
                     <Field label="Description" required {...bind(form, 'description')} />
-                    <Field label="Currency" required maxLength={3} {...bind(form, 'currency')} />
+                    <Field label="Currency" readOnly name="currency" value={currency} hint="From the plan, or the system currency (Settings → Regional)." />
                     <Field label="Discount" type="number" step="0.01" min="0" {...bind(form, 'discount_amount')} />
                     <Field label="Tax" type="number" step="0.01" min="0" {...bind(form, 'tax_amount')} />
                     <Field label="Issue date" type="date" required {...bind(form, 'issue_date')} />

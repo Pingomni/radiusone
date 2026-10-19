@@ -12,7 +12,9 @@ $log = static fn (string $name): string => '/var/log/freeradius-web/' . $name . 
 
 Schedule::command('frweb:process-customer-notifications')->everyMinute()->runInBackground()->appendOutputTo($log('customer-notifications'));
 Schedule::command('frweb:poll-snmp')->everyMinute()->runInBackground()->appendOutputTo($log('snmp-poll'));
-Schedule::command('frweb:generate-billing')->dailyAt('02:15')->appendOutputTo($log('billing'));
+// Off until Settings → Notifications → Admin alerts is turned on (the command then checks every minute).
+Schedule::command('frweb:admin-alerts')->everyMinute()->runInBackground()->appendOutputTo($log('admin-alerts'));
+Schedule::command('frweb:generate-billing')->dailyAt('03:15')->appendOutputTo($log('billing'));
 // Needs DELETE on job_runs (docs/operations/job-runs-retention-grants.sql).
 Schedule::command('frweb:prune-job-runs')->dailyAt('03:30')->appendOutputTo($log('maintenance'));
 // Deletes only when a period is chosen under Settings → Data retention (default: keep forever).

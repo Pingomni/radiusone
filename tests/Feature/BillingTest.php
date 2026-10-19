@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Support\Currency;
 use App\Support\Db;
 use Tests\TestCase;
 
@@ -11,6 +12,7 @@ final class BillingTest extends TestCase
 {
     private function customer(string $username = 'alice'): void
     {
+        Currency::change('EUR');
         $this->post('/services/save', [
             'id' => '', 'name' => 'Home 50', 'group_name' => 'home50', 'description' => '', 'enabled' => true, 'download_speed' => '50', 'upload_speed' => '10',
             'ip_mode' => 'pool', 'ip_pool' => '', 'session_timeout' => '', 'idle_timeout' => '', 'simultaneous_use' => '1', 'expiration_behavior' => '',
@@ -63,7 +65,7 @@ final class BillingTest extends TestCase
             ->where('result.rows.0.status.label', 'Unpaid')
             ->where('result.rows.0.canVoid', true)
             ->where('result.rows.0.canDelete', false)
-            ->where('metrics.0.value', '20.00'));
+            ->where('metrics.0.value', '20.00 EUR'));
         $this->get('/billing?status=paid')->assertOk()->assertInertia(fn ($page) => $page->where('result.total', 0));
 
         $csv = $this->get('/billing/export?q=alice')->assertOk()->streamedContent();

@@ -5,8 +5,11 @@
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width,initial-scale=1">
         <meta name="color-scheme" content="light dark">
-        <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-        <link rel="shortcut icon" href="/favicon.ico">
+        <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=2">
+        <link rel="icon" href="/favicon.ico?v=2" sizes="16x16 32x32 48x48">
+        <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=2">
+        <link rel="manifest" href="/manifest.json?v=2">
+        <meta name="theme-color" content="#1f5fd6">
         @viteReactRefresh
         @vite(['resources/css/app.css', 'resources/js/app.tsx'])
         <x-inertia::head>

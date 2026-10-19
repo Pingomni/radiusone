@@ -2,6 +2,7 @@ import { Link, useForm } from '@inertiajs/react';
 import { useConfirm } from '@/components/confirm';
 import { Check, ErrorSummary, Field, Panel, Select, TextArea } from '@/components/ui';
 import AppLayout from '@/layouts/AppLayout';
+import { useShared } from '@/lib/auth';
 import { bind, bindCheck } from '@/lib/form';
 
 type ServiceValues = Record<string, string | number | boolean> & { id: number | ''; group_name: string; name: string; enabled: boolean };
@@ -15,6 +16,7 @@ export default function ServiceForm({ service, clientCount, expiredOptions, canM
     const form = useForm<ServiceValues>(service);
     const ask = useConfirm();
     const disabled = !canManage;
+    const { currency } = useShared();
     const field = (label: string, key: string, props: Record<string, unknown> = {}) => (
         <Field label={label} disabled={disabled} {...bind(form, key)} {...props} />
     );
@@ -52,8 +54,7 @@ export default function ServiceForm({ service, clientCount, expiredOptions, canM
                     {field('Expiration behavior', 'expiration_behavior')}
                     <Select label="Billing mode (metadata; full payment required for renewal)" disabled={disabled} options={{ prepaid: 'prepaid', postpaid: 'postpaid' }} {...bind(form, 'billing_mode')} />
                     <Select label="Expired service" disabled={disabled} options={expiredOptions} {...bind(form, 'expired_service_group')} />
-                    {field('Price', 'price', { type: 'number', step: '0.01' })}
-                    {field('Currency', 'currency')}
+                    {field(`Price (${currency})`, 'price', { type: 'number', step: '0.01', hint: 'Currency is set in Settings → Regional.' })}
                     <details className="span2">
                         <summary>Advanced legacy RADIUS attributes</summary>
                         <p>Explicit access adapters ignore these attributes. Routine provisioning uses the plan fields above.</p>

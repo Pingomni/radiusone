@@ -152,7 +152,8 @@ final class Invoices
             'payment_state' => $paymentState,
             'subtitle' => 'Generated on ' . date('Y-m-d H:i'),
             'app_name' => (string) config('app.name', 'FreeRADIUS Web'),
-            'logo_path' => str_starts_with($logo, '/uploads/branding/') ? Branding::file(basename($logo)) : null,
+            // An uploaded logo wins; otherwise the RadiusWeb logo (white background: the PDF writer drops transparency).
+            'logo_path' => str_starts_with($logo, '/uploads/branding/') ? Branding::file(basename($logo)) : ($logo === '' ? public_path('brand/logo-invoice.png') : null),
             'meta' => [
                 'Invoice' => (string) $invoice['invoice_number'],
                 'Customer' => Clients::displayName($invoice),

@@ -19,7 +19,9 @@ export interface SharedProps {
     auth: { user: AuthUser | null; permissions: string[] };
     flash: Flash | null;
     logo: string | null;
-    clock: { time: string; timezone: string };
+    clock: { time: string; now: number; timezone: string };
+    /** System currency code (Settings → Regional): EUR, USD or ALL. */
+    currency: string;
     errors: Record<string, string>;
     [key: string]: unknown;
 }

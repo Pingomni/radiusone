@@ -7,6 +7,7 @@ namespace App\Http\Controllers;
 use App\Http\Support\Format;
 use App\Support\Audit;
 use App\Support\Auth;
+use App\Support\Currency;
 use App\Support\Db;
 use App\Support\RadiusRepository;
 use App\Support\StaticIpPool;
@@ -57,7 +58,7 @@ final class ServiceController extends Controller
         }
         $values = ['id' => $r ? (int) $r['id'] : ''] + $values + ['enabled' => $r ? (bool) $r['enabled'] : true];
         if (!$r) {
-            $values = array_merge($values, ['ip_mode' => 'pool', 'simultaneous_use' => '1', 'billing_mode' => 'prepaid', 'price' => '0.00', 'currency' => 'USD']);
+            $values = array_merge($values, ['ip_mode' => 'pool', 'simultaneous_use' => '1', 'billing_mode' => 'prepaid', 'price' => '0.00', 'currency' => Currency::code()]);
         }
         return Inertia::render('services/Form', [
             'service' => $values,
@@ -75,6 +76,7 @@ final class ServiceController extends Controller
         // Vendor rates are derived from the speeds; billing period is always monthly.
         $input['mikrotik_rate_limit'] = '';
         $input['billing_period'] = 'monthly';
+        $input['currency'] = Currency::code();
         $before = $id ? Db::row('SELECT * FROM service_metadata WHERE id=?', [$id]) : null;
         try {
             $saved = RadiusRepository::saveService($input, $id);
@@ -111,7 +113,7 @@ final class ServiceController extends Controller
                     'name' => (string) $p['name'],
                     'key' => (string) $p['pool_key'],
                     'ips' => count($ips),
-                    'price' => Format::money($p['price'] ?? 0) . ' ' . ($p['currency'] ?? 'USD'),
+                    'price' => Currency::amount($p['price'] ?? 0, $p['currency'] ?? null),
                     'enabled' => (bool) $p['enabled'],
                     'assigned' => count(array_intersect($assigned, $ips)),
                 ];
@@ -130,7 +132,7 @@ final class ServiceController extends Controller
             'pool_key' => (string) ($pool['pool_key'] ?? ''),
             'ip_ranges' => (string) ($pool['ip_ranges'] ?? ''),
             'price' => (string) ($pool['price'] ?? '0.00'),
-            'currency' => (string) ($pool['currency'] ?? 'USD'),
+            'currency' => Currency::code(),
             'description' => (string) ($pool['description'] ?? ''),
             'enabled' => $pool ? (bool) $pool['enabled'] : true,
         ], 'isNew' => !$pool]);

@@ -93,6 +93,7 @@ const SECTIONS: [key: string, label: string, href: string, icon: string, hint: s
     ['users', 'Users', '/settings?tab=users', 'clients', 'Roles and 2FA'],
     ['notifications', 'Notifications', '/settings?tab=notifications', 'mail', 'Gateways, templates, history'],
     ['branding', 'Branding', '/settings?tab=branding', 'image', 'Workspace identity'],
+    ['regional', 'Regional', '/settings?tab=regional', 'calendar', 'Time zone and currency'],
     ['backups', 'Backups', '/settings?tab=backups', 'server', 'Encrypted remote copies'],
     ['retention', 'Data retention', '/settings?tab=retention', 'logs', 'Session and login records'],
 ];

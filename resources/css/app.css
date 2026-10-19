@@ -1152,8 +1152,8 @@ td .list-menu > summary:hover { border-color: var(--line); background: var(--sur
   overflow: hidden;
   border-radius: var(--radius);
 }
-.mark { background: var(--accent-solid); color: #fff; }
-.mark svg.icon { width: 60%; height: 60%; stroke-width: 2; }
+.mark { overflow: hidden; background: transparent; }
+.mark > svg { display: block; width: 100%; height: 100%; }
 .custom-brand { padding: 2px; border: 1px solid var(--line); background: #fff; }
 .custom-brand img { width: 100%; height: 100%; object-fit: contain; }
 .brand-fallback { color: var(--accent); }
@@ -1161,91 +1161,62 @@ td .list-menu > summary:hover { border-color: var(--line); background: var(--sur
 /* --------------------------------------------------------------------------
    Sign-in, two-factor and re-authentication
    -------------------------------------------------------------------------- */
-.login { min-height: 100vh; display: grid; background: var(--bg); }
-.login-shell { display: grid; grid-template-columns: minmax(320px, 44%) minmax(0, 1fr); min-height: 100vh; }
-.login-shell:not(:has(.login-intro)) { grid-template-columns: minmax(0, 1fr); }
-.login-intro {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-5);
-  padding: 40px 48px;
-  background: var(--sidebar-bg);
-  color: var(--sidebar-text);
+.login {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: var(--sp-5) var(--sp-4);
+  background:
+    radial-gradient(900px 520px at 50% -10%, var(--accent-bg), transparent 70%),
+    var(--bg);
 }
-.login-brand { display: flex; align-items: center; gap: 10px; color: #fff; font-size: var(--fs-xl); }
-.login-brand strong { color: #fff; }
-.login-brand .mark, .login-brand .custom-brand { width: 32px; height: 32px; }
-.login-story { margin-top: auto; display: grid; gap: var(--sp-3); max-width: 440px; }
-.login-eyebrow { color: var(--sidebar-indicator); font-size: var(--fs-xs); font-weight: 600; letter-spacing: .06em; }
-.login-story h2 { color: #fff; font-size: 26px; line-height: 1.2; }
-.login-story p { color: var(--sidebar-text); font-size: var(--fs-lg); }
-.login-features, .login-points { display: grid; gap: var(--sp-3); max-width: 440px; }
-.login-features > div, .login-points > div { display: flex; gap: var(--sp-3); align-items: flex-start; }
-.login-features svg.icon, .login-points svg.icon { margin-top: 2px; color: var(--sidebar-indicator); }
-.login-features strong, .login-points strong { display: block; color: #fff; font-weight: 600; }
-.login-features small, .login-points small { display: block; color: var(--sidebar-muted); }
-.login-intro-footer { margin-top: auto; color: var(--sidebar-muted); font-size: var(--fs-sm); }
+.login-shell { display: grid; justify-items: center; gap: var(--sp-4); width: min(400px, 100%); }
+.login-footnote { color: var(--text-faint); font-size: var(--fs-sm); text-align: center; }
 
 .login-card {
   display: grid;
-  align-content: center;
   gap: var(--sp-3);
-  width: min(380px, 100%);
-  margin: 0 auto;
-  padding: 40px var(--sp-4);
+  width: 100%;
+  padding: 28px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: var(--shadow-pop);
 }
-.login-card-head { display: grid; gap: var(--sp-3); margin-bottom: var(--sp-2); }
-.login-card-head .workspace-eyebrow { color: var(--accent); font-weight: 600; letter-spacing: .04em; }
-.login-card-head h1 { margin-top: 2px; font-size: 22px; }
-.login-card-head p { margin-top: var(--sp-1); color: var(--text-muted); }
-.login-head-icon {
-  display: grid;
-  place-items: center;
-  width: 36px;
-  height: 36px;
-  border: 1px solid var(--accent-line);
-  border-radius: var(--radius);
-  background: var(--accent-bg);
-  color: var(--accent);
-}
-.login-head-icon svg.icon { width: 18px; height: 18px; }
-.login-field { display: grid; gap: var(--sp-1); font-size: var(--fs-sm); font-weight: 600; }
+.login-card-head { display: grid; justify-items: center; gap: var(--sp-1); margin-bottom: var(--sp-2); text-align: center; }
+.login-brand { display: flex; align-items: center; gap: 10px; margin-bottom: var(--sp-3); color: var(--text-strong); font-size: var(--fs-xl); }
+.login-brand .mark, .login-brand .custom-brand { width: 36px; height: 36px; border-radius: 9px; }
+.login-card-head h1 { font-size: 22px; line-height: 1.25; }
+.login-card-head p { color: var(--text-muted); }
+.login-field { display: grid; gap: 6px; font-size: var(--fs-sm); font-weight: 600; }
 .login-input { position: relative; display: flex; align-items: center; }
-.login-input > svg.icon { position: absolute; left: 10px; color: var(--text-faint); pointer-events: none; }
-.login-input input { min-height: 36px; padding-left: 34px; }
-.login-input input:not(:first-child) { padding-left: 34px; }
-.login-input input:first-child { padding-left: 10px; }
+.login-input > svg.icon { position: absolute; left: 12px; color: var(--text-faint); pointer-events: none; transition: color .15s; }
+.login-input:focus-within > svg.icon { color: var(--accent); }
+.login-input input { width: 100%; min-height: 40px; padding-left: 38px; border-radius: 8px; font-size: var(--fs-lg); }
+.login-input input:not(:first-child) { padding-left: 38px; }
+.login-input input:first-child { padding-left: 12px; }
 .login-input .password-toggle {
   position: absolute;
-  right: 4px;
-  min-height: 28px;
-  padding: 0 8px;
+  right: 5px;
+  min-height: 30px;
+  padding: 0 10px;
   border-color: transparent;
+  border-radius: 6px;
   background: transparent;
   color: var(--accent);
   font-size: var(--fs-sm);
 }
 .login-input .password-toggle:hover { background: var(--accent-bg); }
-.login-input:has(.password-toggle) input { padding-right: 64px; }
-.login-submit { min-height: 36px; margin-top: var(--sp-2); font-size: var(--fs-lg); }
+.login-input:has(.password-toggle) input { padding-right: 68px; }
+.login-submit { min-height: 42px; margin-top: var(--sp-2); border-radius: 8px; font-size: var(--fs-lg); font-weight: 600; }
+.login-card .wide { min-height: 38px; border-radius: 8px; }
 .login-help { color: var(--text-muted); font-size: var(--fs-sm); text-align: center; }
-.login-security {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 6px;
-  padding-top: var(--sp-3);
-  border-top: 1px solid var(--line);
-  color: var(--text-faint);
-  font-size: var(--fs-sm);
-}
 .login-card .flash { margin-bottom: var(--sp-1); }
 .login-card .two-factor-setup { grid-template-columns: minmax(0, 1fr); }
 
-@media (max-width: 860px) {
-  .login-shell { grid-template-columns: minmax(0, 1fr); }
-  .login-intro { padding: var(--sp-4); gap: var(--sp-3); }
-  .login-story, .login-features, .login-points, .login-intro-footer { display: none; }
+@media (max-width: 480px) {
+  .login { place-items: start center; padding-top: 40px; background: var(--bg); }
+  .login-card { padding: var(--sp-5) 20px; }
 }
 
 /* --------------------------------------------------------------------------
@@ -1906,3 +1877,43 @@ td .list-menu > summary:hover { border-color: var(--line); background: var(--sur
   .table-wrap td[data-label=""]::before, .table-wrap td.empty::before { content: none; }
   .table-wrap td.empty { display: block; text-align: center; }
 }
+
+/* Settings → Notifications → Admin alerts: checkbox groups. */
+.admin-alert-checks { display: grid; gap: var(--sp-2); margin: 0; padding: 0; border: 0; }
+.admin-alert-checks legend { margin-bottom: var(--sp-1); font-size: var(--fs-sm); font-weight: 600; }
+
+/* --------------------------------------------------------------------------
+   Documentation (/docs)
+   -------------------------------------------------------------------------- */
+.docs { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: var(--sp-5); align-items: start; }
+.docs-toc { position: sticky; top: calc(var(--topbar-h) + var(--sp-4)); display: grid; gap: 2px; max-height: calc(100vh - var(--topbar-h) - 32px); overflow-y: auto; }
+.docs-toc strong { margin-bottom: var(--sp-2); padding: 0 var(--sp-2); color: var(--text-muted); font-size: var(--fs-xs); letter-spacing: .06em; text-transform: uppercase; }
+.docs-toc a { display: flex; align-items: center; gap: var(--sp-2); padding: 6px var(--sp-2); border-radius: var(--radius); color: var(--text); font-size: var(--fs-md); }
+.docs-toc a:hover { background: var(--surface-hover); text-decoration: none; }
+.docs-toc a[aria-current="true"] { background: var(--accent-bg); color: var(--accent); font-weight: 600; }
+.docs-toc svg.icon { width: 14px; height: 14px; flex: none; }
+.docs-body { display: grid; gap: var(--sp-4); max-width: 860px; }
+.docs-intro h2 { font-size: 22px; }
+.docs-intro p { margin-top: var(--sp-1); color: var(--text-muted); }
+.docs-section { padding: var(--sp-5); border: 1px solid var(--line); border-radius: 10px; background: var(--surface); box-shadow: var(--shadow-sm); scroll-margin-top: calc(var(--topbar-h) + var(--sp-4)); line-height: 1.6; }
+.docs-section > h2 { display: flex; align-items: center; gap: var(--sp-3); margin-bottom: var(--sp-3); font-size: var(--fs-2xl); }
+.docs-section h3 { margin: var(--sp-4) 0 var(--sp-2); font-size: var(--fs-lg); scroll-margin-top: calc(var(--topbar-h) + var(--sp-4)); }
+.docs-section p + p, .docs-section p + ul, .docs-section ul + p { margin-top: var(--sp-2); }
+.docs-section ul, .docs-steps { display: grid; gap: 6px; margin: var(--sp-2) 0 0; padding-left: 22px; }
+.docs-section code { padding: 1px 5px; border-radius: 4px; background: var(--surface-2); border: 1px solid var(--line); font-family: var(--font-mono); font-size: .92em; overflow-wrap: anywhere; }
+.docs-note { display: flex; gap: var(--sp-3); margin-top: var(--sp-3); padding: var(--sp-3); border: 1px solid var(--accent-line); border-radius: var(--radius); background: var(--accent-bg); }
+.docs-note-warning { border-color: var(--warning-line); background: var(--warning-bg); }
+.docs-note > svg.icon { flex: none; margin-top: 3px; color: var(--accent); }
+.docs-note-warning > svg.icon { color: var(--warning); }
+.docs-table { margin-top: var(--sp-2); overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); }
+.docs-table table { width: 100%; border-collapse: collapse; }
+.docs-table th, .docs-table td { padding: 8px var(--sp-3); border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+.docs-table th { background: var(--surface-2); font-size: var(--fs-sm); font-weight: 600; }
+.docs-table tr:last-child td { border-bottom: 0; }
+@media (max-width: 900px) {
+  .docs { grid-template-columns: minmax(0, 1fr); }
+  .docs-toc { position: static; max-height: none; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
+  .docs-toc strong { grid-column: 1 / -1; }
+  .docs-section { padding: var(--sp-4); }
+}
+

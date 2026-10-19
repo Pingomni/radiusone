@@ -16,6 +16,7 @@ use App\Support\Audit;
 use App\Support\Auth;
 use App\Support\ClientQuery;
 use App\Support\ConnectionDiagnostics;
+use App\Support\Currency;
 use App\Support\Db;
 use App\Support\Diagnostics;
 use App\Support\Documents;
@@ -193,32 +194,32 @@ final class ClientController extends Controller
 
     private function billing(array $client, array $invoices): array
     {
-        $totals = Db::row(
-            'SELECT
+        // Per currency: invoices issued before a currency change keep theirs.
+        $sums = Db::select(
+            'SELECT currency,
                 COALESCE(SUM(CASE WHEN status NOT IN ("draft","void") THEN total_amount ELSE 0 END),0) AS billed,
                 COALESCE(SUM(CASE WHEN status NOT IN ("draft","void") THEN amount_paid ELSE 0 END),0) AS paid,
                 COALESCE(SUM(CASE WHEN status IN ("open","partial","overdue") THEN balance_due ELSE 0 END),0) AS outstanding,
                 COALESCE(SUM(CASE WHEN status = "overdue" THEN balance_due ELSE 0 END),0) AS overdue,
                 SUM(status IN ("open","partial","overdue")) AS unpaid_count,
-                SUM(status = "draft") AS draft_count,
-                MAX(currency) AS currency
-             FROM billing_invoices WHERE username=?',
+                SUM(status = "draft") AS draft_count
+             FROM billing_invoices WHERE username=? GROUP BY currency',
             [$client['username']]
-        ) ?: [];
-        $currency = (string) (($totals['currency'] ?? '') ?: '');
-        $unpaid = (int) ($totals['unpaid_count'] ?? 0);
-        $drafts = (int) ($totals['draft_count'] ?? 0);
-        $overdue = (float) ($totals['overdue'] ?? 0);
+        );
+        $total = static fn (string $column) => Currency::totals(array_column($sums, $column, 'currency'));
+        $unpaid = (int) array_sum(array_column($sums, 'unpaid_count'));
+        $drafts = (int) array_sum(array_column($sums, 'draft_count'));
+        $overdue = (float) array_sum(array_column($sums, 'overdue'));
         $stat = static fn (string $label, string $value, string $note, string $tone = '') => ['label' => $label, 'value' => trim($value), 'note' => $note, 'tone' => $tone];
         return [
             'newInvoice' => Auth::can('billing.manage') && !Clients::isArchived($client),
             'stats' => [
-                $stat('Total billed', Format::money($totals['billed'] ?? 0) . ' ' . $currency, 'Issued invoices only'),
-                $stat('Paid', Format::money($totals['paid'] ?? 0) . ' ' . $currency, 'Payments received', 'success'),
-                $stat('Still owed', Format::money($totals['outstanding'] ?? 0) . ' ' . $currency, $unpaid ? $unpaid . ' unpaid invoice' . ($unpaid === 1 ? '' : 's') : 'Nothing owed', $overdue > 0 ? 'danger' : ($unpaid ? 'warning' : '')),
+                $stat('Total billed', $total('billed'), 'Issued invoices only'),
+                $stat('Paid', $total('paid'), 'Payments received', 'success'),
+                $stat('Still owed', $total('outstanding'), $unpaid ? $unpaid . ' unpaid invoice' . ($unpaid === 1 ? '' : 's') : 'Nothing owed', $overdue > 0 ? 'danger' : ($unpaid ? 'warning' : '')),
                 $stat('Drafts', (string) $drafts, $drafts ? 'Not billed to the customer yet' : 'No drafts', $drafts ? 'info' : ''),
             ],
-            'overdue' => $overdue > 0 ? Format::money($overdue) . ' ' . $currency . ' is overdue.' : null,
+            'overdue' => $overdue > 0 ? $total('overdue') . ' is overdue.' : null,
             'invoices' => array_map([Invoices::class, 'row'], $invoices),
             'payments' => array_map(static fn (array $p) => [
                 'id' => (int) $p['id'],

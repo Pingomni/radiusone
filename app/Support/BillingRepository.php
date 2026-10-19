@@ -51,7 +51,7 @@ final class BillingRepository
         $subtotal = round($serviceSubtotal + $staticIpTotal, 2);
         $total = round($subtotal - $discount + $tax, 2);
         if ($total < 0 || $total > 9999999999.99) { throw new RuntimeException('Invoice total is outside the supported range.'); }
-        $currency = strtoupper(trim((string) ($service['currency'] ?? $staticIpCharge['currency'] ?? $input['currency'] ?? 'USD')));
+        $currency = strtoupper(trim((string) ($service['currency'] ?? $staticIpCharge['currency'] ?? $input['currency'] ?? Currency::code())));
         if(!preg_match('/^[A-Z]{3}$/D',$currency) || (isset($input['currency']) && strtoupper(trim((string)$input['currency']))!==$currency)){throw new RuntimeException('Invoice currency must be a three-letter code matching its service/add-on.');}
         if ($staticIpTotal > 0 && $staticIpCharge && strtoupper((string) $staticIpCharge['currency']) !== $currency) {
             throw new RuntimeException('Static IP pool currency must match the invoice currency.');
@@ -75,7 +75,6 @@ final class BillingRepository
         $customer = Db::row('SELECT account_status FROM customer_profiles WHERE username=? FOR UPDATE', [$username]);
         if (!$customer || $customer['account_status'] === 'archived') { throw new RuntimeException('Archived customers cannot receive new or edited invoices.'); }
         if($serviceGroup!==null && !Db::row('SELECT group_name FROM service_metadata WHERE group_name=? AND enabled=1 FOR UPDATE',[$serviceGroup])){throw new RuntimeException('Service changed; reload invoice.');}
-        if($status!=='draft' && Db::value('SELECT COUNT(*) FROM billing_invoices WHERE username=? AND currency<>? AND status NOT IN ("draft","void")',[$username,$currency])){throw new RuntimeException('Issued customer invoices must use one currency; a currency change requires a reviewed financial migration.');}
         if ($id) {
             $invoice = Db::row('SELECT * FROM billing_invoices WHERE id=? FOR UPDATE', [$id]);
             if (!$invoice) {

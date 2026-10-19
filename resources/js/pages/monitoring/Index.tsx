@@ -61,7 +61,7 @@ function OverviewBody({ data, canManage }: { data: Overview; canManage: boolean 
                         <div className="monitor-job-state">{job.tone ? <Badge tone={job.tone}>{job.state}</Badge> : <strong>{job.state}</strong>}<small>{job.detail}</small></div>
                     </div>
                 ))}
-                <p className="hint">Jobs run from cron on this server. A job that is not running leaves its feature switched off; see docs/operations for how each one is enabled.</p>
+                <p className="hint">Jobs run from cron on this server. A job that is not running leaves its feature switched off; see <Link href="/docs#server">Documentation → Server operations</Link> for the schedule.</p>
             </section>
         </>
     );

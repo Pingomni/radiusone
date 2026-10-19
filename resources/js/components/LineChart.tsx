@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { formatInZone, useServerTimezone } from '@/lib/clock';
 import { DataTable } from './table';
 import { Empty } from './ui';
 
@@ -51,6 +52,7 @@ function tableValue(value: number | null, unit: ChartData['unit']): string {
  * (arrow keys, Home, End, Escape) and a table view. One y-axis only.
  */
 export function LineChart({ data }: { data: ChartData }) {
+    const timeZone = useServerTimezone();
     const [index, setIndex] = useState<number | null>(null);
     const span = Math.max(1, data.end - data.start);
     const x = (t: number) => ((t + data.bucket / 2 - data.start) / span) * 1000;
@@ -88,7 +90,7 @@ export function LineChart({ data }: { data: ChartData }) {
     const show = (next: number) => setIndex(Math.max(0, Math.min(data.points.length - 1, next)));
     const point = index === null ? null : data.points[index];
     const pointX = point ? percentX(point[0] as number) : 0;
-    const timeLabel = (t: number) => new Date(t * 1000).toLocaleString([], data.week
+    const timeLabel = (t: number) => formatInZone(t * 1000, timeZone, data.week
         ? { weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: false }
         : { hour: '2-digit', minute: '2-digit', hour12: false });
 

@@ -56,7 +56,11 @@ final class BackupsTest extends TestCase
             ->where('backups.passphraseSet', false)
             ->where('backups.destinations', [])
             ->where('backups.localDays', 30)
-            ->where('backups.googleRedirect', 'https://frweb.test/settings/backups/google/callback'));
+            ->where('backups.s3Providers.b2', 'Backblaze B2')
+            ->where('backups.s3Providers.r2', 'Cloudflare R2')
+            ->missing('backups.s3Providers.other')
+            ->missing('backups.types.gdrive')
+            ->where('backups.keepOptions.1', '1 copy'));
         $this->post('/settings/backups/passphrase', ['passphrase' => 'short', 'passphrase_confirmation' => 'short'])->assertSessionHasErrors('passphrase');
         $this->post('/settings/backups/passphrase', ['passphrase' => 'correct horse battery', 'passphrase_confirmation' => 'correct horse batterY'])
             ->assertSessionHas('flash.message', 'The two passphrases do not match.');
@@ -66,17 +70,20 @@ final class BackupsTest extends TestCase
         $this->assertSame(7, BackupDestinations::localDays());
 
         $this->withSession(['user_id' => (int) $user['id'], 'session_version' => (int) $user['session_version'], 'reauth_at' => time() - 3600]);
-        $this->post('/settings/backups/passphrase', ['passphrase' => 'another long passphrase', 'passphrase_confirmation' => 'another long passphrase'])->assertRedirect('/reauth');
+        $this->post('/settings/backups/passphrase', ['passphrase' => 'another long passphrase', 'passphrase_confirmation' => 'another long passphrase'])->assertSessionHas('flash.type', 'success');
+        $this->assertSame('another long passphrase', BackupDestinations::passphrase());
         $this->actingAsOperator('admin');
         $this->get('/settings?tab=backups')->assertForbidden();
     }
 
-    public function test_s3_destination_is_signed_and_tested_without_exposing_the_secret(): void
+    public function test_s3_compatible_destination_is_signed_and_tested_without_exposing_the_secret(): void
     {
         $this->actingAsOperator();
-        $this->post('/settings/backups/destinations', ['type' => 's3', 'name' => 'AWS', 'enabled' => true, 'keep' => '14', 'region' => 'eu-central-1',
-            'bucket' => 'isp.backups', 'prefix' => 'radius', 'access_key' => 'AKIAEXAMPLEEXAMPLE12', 'secret_key' => 's3-secret'])->assertSessionHas('flash.type', 'success');
+        $this->post('/settings/backups/destinations', ['type' => 's3', 'name' => 'B2', 'enabled' => true, 'keep' => '1', 'provider' => 'b2', 'endpoint' => 'https://S3.eu-central-003.backblazeb2.com/', 'region' => '',
+            'bucket' => 'isp.backups', 'prefix' => 'radius', 'access_key' => '0035f1c2a3b4c5d0000000001', 'secret_key' => 's3-secret'])->assertSessionHas('flash.type', 'success');
         $id = BackupDestinations::all()[0]['id'];
+        $saved = BackupDestinations::find($id);
+        $this->assertSame(['s3.eu-central-003.backblazeb2.com', 'eu-central-003', 1], [$saved['endpoint'], $saved['region'], $saved['keep']]);
         $this->get('/settings?tab=backups')->assertInertia(fn ($page) => $page
             ->where('backups.destinations.0.secret_key_saved', true)
             ->missing('backups.destinations.0.secret_key')
@@ -91,54 +98,109 @@ final class BackupsTest extends TestCase
             }
             return [$method === 'PUT' ? 200 : 204, ''];
         });
-        $this->post('/settings/backups/destinations/' . $id . '/test')->assertSessionHas('flash.message', 'AWS works: a test file was uploaded, listed and deleted.');
+        $this->post('/settings/backups/destinations/' . $id . '/test')->assertSessionHas('flash.message', 'B2 works: a test file was uploaded, listed and deleted.');
         $this->assertSame(['PUT', 'GET', 'DELETE'], array_column($this->sent, 'method'));
-        $this->assertMatchesRegularExpression('#^https://s3\.eu-central-1\.amazonaws\.com/isp\.backups/radius/frweb-test-[0-9a-f]{8}\.txt$#', $this->sent[0]['url']);
-        $this->assertMatchesRegularExpression('#^AWS4-HMAC-SHA256 Credential=AKIAEXAMPLEEXAMPLE12/\d{8}/eu-central-1/s3/aws4_request, SignedHeaders=host;x-amz-content-sha256;x-amz-date, Signature=[0-9a-f]{64}$#', $this->sent[0]['headers']['Authorization']);
+        $this->assertMatchesRegularExpression('#^https://s3\.eu-central-003\.backblazeb2\.com/isp\.backups/radius/frweb-test-[0-9a-f]{8}\.txt$#', $this->sent[0]['url']);
+        $this->assertMatchesRegularExpression('#^AWS4-HMAC-SHA256 Credential=0035f1c2a3b4c5d0000000001/\d{8}/eu-central-003/s3/aws4_request, SignedHeaders=host;x-amz-content-sha256;x-amz-date, Signature=[0-9a-f]{64}$#', $this->sent[0]['headers']['Authorization']);
         $this->assertStringContainsString('list-type=2&prefix=radius%2Ffrweb-', $this->sent[1]['url']);
 
-        // Hosts other than S3 are refused even with a crafted region.
-        $this->post('/settings/backups/destinations', ['type' => 's3', 'name' => 'Bad', 'region' => 'evil.com/x', 'bucket' => 'b', 'access_key' => 'AKIAEXAMPLEEXAMPLE12', 'secret_key' => 'x'])
+        // Cloudflare R2 signs with region "auto".
+        $this->post('/settings/backups/destinations', ['type' => 's3', 'name' => 'R2', 'enabled' => true, 'keep' => '3', 'provider' => 'r2', 'endpoint' => '0123abcd4567ef890123abcd4567ef89.r2.cloudflarestorage.com',
+            'bucket' => 'radius-backups', 'access_key' => '6d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a', 'secret_key' => 'r2-secret'])->assertSessionHas('flash.type', 'success');
+        $this->assertSame('auto', BackupDestinations::all()[1]['region']);
+
+        // An endpoint with a path or another scheme is refused.
+        $this->post('/settings/backups/destinations', ['type' => 's3', 'name' => 'Bad', 'provider' => 'b2', 'endpoint' => 'evil.com/x', 'bucket' => 'b', 'access_key' => 'AKIAEXAMPLEEXAMPLE12', 'secret_key' => 'x'])
             ->assertSessionHas('flash.type', 'danger');
+        // The endpoint must be on the chosen provider's domain, and a provider is required.
+        $this->post('/settings/backups/destinations', ['type' => 's3', 'name' => 'Bad', 'provider' => 'b2', 'endpoint' => 's3.example.com', 'bucket' => 'b', 'access_key' => 'AKIAEXAMPLEEXAMPLE12', 'secret_key' => 'x'])
+            ->assertSessionHas('flash.message', 'A Backblaze B2 endpoint ends in .backblazeb2.com. Copy it from the provider (see Documentation → Backups).');
+        $this->post('/settings/backups/destinations', ['type' => 's3', 'name' => 'Bad', 'provider' => 'other', 'endpoint' => 's3.example.com', 'bucket' => 'b', 'access_key' => 'AKIAEXAMPLEEXAMPLE12', 'secret_key' => 'x'])
+            ->assertSessionHas('flash.message', 'Choose the storage provider under Type.');
+        $this->assertCount(2, BackupDestinations::all());
     }
 
-    public function test_google_drive_connects_through_oauth_and_uploads_with_a_resumable_session(): void
+    public function test_a_pasted_bucket_address_fills_in_provider_endpoint_bucket_and_name(): void
     {
         $this->actingAsOperator();
-        $this->post('/settings/backups/destinations', ['type' => 'gdrive', 'name' => 'Drive', 'enabled' => true, 'keep' => '7',
-            'client_id' => '1234-abc.apps.googleusercontent.com', 'client_secret' => 'g-secret', 'folder' => 'ISP backups'])->assertSessionHas('flash.type', 'success');
+        $key = ['type' => 's3', 'enabled' => true, 'access_key' => '6d1e2f3a4b5c6d7e8f9a0b1c', 'secret_key' => 'secret'];
+        foreach ([
+            ['https://s3.eu-central-003.backblazeb2.com/isp-backups', 'b2', 's3.eu-central-003.backblazeb2.com', 'isp-backups', 'eu-central-003', 'freeradius-web'],
+            ['https://0123abcd4567ef890123abcd4567ef89.r2.cloudflarestorage.com/radius/nightly', 'r2', '0123abcd4567ef890123abcd4567ef89.r2.cloudflarestorage.com', 'radius', 'auto', 'nightly'],
+            ['s3.eu-central-1.wasabisys.com/isp', 'wasabi', 's3.eu-central-1.wasabisys.com', 'isp', 'eu-central-1', 'freeradius-web'],
+            ['https://isp-backups.fsn1.your-objectstorage.com/', 'hetzner', 'fsn1.your-objectstorage.com', 'isp-backups', 'fsn1', 'freeradius-web'],
+            ['https://my-space.fra1.digitaloceanspaces.com', 'spaces', 'fra1.digitaloceanspaces.com', 'my-space', 'fra1', 'freeradius-web'],
+        ] as [$url, $provider, $endpoint, $bucket, $region, $prefix]) {
+            // The chosen provider is only a starting point: the address decides.
+            $this->post('/settings/backups/destinations', $key + ['provider' => 'b2', 'url' => $url])->assertSessionHas('flash.type', 'success');
+            $saved = BackupDestinations::all()[count(BackupDestinations::all()) - 1];
+            $this->assertSame([$provider, $endpoint, $bucket, $region, $prefix, 7, true],
+                [$saved['provider'], $saved['endpoint'], $saved['bucket'], $saved['region'], $saved['prefix'], $saved['keep'], $saved['enabled']], $url);
+            $this->assertStringEndsWith(' · ' . $bucket, $saved['name']);
+        }
+
+        foreach (['https://evil.example.com/bucket', 'https://s3.eu-central-003.backblazeb2.com/'] as $bad) {
+            $this->post('/settings/backups/destinations', $key + ['provider' => 'r2', 'url' => $bad])->assertSessionHas('flash.type', 'danger');
+        }
+        $this->assertCount(5, BackupDestinations::all());
+
+        // Editing without the address keeps the bucket; a blank secret keeps the saved one.
         $id = BackupDestinations::all()[0]['id'];
-        $this->get('/settings?tab=backups')->assertInertia(fn ($page) => $page->where('backups.destinations.0.connected', false));
-
-        $start = $this->get('/settings/backups/destinations/' . $id . '/google');
-        parse_str((string) parse_url((string) $start->headers->get('Location'), PHP_URL_QUERY), $query);
-        $this->assertStringStartsWith('https://accounts.google.com/o/oauth2/v2/auth?', $start->headers->get('Location'));
-        $this->assertSame(['https://www.googleapis.com/auth/drive.file', 'offline', 'https://frweb.test/settings/backups/google/callback'], [$query['scope'], $query['access_type'], $query['redirect_uri']]);
-
-        $this->get('/settings/backups/google/callback?state=forged&code=x')->assertSessionHas('flash.type', 'danger');
-        $start = $this->get('/settings/backups/destinations/' . $id . '/google');
-        parse_str((string) parse_url((string) $start->headers->get('Location'), PHP_URL_QUERY), $query);
-        $this->provider([200, '{"refresh_token":"r-token","access_token":"a1"}'], [200, '{"access_token":"a2"}'], [200, '{"id":"folder123"}']);
-        $this->get('/settings/backups/google/callback?state=' . $query['state'] . '&code=auth-code')->assertSessionHas('flash.type', 'success');
-        $this->assertStringContainsString('code=auth-code', $this->sent[0]['body']);
-        $this->assertSame(['name' => 'ISP backups', 'mimeType' => 'application/vnd.google-apps.folder'], json_decode($this->sent[2]['body'], true));
+        $this->post('/settings/backups/destinations', ['id' => $id, 'name' => 'Offsite', 'keep' => '30', 'enabled' => false, 'access_key' => '6d1e2f3a4b5c6d7e8f9a0b1c', 'secret_key' => ''])
+            ->assertSessionHas('flash.type', 'success');
         $saved = BackupDestinations::find($id);
-        $this->assertSame(['r-token', 'folder123'], [$saved['refresh_token'], $saved['folder_id']]);
+        $this->assertSame(['Offsite', 'isp-backups', 30, false, 'secret'], [$saved['name'], $saved['bucket'], $saved['keep'], $saved['enabled'], $saved['secret_key']]);
+    }
 
-        ProviderHttp::fake(function (string $method, string $url, array $headers, $body): array {
-            $this->sent[] = compact('method', 'url', 'headers', 'body');
-            return match (true) {
-                str_contains($url, 'oauth2.googleapis.com/token') => [200, '{"access_token":"a3"}'],
-                str_contains($url, 'uploadType=resumable') => [200, '', ['location' => 'https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&upload_id=s1']],
-                $method === 'PUT' => [200, '{"id":"f1"}'],
-                $method === 'GET' => [200, json_encode(['files' => [['id' => 'f1', 'name' => json_decode($this->sent[1]['body'], true)['name']]]])],
-                default => [204, ''],
-            };
-        });
+    public function test_backblaze_needs_only_the_key(): void
+    {
+        $this->actingAsOperator();
         $this->sent = [];
-        $this->post('/settings/backups/destinations/' . $id . '/test')->assertSessionHas('flash.message', 'Drive works: a test file was uploaded, listed and deleted.');
-        $this->assertSame(['folder123'], json_decode($this->sent[1]['body'], true)['parents']);
-        $this->assertSame('https://www.googleapis.com/drive/v3/files/f1', $this->sent[array_key_last($this->sent)]['url']);
+        $responses = [[200, json_encode(['s3ApiUrl' => 'https://s3.us-west-004.backblazeb2.com', 'allowed' => ['bucketName' => 'isp-backups']])]];
+        ProviderHttp::fake(function (string $method, string $url, array $headers, $body) use (&$responses): array {
+            $this->sent[] = compact('method', 'url', 'headers', 'body');
+            return array_shift($responses) ?? [500, ''];
+        });
+        $this->post('/settings/backups/destinations', ['type' => 's3', 'enabled' => true, 'provider' => 'b2', 'url' => '', 'access_key' => '0035f1c2a3b4c5d0000000001', 'secret_key' => 'app-key'])
+            ->assertSessionHas('flash.type', 'success');
+        $this->assertSame('https://api.backblazeb2.com/b2api/v2/b2_authorize_account', $this->sent[0]['url']);
+        $this->assertSame('Basic ' . base64_encode('0035f1c2a3b4c5d0000000001:app-key'), $this->sent[0]['headers']['Authorization']);
+        $saved = BackupDestinations::all()[0];
+        $this->assertSame(['Backblaze B2 · isp-backups', 's3.us-west-004.backblazeb2.com', 'isp-backups', 'us-west-004'], [$saved['name'], $saved['endpoint'], $saved['bucket'], $saved['region']]);
+
+        // A key for the whole account with one bucket finds it; with several, the operator is asked to choose.
+        $responses = [
+            [200, json_encode(['s3ApiUrl' => 'https://s3.eu-central-003.backblazeb2.com', 'apiUrl' => 'https://api003.backblazeb2.com', 'authorizationToken' => 'tok', 'accountId' => 'acc', 'allowed' => ['bucketName' => null]])],
+            [200, json_encode(['buckets' => [['bucketName' => 'a-backups'], ['bucketName' => 'b-photos']]])],
+        ];
+        $this->post('/settings/backups/destinations', ['type' => 's3', 'provider' => 'b2', 'access_key' => '0035f1c2a3b4c5d0000000002', 'secret_key' => 'app-key'])
+            ->assertSessionHas('flash.message', fn (string $m) => str_contains($m, '2 buckets (a-backups, b-photos)'));
+        $this->assertSame('https://api003.backblazeb2.com/b2api/v2/b2_list_buckets', $this->sent[2]['url']);
+        $this->assertSame('tok', $this->sent[2]['headers']['Authorization']);
+
+        $responses = [[401, json_encode(['message' => 'bad key'])]];
+        $this->post('/settings/backups/destinations', ['type' => 's3', 'provider' => 'b2', 'access_key' => '0035f1c2a3b4c5d0000000003', 'secret_key' => 'wrong'])
+            ->assertSessionHas('flash.message', fn (string $m) => str_contains($m, 'Backblaze did not accept this key'));
+        $this->assertCount(1, BackupDestinations::all());
+    }
+
+    public function test_sftp_server_must_be_user_at_host(): void
+    {
+        $this->actingAsOperator();
+        $this->post('/settings/backups/destinations', ['type' => 'sftp', 'server' => 'backup@nas example'])
+            ->assertSessionHas('flash.message', fn (string $m) => str_contains($m, 'user@host'));
+        $this->assertSame([], BackupDestinations::all());
+    }
+
+    public function test_retired_google_drive_and_amazon_only_destinations_are_dropped(): void
+    {
+        $this->actingAsOperator();
+        \App\Support\Settings::save('backup_destinations', json_encode([
+            ['id' => 'aaaaaaaaaaaa', 'type' => 'gdrive', 'name' => 'Drive', 'enabled' => true, 'keep' => 7],
+            ['id' => 'bbbbbbbbbbbb', 'type' => 's3', 'name' => 'AWS', 'enabled' => true, 'keep' => 7, 'region' => 'eu-central-1', 'bucket' => 'b'],
+        ]), true);
+        $this->assertSame([], BackupDestinations::all());
+        $this->get('/settings/backups/destinations/aaaaaaaaaaaa/google')->assertNotFound();
     }
 
     public function test_nightly_backup_to_sftp_is_encrypted_and_old_copies_are_pruned(): void
@@ -150,9 +212,12 @@ final class BackupsTest extends TestCase
         $this->post('/settings/backups/passphrase', ['passphrase' => 'correct horse battery', 'passphrase_confirmation' => 'correct horse battery']);
         $port = $this->startSshd();
         $remote = $this->work . '/remote';
-        $this->post('/settings/backups/destinations', ['type' => 'sftp', 'name' => 'Office NAS', 'enabled' => true, 'keep' => '7',
-            'host' => '127.0.0.1', 'port' => (string) $port, 'user' => posix_getpwuid(posix_geteuid())['name'], 'path' => $remote])->assertSessionHas('flash.type', 'success');
+        // One field for the server; the name and copies to keep take their defaults.
+        $user = posix_getpwuid(posix_geteuid())['name'];
+        $this->post('/settings/backups/destinations', ['type' => 'sftp', 'enabled' => true, 'server' => $user . '@127.0.0.1:' . $port, 'path' => $remote])->assertSessionHas('flash.type', 'success');
         $destination = BackupDestinations::all()[0];
+        $this->assertSame([$user . '@127.0.0.1', '127.0.0.1', (string) $port, $user, 7, true],
+            [$destination['name'], $destination['host'], $destination['port'], $destination['user'], $destination['keep'], $destination['enabled']]);
         $this->assertStringStartsWith('ssh-ed25519 ', $destination['public_key']);
         $this->assertStringContainsString('(ED25519)', $destination['fingerprint']);
         $this->post('/settings/backups/destinations/' . $destination['id'] . '/test')->assertSessionHas('flash.message', fn ($m) => str_contains($m, 'add the public key'));
@@ -193,8 +258,8 @@ final class BackupsTest extends TestCase
     {
         $this->actingAsOperator();
         BackupDestinations::update('x', []);
-        $this->post('/settings/backups/destinations', ['type' => 's3', 'name' => 'AWS', 'enabled' => true, 'keep' => '7', 'region' => 'eu-central-1',
-            'bucket' => 'isp-backups', 'access_key' => 'AKIAEXAMPLEEXAMPLE12', 'secret_key' => 's3-secret']);
+        $this->post('/settings/backups/destinations', ['type' => 's3', 'name' => 'B2', 'enabled' => true, 'keep' => '7', 'provider' => 'b2', 'endpoint' => 's3.eu-central-003.backblazeb2.com',
+            'bucket' => 'isp-backups', 'access_key' => '0035f1c2a3b4c5d0000000001', 'secret_key' => 's3-secret']);
         $this->provider();
         $local = $this->work . '/local';
         for ($i = 1; $i <= 6; $i++) {

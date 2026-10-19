@@ -12,6 +12,7 @@ use App\Http\Support\Present;
 use App\Support\Audit;
 use App\Support\Auth;
 use App\Support\BillingRepository;
+use App\Support\Currency;
 use App\Support\Db;
 use App\Support\Diagnostics;
 use App\Support\Entitlement;
@@ -47,23 +48,29 @@ final class BillingController extends Controller
     {
         $filters = array_map(static fn ($v) => is_scalar($v) ? trim((string) $v) : '', $request->only(self::FILTERS)) + array_fill_keys(self::FILTERS, '');
         $result = InvoiceQuery::page($request->query(), (int) $request->query('page', 1));
-        $totals = Db::row(
-            'SELECT
+        // Per currency: invoices issued before a currency change keep theirs.
+        $sums = Db::select(
+            'SELECT currency,
                 COUNT(*) AS invoices,
                 COALESCE(SUM(CASE WHEN status NOT IN ("paid", "void", "draft") THEN balance_due ELSE 0 END),0) AS outstanding,
                 COALESCE(SUM(CASE WHEN status = "overdue" THEN balance_due ELSE 0 END),0) AS overdue
-             FROM billing_invoices'
-        ) ?: ['invoices' => 0, 'outstanding' => 0, 'overdue' => 0];
-        // Money actually received this month, including partial payments and payments on older invoices.
-        $totals['paid_month'] = Db::value('SELECT COALESCE(SUM(amount),0) FROM billing_payments WHERE payment_date >= DATE_FORMAT(CURDATE(), "%Y-%m-01")');
+             FROM billing_invoices GROUP BY currency'
+        );
+        $totals = [
+            'invoices' => array_sum(array_column($sums, 'invoices')),
+            'outstanding' => array_column($sums, 'outstanding', 'currency'),
+            'overdue' => array_column($sums, 'overdue', 'currency'),
+            // Money actually received this month, including partial payments and payments on older invoices.
+            'paid_month' => array_column(Db::select('SELECT currency, SUM(amount) AS amount FROM billing_payments WHERE payment_date >= DATE_FORMAT(CURDATE(), "%Y-%m-01") GROUP BY currency'), 'amount', 'currency'),
+        ];
         $manage = Auth::can('billing.manage');
 
         return Inertia::render('billing/Index', [
             'filters' => $filters,
             'metrics' => [
-                Present::metric('Outstanding', Format::money($totals['outstanding']), 'billing', (float) $totals['outstanding'] > 0 ? 'warning' : ''),
-                Present::metric('Overdue', Format::money($totals['overdue']), 'billing', (float) $totals['overdue'] > 0 ? 'danger' : ''),
-                Present::metric('Received this month', Format::money($totals['paid_month']), 'billing', 'success'),
+                Present::metric('Outstanding', Currency::totals($totals['outstanding']), 'billing', array_sum($totals['outstanding']) > 0 ? 'warning' : ''),
+                Present::metric('Overdue', Currency::totals($totals['overdue']), 'billing', array_sum($totals['overdue']) > 0 ? 'danger' : ''),
+                Present::metric('Received this month', Currency::totals($totals['paid_month']), 'billing', 'success'),
                 Present::metric('Invoices', (int) $totals['invoices'], 'billing'),
             ],
             'result' => [
@@ -168,8 +175,8 @@ final class BillingController extends Controller
             'static_ip_pool_key' => $staticPool,
             'billing_period' => $period,
             'description' => (string) ($item['description'] ?? ($serviceName !== '' ? $serviceName . ' service' : 'Internet service')),
-            // Without a plan yet, the currency most plans use (not a fixed USD).
-            'currency' => (string) ($invoice['currency'] ?? $prefill['currency'] ?? (Db::value('SELECT currency FROM service_metadata WHERE enabled=1 GROUP BY currency ORDER BY COUNT(*) DESC LIMIT 1') ?: 'USD')),
+            // Without a plan yet, the system currency (Settings → Regional).
+            'currency' => (string) ($invoice['currency'] ?? $prefill['currency'] ?? Currency::code()),
             'discount_amount' => (string) ($invoice['discount_amount'] ?? '0.00'),
             'tax_amount' => (string) ($invoice['tax_amount'] ?? '0.00'),
             'issue_date' => $issueDate,

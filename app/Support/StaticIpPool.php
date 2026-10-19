@@ -48,7 +48,7 @@ final class StaticIpPool
         $name=trim((string)($input['name'] ?? ''));$key=trim((string)($input['pool_key'] ?? ''));
         $ranges=trim((string)($input['ip_ranges'] ?? ''));$ips=self::parse($ranges);
         if($name==='' || !preg_match('/^[a-zA-Z0-9_-]{1,80}$/D',$key) || !$ips){throw new RuntimeException('Valid pool name, key and ranges are required.');}
-        $price=trim((string)($input['price'] ?? '0'));$currency=strtoupper((string)($input['currency'] ?? 'USD'));
+        $price=trim((string)($input['price'] ?? '0'));$currency=Currency::code();
         if(!preg_match('/^\d{1,10}(?:\.\d{1,2})?$/D',$price) || !preg_match('/^[A-Z]{3}$/D',$currency)){throw new RuntimeException('Invalid pool price or currency.');}
         $enabled=!empty($input['enabled'])?1:0;
         $pdo=Db::pdo();$pdo->beginTransaction();

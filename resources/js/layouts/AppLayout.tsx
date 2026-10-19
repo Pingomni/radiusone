@@ -1,8 +1,9 @@
 import { Head, Link, router, usePage } from '@inertiajs/react';
-import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
+import { Fragment, useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import Icon from '@/components/Icon';
 import { FlashMessage } from '@/components/ui';
 import { useCan, useShared } from '@/lib/auth';
+import { useServerClock } from '@/lib/clock';
 
 // Each label appears once: items are listed in group order.
 const NAV: [href: string, label: string, permission: string, icon: string, group: string][] = [
@@ -16,6 +17,7 @@ const NAV: [href: string, label: string, permission: string, icon: string, group
     ['/reports', 'Reports', 'reports.view', 'reports', 'Workspace'],
     ['/logs', 'Logs', 'logs.view', 'logs', 'Workspace'],
     ['/settings', 'Settings', 'settings.manage', 'settings', 'Workspace'],
+    ['/docs', 'Documentation', 'settings.manage', 'book', 'Workspace'],
 ];
 
 const CONTEXTS: Record<string, string> = {
@@ -30,6 +32,7 @@ const CONTEXTS: Record<string, string> = {
     reports: 'Workspace / Insights',
     logs: 'Workspace / Activity',
     settings: 'Workspace / Administration',
+    docs: 'Workspace / Administration',
     profile: 'Workspace / My account',
 };
 
@@ -43,7 +46,24 @@ export function BrandLogo({ className = 'brand-logo' }: { className?: string }) 
             </span>
         );
     }
-    return <span className={`mark ${className}`}><Icon name="signal" /></span>;
+    return <span className={`mark ${className}`}><BrandMark /></span>;
+}
+
+/** The RadiusWeb mark (public/brand/logo-mark.svg): an R whose leg runs out as a network link to a node. */
+export function BrandMark() {
+    const id = `rw-${useId().replace(/:/g, '')}`;
+    const line = { stroke: '#fff', strokeWidth: 6.5, strokeLinecap: 'round', strokeLinejoin: 'round', fill: 'none' } as const;
+    return (
+        <svg viewBox="0 0 64 64" aria-hidden="true" focusable="false">
+            <defs>
+                <linearGradient id={id} x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stopColor="#2f6bf0" /><stop offset="1" stopColor="#4338ca" /></linearGradient>
+            </defs>
+            <rect width="64" height="64" rx="15" fill={`url(#${id})`} />
+            <path d="M22 47V17h10.5a8.75 8.75 0 0 1 0 17.5H22" {...line} />
+            <path d="M32 34.5L40.5 43" {...line} />
+            <circle cx="44.5" cy="47" r="5.5" fill="#5eead4" />
+        </svg>
+    );
 }
 
 function ThemeToggle() {
@@ -94,6 +114,7 @@ function useMobileNav() {
 /** Workspace shell: sidebar, topbar and page feedback (legacy render()). */
 export default function AppLayout({ title, children }: { title: string; children: ReactNode }) {
     const { auth, flash, clock } = useShared();
+    const time = useServerClock();
     const can = useCan();
     const { url } = usePage();
     const path = url.split('?')[0];
@@ -216,7 +237,7 @@ export default function AppLayout({ title, children }: { title: string; children
                         </form>
                     )}
                     <div className="operator">
-                        <span className="topbar-clock" title="All times are shown in this timezone">{clock.time} {clock.timezone}</span>
+                        <span className="topbar-clock" title="All times are shown in this timezone">{time} {clock.timezone}</span>
                         <ThemeToggle />
                         <Link className="operator-id" href="/profile" title="My profile">
                             <Icon name="user" />

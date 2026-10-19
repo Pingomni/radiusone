@@ -11,29 +11,10 @@ export default function Login() {
     const described = flash ? 'page-feedback' : undefined;
 
     return (
-        <AuthLayout
-            title="Login"
-            intro={
-                <>
-                    <div className="login-story">
-                        <span className="login-eyebrow">YOUR OPERATIONS, CONNECTED</span>
-                        <h2>More clarity.<br />Better connections.</h2>
-                        <p>A thoughtful workspace for your customers, network and everyday operations.</p>
-                    </div>
-                    <div className="login-features">
-                        <div><Icon name="clients" /><span><strong>Customers, in focus</strong><small>Accounts, services and documents together.</small></span></div>
-                        <div><Icon name="billing" /><span><strong>Billing, simplified</strong><small>A clear view of invoices and payments.</small></span></div>
-                        <div><Icon name="signal" /><span><strong>Your network, connected</strong><small>Devices and accounting in one workspace.</small></span></div>
-                    </div>
-                    <div className="login-intro-footer">Built for the people behind the connection.</div>
-                </>
-            }
-        >
+        <AuthLayout title="Login">
             <AuthCard
-                icon="lock"
-                eyebrow="WELCOME BACK"
-                heading="Sign in to your workspace"
-                lead="Enter your operator credentials to continue."
+                heading="Welcome back"
+                lead="Sign in with your operator credentials."
                 onSubmit={(event) => {
                     event.preventDefault();
                     form.post('/login', { onFinish: () => form.reset('password') });
@@ -75,7 +56,6 @@ export default function Login() {
                 </div>
                 <button className="primary login-submit" disabled={form.processing}>Sign in <span aria-hidden="true">&rarr;</span></button>
                 <p className="login-help">Need access? Contact your workspace administrator.</p>
-                <div className="login-security"><Icon name="shield" /><span>Secure operator access</span></div>
             </AuthCard>
         </AuthLayout>
     );

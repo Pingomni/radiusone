@@ -14,8 +14,8 @@ final class SubscriberPolicy
     public static function ensure(int $customerId): array
     {
         if(!Db::pdo()->inTransaction()){throw new RuntimeException('Policy publication requires a transaction.');}
-        Db::exec('INSERT IGNORE INTO billing_accounts (legacy_customer_id,created_at) VALUES (?,UTC_TIMESTAMP())',[$customerId]);
-        Db::exec('INSERT IGNORE INTO subscriptions (customer_id,billing_account_id,created_at,updated_at) SELECT ?,id,UTC_TIMESTAMP(),UTC_TIMESTAMP() FROM billing_accounts WHERE legacy_customer_id=?',[$customerId,$customerId]);
+        Db::exec('INSERT IGNORE INTO billing_accounts (legacy_customer_id,created_at) VALUES (?,NOW())',[$customerId]);
+        Db::exec('INSERT IGNORE INTO subscriptions (customer_id,billing_account_id,created_at,updated_at) SELECT ?,id,NOW(),NOW() FROM billing_accounts WHERE legacy_customer_id=?',[$customerId,$customerId]);
         $sub=Db::row('SELECT * FROM subscriptions WHERE customer_id=? FOR UPDATE',[$customerId]);
         $lock='frweb:subscription:'.substr(hash('sha256',(string)Db::value('SELECT DATABASE()')),0,20).':'.$sub['id'];
         if(!isset(self::$locks[$lock])){
@@ -68,15 +68,15 @@ final class SubscriberPolicy
         $changed=$hash!==$sub['policy_hash'];
         if($changed) {
             $revision++;
-            Db::exec('INSERT INTO policy_revisions (subscription_id,revision,policy_json,created_at) VALUES (?,?,?,UTC_TIMESTAMP())',[$sub['id'],$revision,$json]);
+            Db::exec('INSERT INTO policy_revisions (subscription_id,revision,policy_json,created_at) VALUES (?,?,?,NOW())',[$sub['id'],$revision,$json]);
             $previous=$sub['policy_revision']?Db::value('SELECT policy_json FROM policy_revisions WHERE subscription_id=? AND revision=?',[$sub['id'],$sub['policy_revision']]):null;
             $previous=$previous?json_decode($previous,true,512,JSON_THROW_ON_ERROR):[];
             $action=(!$entitled)?'suspend':(($previous['entitlement']??'')==='suspended' || ($previous['entitlement']??'')==='expired'?'restore':'apply');
-            Db::exec('INSERT INTO network_operations (subscription_id,policy_revision,action,dedupe_key,available_at,created_at,updated_at) VALUES (?,?,?,?,UTC_TIMESTAMP(),UTC_TIMESTAMP(),UTC_TIMESTAMP())',[$sub['id'],$revision,$action,$sub['id'].':'.$revision.':'.$action]);
+            Db::exec('INSERT INTO network_operations (subscription_id,policy_revision,action,dedupe_key,available_at,created_at,updated_at) VALUES (?,?,?,?,NOW(),NOW(),NOW())',[$sub['id'],$revision,$action,$sub['id'].':'.$revision.':'.$action]);
         }
         $source=$blocked?($sub['suspension_source']?:'manual'):null;
-        Db::exec('UPDATE subscriptions SET policy_hash=?,policy_revision=?,service_revision=?,dirty=0,next_transition_at=?,suspension_source=?,provisioning_state=IF(?,"pending",provisioning_state),last_error=IF(?, ?,last_error),updated_at=UTC_TIMESTAMP() WHERE id=?',
-            [$hash,$revision,(int)($selected['policy_revision']??0),$until?gmdate('Y-m-d H:i:s',$until):null,$source,(int)$changed,(int)$changed,$gate,$sub['id']]);
+        Db::exec('UPDATE subscriptions SET policy_hash=?,policy_revision=?,service_revision=?,dirty=0,next_transition_at=?,suspension_source=?,provisioning_state=IF(?,"pending",provisioning_state),last_error=IF(?, ?,last_error),updated_at=NOW() WHERE id=?',
+            [$hash,$revision,(int)($selected['policy_revision']??0),$until?date('Y-m-d H:i:s',$until):null,$source,(int)$changed,(int)$changed,$gate,$sub['id']]);
         // Renames remove only authorization publication; raw events/identity history are untouched.
         Db::exec('DELETE FROM access_policies WHERE subscription_id=? AND username<>?',[$sub['id'],$client['username']]);
         Db::exec('INSERT INTO access_policies (username,subscription_id,revision,adapter,source_ip,listener_key,circuit_id,dhcp_server,dhcp_client_id,mac_address,allowed,valid_until,reason) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE subscription_id=VALUES(subscription_id),revision=VALUES(revision),adapter=VALUES(adapter),source_ip=VALUES(source_ip),listener_key=VALUES(listener_key),circuit_id=VALUES(circuit_id),dhcp_server=VALUES(dhcp_server),dhcp_client_id=VALUES(dhcp_client_id),mac_address=VALUES(mac_address),allowed=VALUES(allowed),valid_until=VALUES(valid_until),reason=VALUES(reason)',
@@ -103,7 +103,7 @@ final class SubscriberPolicy
         while($processed<$limit){
             $pdo=Db::pdo();$pdo->beginTransaction();
             try{
-                $row=Db::row('SELECT c.username FROM subscriptions u JOIN customer_profiles c ON c.id=u.customer_id JOIN service_metadata s ON s.group_name=c.service_group WHERE c.account_status<>"archived" AND (u.dirty=1 OR u.next_transition_at<=UTC_TIMESTAMP() OR u.service_revision<>s.policy_revision) ORDER BY u.dirty DESC,u.next_transition_at,u.id LIMIT 1 FOR UPDATE SKIP LOCKED');
+                $row=Db::row('SELECT c.username FROM subscriptions u JOIN customer_profiles c ON c.id=u.customer_id JOIN service_metadata s ON s.group_name=c.service_group WHERE c.account_status<>"archived" AND (u.dirty=1 OR u.next_transition_at<=NOW() OR u.service_revision<>s.policy_revision) ORDER BY u.dirty DESC,u.next_transition_at,u.id LIMIT 1 FOR UPDATE SKIP LOCKED');
                 if(!$row){$pdo->commit();self::releaseLocks();break;}
                 RadiusRepository::provisionClient($row['username']);$pdo->commit();self::releaseLocks();$processed++;
             }catch(\Throwable $e){if($pdo->inTransaction()){$pdo->rollBack();self::releaseLocks();}throw $e;}

@@ -6,14 +6,19 @@ use DateTimeZone;
 use RuntimeException;
 final class Entitlement
 {
+    /** The business day follows the server time zone unless BUSINESS_TIMEZONE is set. */
+    private static function zone(): string
+    {
+        return (string) (App::env('BUSINESS_TIMEZONE') ?: date_default_timezone_get());
+    }
     public static function today(?int $now = null): string
     {
         return (new DateTimeImmutable('@' . ($now ?? time())))
-            ->setTimezone(new DateTimeZone((string)App::env('BUSINESS_TIMEZONE','Europe/Tirane')))->format('Y-m-d');
+            ->setTimezone(new DateTimeZone(self::zone()))->format('Y-m-d');
     }
     public static function expiryInstant(string $date): int
     {
-        $day = DateTimeImmutable::createFromFormat('!Y-m-d', $date, new DateTimeZone((string)App::env('BUSINESS_TIMEZONE','Europe/Tirane')));
+        $day = DateTimeImmutable::createFromFormat('!Y-m-d', $date, new DateTimeZone(self::zone()));
         if (!$day || $day->format('Y-m-d') !== $date) { throw new RuntimeException('Invalid expiry date.'); }
         // Epoch values avoid depending on the RADIUS daemon's local timezone.
         return $day->modify('+1 day')->getTimestamp();

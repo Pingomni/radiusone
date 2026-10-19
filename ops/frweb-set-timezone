@@ -1,0 +1,96 @@
+#!/usr/bin/env bash
+# Root helper behind Settings → Regional → Time zone. Moves the server, MariaDB, FreeRADIUS and the
+# portal to another time zone and converts the times already stored, so old and new records line up.
+#   frweb-set-timezone schedule <Zone/Name>   what www-data may run through sudo: checks the zone and
+#                                             starts "apply" five seconds later in a transient systemd
+#                                             unit, so the web request that asked for it can answer first
+#   frweb-set-timezone apply <Zone/Name>      the change itself (also run by ops/apply-timezone.sh)
+# Installed by ops/apply-service-control.sh as /usr/local/sbin/frweb-set-timezone. Progress and the result
+# go to /var/log/freeradius-web/timezone.log, which the Settings page shows.
+#
+# Every DATETIME column in the radius database holds server-local time; each is converted with CONVERT_TZ
+# (old zone → new zone), which follows both zones' summer/winter time history. radpostauth.authdate is a
+# TIMESTAMP (stored as UTC by MariaDB) and epoch columns (SNMP samples) need no conversion. The portal is
+# in maintenance mode and cron is stopped meanwhile; FreeRADIUS is stopped only while radacct is converted.
+# A database backup is taken first; undo by running the helper again with the old zone.
+set -Eeuo pipefail
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+app=/opt/freeradius-web-laravel
+log=/var/log/freeradius-web/timezone.log
+
+mode=${1:-}
+zone=${2:-}
+[[ "$zone" =~ ^[A-Za-z]+(/[A-Za-z0-9_+-]+){0,2}$ || "$zone" == "UTC" ]] || { echo "Not a time zone name: $zone" >&2; exit 2; }
+timedatectl list-timezones | grep -qxF "$zone" || { echo "Unknown time zone: $zone" >&2; exit 2; }
+old=$(timedatectl show -p Timezone --value)
+[[ "$old" != "$zone" ]] || { echo "The server already runs on $zone."; exit 0; }
+
+case "$mode" in
+  schedule)
+    if systemctl list-units --no-legend 'frweb-timezone-*' | grep -q .; then echo 'A time zone change is already running.' >&2; exit 3; fi
+    mkdir -p "$(dirname "$log")"
+    echo "$(date '+%F %T %Z') scheduled: $old → $zone" >> "$log"
+    systemd-run --quiet --collect --on-active=5 --unit="frweb-timezone-$(date +%s)" /usr/local/sbin/frweb-set-timezone apply "$zone"
+    echo "Time zone change to $zone scheduled."
+    exit 0 ;;
+  apply) ;;
+  *) echo "Usage: $0 schedule|apply <Zone/Name>" >&2; exit 2 ;;
+esac
+
+mkdir -p "$(dirname "$log")"
+exec > >(tee -a "$log") 2>&1
+echo "$(date '+%F %T %Z') started: $old → $zone"
+cd "$app"
+
+sql() { mariadb -N "$@"; }
+[[ "$(sql -e 'SELECT @@global.time_zone')" =~ ^(SYSTEM|$old)$ ]] || { echo "failed: MariaDB time_zone is $(sql -e 'SELECT @@global.time_zone'), not the server's $old."; exit 1; }
+
+echo '== backup'
+FRWEB_OPERATOR_ENV_FILE=/etc/freeradius-web/backup.env LOG_CHANNEL=stderr php artisan frweb:backup --no-upload
+
+echo '== time zone tables for MariaDB'
+mariadb-tzinfo-to-sql /usr/share/zoneinfo 2>/dev/null | mariadb mysql
+[[ "$(sql -e "SELECT CONVERT_TZ('2026-01-01 00:00:00', '$old', '$zone') IS NOT NULL")" == 1 ]] || { echo "failed: MariaDB cannot convert $old → $zone."; exit 1; }
+
+radius_stopped=0
+resume() {
+  [[ $radius_stopped == 1 ]] && systemctl start freeradius
+  php artisan up >/dev/null 2>&1 || true
+  systemctl start cron
+}
+trap 'resume; echo "$(date "+%F %T %Z") failed: see the lines above. Stored times may be partly converted: restore the backup."' ERR
+
+echo '== pause the portal and scheduled jobs'
+systemctl stop cron
+php artisan down --retry=30
+sleep 5   # let running requests and jobs finish
+
+echo "== switch to $zone"
+timedatectl set-timezone "$zone"
+echo "$zone" > /etc/timezone   # timedatectl leaves this Debian copy behind
+sql -e "SET GLOBAL time_zone = '$zone'"
+# The portal follows the server's zone (config/app.php) unless APP_TIMEZONE pins it.
+sed -i '/^APP_TIMEZONE=/d' .env
+
+echo '== convert stored times'
+convert() {   # $1: SQL condition on table_name; one transaction for the lot
+  local statements
+  statements=$(sql -e "SELECT CONCAT('UPDATE \`', table_name, '\` SET \`', column_name, '\` = CONVERT_TZ(\`', column_name, '\`, ''$old'', ''$zone'') WHERE \`', column_name, '\` IS NOT NULL;')
+    FROM information_schema.columns WHERE table_schema = 'radius' AND data_type = 'datetime' AND $1 ORDER BY table_name, column_name")
+  printf 'START TRANSACTION;\n%s\nCOMMIT;\n' "$statements" | mariadb radius
+  echo "  $(grep -c '^UPDATE' <<<"$statements") columns"
+}
+convert "table_name <> 'radacct'"
+# FreeRADIUS writes radacct continuously: stop it while that table is converted, then start it in the new zone.
+systemctl stop freeradius
+radius_stopped=1
+convert "table_name = 'radacct'"
+systemctl start freeradius
+radius_stopped=0
+
+systemctl reload 'php*-fpm.service' 2>/dev/null || true
+trap - ERR
+resume
+
+echo "== now: $(date '+%F %T %Z') · MariaDB $(sql -e 'SELECT NOW()') · portal $(sudo -u www-data php artisan tinker --execute 'echo date("Y-m-d H:i:s T");' 2>/dev/null)"
+echo "$(date '+%F %T %Z') done: $old → $zone"

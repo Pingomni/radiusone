@@ -17,7 +17,7 @@ final class NetworkOperations
             $session=self::sessions($sub,(int)$accountingId);
             if(count($session)!==1){throw new RuntimeException('Select one identified active session.');}
             $key=$sub['id'].':disconnect:'.$accountingId;
-            Db::exec('INSERT IGNORE INTO network_operations (subscription_id,policy_revision,action,dedupe_key,session_json,available_at,created_at,updated_at) VALUES (?, ?,"disconnect",?,?,UTC_TIMESTAMP(),UTC_TIMESTAMP(),UTC_TIMESTAMP())',[$sub['id'],$sub['policy_revision'],$key,json_encode($session,JSON_THROW_ON_ERROR)]);
+            Db::exec('INSERT IGNORE INTO network_operations (subscription_id,policy_revision,action,dedupe_key,session_json,available_at,created_at,updated_at) VALUES (?, ?,"disconnect",?,?,NOW(),NOW(),NOW())',[$sub['id'],$sub['policy_revision'],$key,json_encode($session,JSON_THROW_ON_ERROR)]);
             $id=(int)Db::value('SELECT id FROM network_operations WHERE dedupe_key=?',[$key]);$pdo->commit();return $id;
         }catch(\Throwable $e){if($pdo->inTransaction()){$pdo->rollBack();}throw $e;}
     }
@@ -31,14 +31,14 @@ final class NetworkOperations
     public static function run(NetworkDriver $driver,int $limit=50): array
     {
         SchemaCompatibility::require('policy');$limit=max(1,min(200,$limit));$counts=[];
-        $ids=Db::select('SELECT id FROM network_operations WHERE (state IN ("pending","running","ack","timeout","uncertain") OR (state="blocked" AND result_code="no_observed_session_next_authentication")) AND available_at<=UTC_TIMESTAMP() ORDER BY available_at,id LIMIT '.$limit);
+        $ids=Db::select('SELECT id FROM network_operations WHERE (state IN ("pending","running","ack","timeout","uncertain") OR (state="blocked" AND result_code="no_observed_session_next_authentication")) AND available_at<=NOW() ORDER BY available_at,id LIMIT '.$limit);
         $deadline=microtime(true)+45;
         foreach($ids as $row){if(microtime(true)>=$deadline){break;}$state=self::process((int)$row['id'],$driver);$counts[$state]=($counts[$state]??0)+1;}
         return ['processed'=>array_sum($counts),'states'=>$counts,'lag'=>self::lag()];
     }
     public static function lag(): array
     {
-        return Db::row('SELECT COUNT(*) AS outstanding,COALESCE(MAX(TIMESTAMPDIFF(SECOND,created_at,UTC_TIMESTAMP())),0) AS oldest_seconds,SUM(state IN ("failed","nak","blocked")) AS needs_attention FROM network_operations WHERE state NOT IN ("verified","superseded")');
+        return Db::row('SELECT COUNT(*) AS outstanding,COALESCE(MAX(TIMESTAMPDIFF(SECOND,created_at,NOW())),0) AS oldest_seconds,SUM(state IN ("failed","nak","blocked")) AS needs_attention FROM network_operations WHERE state NOT IN ("verified","superseded")');
     }
     public static function process(int $id,NetworkDriver $driver): string
     {
@@ -75,7 +75,7 @@ final class NetworkOperations
             $sessions=$op['session_json']?json_decode($op['session_json'],true,512,JSON_THROW_ON_ERROR):self::sessions($sub);
             if(!$sessions){return self::finish($op,'blocked','no_observed_session_next_authentication');}
             foreach($sessions as $session){if($session['nasipaddress']!==$profile['source_ip']){return self::finish($op,'blocked','session_nas_mismatch');}}
-            Db::exec('UPDATE network_operations SET state="running",session_json=?,claimed_at=UTC_TIMESTAMP(),available_at=DATE_ADD(UTC_TIMESTAMP(),INTERVAL 60 SECOND),updated_at=UTC_TIMESTAMP() WHERE id=?',[json_encode($sessions,JSON_THROW_ON_ERROR),$op['id']]);
+            Db::exec('UPDATE network_operations SET state="running",session_json=?,claimed_at=NOW(),available_at=DATE_ADD(NOW(),INTERVAL 60 SECOND),updated_at=NOW() WHERE id=?',[json_encode($sessions,JSON_THROW_ON_ERROR),$op['id']]);
             $allVerified=true;$observations=[];
             foreach($sessions as $session){
                 if(microtime(true)>=$deadline){return self::finish($op,'uncertain','observation_deadline');}
@@ -117,7 +117,7 @@ final class NetworkOperations
         if($own) $pdo->beginTransaction();
         try {
             $delay=min(900,30*(2**min(5,(int)$op['attempts'])));
-            Db::exec('UPDATE network_operations SET state=?,result_code=?,available_at=DATE_ADD(UTC_TIMESTAMP(),INTERVAL ? SECOND),updated_at=UTC_TIMESTAMP() WHERE id=?',[$state,$code,$delay,$op['id']]);
+            Db::exec('UPDATE network_operations SET state=?,result_code=?,available_at=DATE_ADD(NOW(),INTERVAL ? SECOND),updated_at=NOW() WHERE id=?',[$state,$code,$delay,$op['id']]);
             if($op['action']!=='disconnect'){
                 Db::exec('UPDATE subscriptions SET provisioning_state=?,last_error=?,applied_revision=IF(?="verified",?,applied_revision) WHERE id=? AND policy_revision=?',[$state,$code,$state,$op['policy_revision'],$op['subscription_id'],$op['policy_revision']]);
             }

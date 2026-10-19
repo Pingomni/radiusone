@@ -8,6 +8,7 @@ import { Badge, Check, Empty, Field, Select, Tag, TextArea, type TagData } from 
 import AppLayout, { BrandLogo } from '@/layouts/AppLayout';
 import { useCan } from '@/lib/auth';
 import { bind } from '@/lib/form';
+import { useServerTimezone } from '@/lib/clock';
 import { bytes } from '@/lib/format';
 
 type Overview = { engine: TagData; rows: [string, string][] };
@@ -27,8 +28,14 @@ type EmailGateway = {
     reply_to: string; timeout: string; password_saved: boolean; ms_tenant_id: string; ms_client_id: string; ms_client_secret_saved: boolean;
     mailgun_domain: string; mailgun_region: string; mailgun_api_key_saved: boolean;
 };
+type AdminSettings = {
+    enabled: boolean; emails: string; phones: string; alert_email: boolean; alert_sms: boolean; checks: string[]; report_enabled: boolean; report_time: string;
+    alert_telegram: boolean; report_telegram: boolean; telegram_chats: string; telegram_token_saved: boolean;
+};
+type AdminEvent = { at: string; kind: TagData; text: string; sent: string };
 type Notifications = {
-    view: 'templates' | 'gateways' | 'bulk' | 'preview' | 'history';
+    view: 'templates' | 'gateways' | 'bulk' | 'preview' | 'history' | 'admin';
+    admin?: { settings: AdminSettings; checks: Record<string, string>; recent: AdminEvent[] };
     ready: { email: boolean; sms: boolean };
     gateway?: 'email' | 'sms' | null;
     providers?: Record<string, string>;
@@ -44,9 +51,8 @@ type Notifications = {
 };
 
 type BackupDestination = {
-    id: string; type: 'gdrive' | 's3' | 'sftp'; name: string; enabled: boolean; keep: number; connected: boolean;
-    client_id?: string; folder?: string; client_secret_saved?: boolean; refresh_token_saved?: boolean; connected_at?: string;
-    region?: string; bucket?: string; prefix?: string; access_key?: string; secret_key_saved?: boolean;
+    id: string; type: 's3' | 'sftp'; name: string; enabled: boolean; keep: number; connected: boolean;
+    provider?: string; endpoint?: string; region?: string; bucket?: string; prefix?: string; access_key?: string; secret_key_saved?: boolean;
     host?: string; port?: string; user?: string; path?: string; public_key?: string; fingerprint?: string;
 };
 type BackupRun = {
@@ -56,7 +62,7 @@ type BackupRun = {
 type Backups = {
     passphraseSet: boolean; localDays: number; localDaysOptions: Record<string, string>; destinations: BackupDestination[];
     types: Record<string, string>; keepOptions: Record<string, string>; status: BackupRun | null;
-    local: { name: string; size: number; at: string }[]; localCount: number; googleRedirect: string;
+    local: { name: string; size: number; at: string }[]; localCount: number; s3Providers: Record<string, string>;
 };
 type RetentionRun = { sessions: number; logins: number; finished: boolean; at: string };
 type Retention = {
@@ -86,7 +92,7 @@ function OverviewTab({ overview, usersSummary, branding }: { overview: Overview;
                 <Destination title="Users & access" description="Manage operators, roles, and two-factor authentication." href="/settings?tab=users" icon="clients" status={<Badge tone="success">{usersSummary.enabled} enabled</Badge>} />
                 <Destination title="Notifications" description="Connect a gateway, customize templates and send customer updates." href="/settings?tab=notifications" icon="mail" status={<Badge>Email + SMS</Badge>} />
                 <Destination title="Branding" description="Give your workspace and invoices a familiar identity." href="/settings?tab=branding" icon="image" status={<Badge>{branding.custom ? 'Custom logo' : 'Default logo'}</Badge>} />
-                <Destination title="Backups" description="Encrypted copies to Google Drive, Amazon S3 or your own server." href="/settings?tab=backups" icon="server" status={<Badge>Remote copies</Badge>} />
+                <Destination title="Backups" description="Encrypted copies to Backblaze B2, Cloudflare R2, other S3-compatible storage or your own server." href="/settings?tab=backups" icon="server" status={<Badge>Remote copies</Badge>} />
                 <Destination title="Data retention" description="Choose how long session and login records are kept." href="/settings?tab=retention" icon="logs" status={<Badge>History</Badge>} />
             </div>
             <Sheet title="System information" description="Environment, operator access, and backup locations for this workspace." icon="server" meta={<Tag tag={overview.engine} />}>
@@ -264,14 +270,14 @@ function BackupStatus({ b }: { b: Backups }) {
     return (
         <Sheet
             title="Last backup"
-            description="Every night at 02:15 UTC the database and customer documents are backed up, encrypted and uploaded to each enabled destination."
+            description="Every night at 02:15 (server time) the database and customer documents are backed up, encrypted and uploaded to each enabled destination."
             icon="server"
             meta={run ? <Badge tone={run.ok ? 'success' : 'danger'}>{run.ok ? 'completed' : 'needs attention'}</Badge> : <Badge>not run yet</Badge>}
         >
             {run ? (
                 <>
                     <SettingsRows rows={[
-                        ['Finished', `${run.at} UTC`],
+                        ['Finished', run.at],
                         ['Database', run.database ? `${run.database.file} · ${bytes(run.database.size)}` : '—'],
                         ['Documents', run.documents ? `${run.documents.file} · ${bytes(run.documents.size)}` : '—'],
                         ['Local copies', `${b.localCount} files${run.local_removed ? ` · ${run.local_removed} old copies removed` : ''}`],
@@ -283,7 +289,7 @@ function BackupStatus({ b }: { b: Backups }) {
                     {Object.keys(run.destinations).length === 0 && !run.error && <p className="hint">No remote destination was enabled, so this backup exists only on this server.</p>}
                 </>
             ) : (
-                <p className="hint">No backup has run with remote copies yet. To run one now on the server: sudo FRWEB_OPERATOR_ENV_FILE=/etc/freeradius-web/backup.env php /opt/freeradius-web-laravel/artisan frweb:backup</p>
+                <p className="hint">No backup has run with remote copies yet. To run one now, see <Link href="/docs#backups">Documentation → Backups</Link>.</p>
             )}
         </Sheet>
     );
@@ -311,51 +317,63 @@ function BackupPassphrase({ set }: { set: boolean }) {
     );
 }
 
+/** Where each provider shows the bucket address, an example, and what it calls the two key parts (see Documentation → Backups). */
+const S3_HELP: Record<string, { url: string; where: string; key: string; secret: string }> = {
+    b2: { url: 'https://s3.eu-central-003.backblazeb2.com/my-bucket', where: 'Optional: leave empty and it is found from the key.', key: 'keyID', secret: 'applicationKey' },
+    r2: { url: 'https://<account id>.r2.cloudflarestorage.com/my-bucket', where: 'Cloudflare → R2 → your bucket → Settings → S3 API.', key: 'Access Key ID', secret: 'Secret Access Key' },
+    wasabi: { url: 'https://s3.eu-central-1.wasabisys.com/my-bucket', where: 'Wasabi → Buckets → your bucket → Settings → Properties.', key: 'Access key', secret: 'Secret key' },
+    hetzner: { url: 'https://my-bucket.fsn1.your-objectstorage.com', where: 'Hetzner Console → Object Storage → your bucket (URL).', key: 'Access key', secret: 'Secret key' },
+    spaces: { url: 'https://my-space.fra1.digitaloceanspaces.com', where: 'DigitalOcean → Spaces → your Space (Origin Endpoint).', key: 'Access Key', secret: 'Secret' },
+};
+
 function DestinationForm({ d, b, onDone }: { d: BackupDestination | null; b: Backups; onDone: () => void }) {
     const form = useForm({
-        id: d?.id ?? '', type: d?.type ?? 'gdrive', name: d?.name ?? '', enabled: d?.enabled ?? true, keep: String(d?.keep ?? 14),
-        client_id: d?.client_id ?? '', client_secret: '', folder: d?.folder ?? 'FreeRADIUS Web backups',
-        region: d?.region ?? 'eu-central-1', bucket: d?.bucket ?? '', prefix: d?.prefix ?? 'freeradius-web', access_key: d?.access_key ?? '', secret_key: '',
-        host: d?.host ?? '', port: d?.port ?? '22', user: d?.user ?? '', path: d?.path ?? 'backups/freeradius-web', rescan_host_key: false,
+        id: d?.id ?? '', type: d?.type ?? 's3', provider: d?.provider ?? 'b2',
+        url: d?.type === 's3' && d.endpoint ? `https://${d.endpoint}/${d.bucket}` : '', access_key: d?.access_key ?? '', secret_key: '',
+        server: d?.type === 'sftp' ? `${d.user}@${d.host}${d.port && d.port !== '22' ? `:${d.port}` : ''}` : '',
+        name: d?.name ?? '', prefix: d?.prefix ?? 'freeradius-web', path: d?.path ?? 'backups/freeradius-web', keep: String(d?.keep ?? 7), enabled: d?.enabled ?? true, rescan_host_key: false,
     });
     const type = form.data.type;
+    const help = S3_HELP[form.data.provider] ?? S3_HELP.b2;
     return (
-        <form className="form-grid" onSubmit={(e) => { e.preventDefault(); form.post('/settings/backups/destinations', { preserveScroll: true, onSuccess: onDone, onFinish: () => form.setData((v) => ({ ...v, client_secret: '', secret_key: '' })) }); }}>
-            {!d && <Select label="Type" options={b.types} {...bind(form, 'type')} />}
-            <Field label="Name" required placeholder={type === 'gdrive' ? 'Office Google Drive' : type === 's3' ? 'AWS Frankfurt' : 'Backup server'} {...bind(form, 'name')} />
-            {type === 'gdrive' && (
-                <>
-                    <p className="span2 hint">
-                        In Google Cloud Console: enable the Google Drive API, create an OAuth client of type “Web application”, and add this authorised redirect URI: <code>{b.googleRedirect}</code>.
-                        After saving, use Connect to sign in. The app only sees the folder it creates.
-                    </p>
-                    <Field label="OAuth client ID" placeholder="…apps.googleusercontent.com" {...bind(form, 'client_id')} />
-                    <SecretField label="OAuth client secret" name="client_secret" saved={Boolean(d?.client_secret_saved)} value={form.data.client_secret} error={form.errors.client_secret} onChange={(v) => form.setData('client_secret', v)} />
-                    <Field label="Drive folder name" hint="Created in the connected Drive when you connect." {...bind(form, 'folder')} />
-                </>
+        <form className="form-grid" onSubmit={(e) => { e.preventDefault(); form.post('/settings/backups/destinations', { preserveScroll: true, onSuccess: onDone, onFinish: () => form.setData((v) => ({ ...v, secret_key: '' })) }); }}>
+            {/* One list for both: S3-compatible providers, then SFTP. An existing destination keeps its kind. */}
+            {!d && (
+                <Select
+                    label="Store backups in"
+                    name="destination_kind"
+                    className="span2"
+                    options={{ ...b.s3Providers, sftp: 'My own server (SFTP)' }}
+                    value={type === 'sftp' ? 'sftp' : form.data.provider}
+                    onChange={(e) => form.setData((v) => (e.target.value === 'sftp' ? { ...v, type: 'sftp' } : { ...v, type: 's3', provider: e.target.value }))}
+                />
             )}
             {type === 's3' && (
                 <>
-                    <p className="span2 hint">Use an IAM user that can only s3:PutObject, s3:ListBucket and s3:DeleteObject on this bucket and folder.</p>
-                    <Field label="Region" placeholder="eu-central-1" {...bind(form, 'region')} />
-                    <Field label="Bucket" {...bind(form, 'bucket')} />
-                    <Field label="Folder in the bucket" hint="Optional." {...bind(form, 'prefix')} />
-                    <Field label="Access key ID" {...bind(form, 'access_key')} />
-                    <SecretField label="Secret access key" name="secret_key" saved={Boolean(d?.secret_key_saved)} value={form.data.secret_key} error={form.errors.secret_key} onChange={(v) => form.setData('secret_key', v)} />
+                    <Field label="Bucket address" className="span2" required={form.data.provider !== 'b2'} placeholder={help.url} hint={help.where} {...bind(form, 'url')} />
+                    <Field label={help.key} required {...bind(form, 'access_key')} />
+                    <SecretField label={help.secret} name="secret_key" saved={Boolean(d?.secret_key_saved)} value={form.data.secret_key} error={form.errors.secret_key} onChange={(v) => form.setData('secret_key', v)} />
+                    <p className="span2 hint">Use a private bucket and a key limited to that bucket. <Link href={`/docs#${form.data.provider === 'r2' ? 'r2' : 'b2'}`}>Step-by-step guide</Link></p>
                 </>
             )}
             {type === 'sftp' && (
                 <>
-                    <p className="span2 hint">A key pair is generated when you save; add its public key to the server user’s ~/.ssh/authorized_keys. The server’s host key is recorded and checked on every upload.</p>
-                    <Field label="Host" {...bind(form, 'host')} />
-                    <Field label="Port" type="number" min={1} max={65535} {...bind(form, 'port')} />
-                    <Field label="User" {...bind(form, 'user')} />
-                    <Field label="Folder" hint="Relative to the user’s home, or an absolute path." {...bind(form, 'path')} />
-                    {d && <Check label="Re-check the server’s host key (only after you changed it on purpose)" checked={form.data.rescan_host_key} onChange={(e) => form.setData('rescan_host_key', e.target.checked)} />}
+                    <Field label="Server" className="span2" required placeholder="backup@nas.example.net" hint="user@host, or user@host:port if SSH is not on port 22." {...bind(form, 'server')} />
+                    <p className="span2 hint">A key pair is created when you save: add its public key to that user’s ~/.ssh/authorized_keys. The server’s host key is recorded and checked on every upload.</p>
                 </>
             )}
-            <Select label="Copies to keep" options={b.keepOptions} {...bind(form, 'keep')} />
-            <Check label="Enabled" checked={form.data.enabled} onChange={(e) => form.setData('enabled', e.target.checked)} />
+            <details className="span2">
+                <summary>More options</summary>
+                <div className="form-grid">
+                    <Field label="Name" placeholder={type === 's3' ? `${b.s3Providers[form.data.provider] ?? 'Cloud storage'} · bucket` : 'user@host'} hint="Optional." {...bind(form, 'name')} />
+                    {type === 's3'
+                        ? <Field label="Folder in the bucket" hint="Optional." {...bind(form, 'prefix')} />
+                        : <Field label="Folder on the server" hint="Relative to the user’s home, or an absolute path." {...bind(form, 'path')} />}
+                    <Select label="Copies to keep" options={b.keepOptions} {...bind(form, 'keep')} />
+                    <Check label="Enabled" checked={form.data.enabled} onChange={(e) => form.setData('enabled', e.target.checked)} />
+                    {d && type === 'sftp' && <Check label="Re-check the server’s host key (only after you changed it on purpose)" checked={form.data.rescan_host_key} onChange={(e) => form.setData('rescan_host_key', e.target.checked)} />}
+                </div>
+            </details>
             <div className="span2 form-actions">
                 <button className="primary" disabled={form.processing}>{d ? 'Save destination' : 'Add destination'}</button>
                 <button type="button" onClick={onDone}>Cancel</button>
@@ -365,17 +383,16 @@ function DestinationForm({ d, b, onDone }: { d: BackupDestination | null; b: Bac
 }
 
 function DestinationRow({ d, b, open, onToggle }: { d: BackupDestination; b: Backups; open: boolean; onToggle: () => void }) {
-    const detail = d.type === 'gdrive' ? `Folder “${d.folder}”` : d.type === 's3' ? `${d.bucket}${d.prefix ? '/' + d.prefix : ''} · ${d.region}` : `${d.user}@${d.host}:${d.port} · ${d.path}`;
+    const detail = d.type === 's3' ? `${b.s3Providers[d.provider ?? ''] ?? 'S3'} · ${d.bucket}${d.prefix ? '/' + d.prefix : ''}` : `${d.user}@${d.host}:${d.port} · ${d.path}`;
     return (
         <article className="backup-destination">
             <div className="backup-destination-head">
                 <div>
                     <h3>{d.name}</h3>
-                    <p className="hint">{b.types[d.type]} · {detail} · keeps {d.keep} copies</p>
+                    <p className="hint">{d.type === 's3' ? '' : b.types[d.type] + ' · '}{detail} · keeps {d.keep} {d.keep === 1 ? 'copy' : 'copies'}</p>
                 </div>
                 <span className="toolbar-actions">
                     <Badge tone={d.enabled && d.connected ? 'success' : 'warning'}>{!d.connected ? 'not connected' : d.enabled ? 'enabled' : 'disabled'}</Badge>
-                    {d.type === 'gdrive' && <a className="button" href={`/settings/backups/destinations/${d.id}/google`}>{d.connected ? 'Reconnect' : 'Connect Google Drive'}</a>}
                     {d.connected && <PostButton action={`/settings/backups/destinations/${d.id}/test`} label="Test" className="button" />}
                     <button type="button" onClick={onToggle}>{open ? 'Close' : 'Edit'}</button>
                     <DeleteButton action={`/settings/backups/destinations/${d.id}/delete`} label="Remove" message={`Stop sending backups to ${d.name}? Backups already stored there are kept.`} />
@@ -420,7 +437,7 @@ function BackupLocal({ b }: { b: Backups }) {
             <DataTable rows={b.local} rowKey={(f) => f.name} columns={[
                 { header: 'File', cell: (f) => f.name },
                 { header: 'Size', cell: (f) => bytes(f.size) },
-                { header: 'Created (UTC)', cell: (f) => f.at },
+                { header: 'Created', cell: (f) => f.at },
             ]} />
         </Sheet>
     );
@@ -439,6 +456,77 @@ function BackupsTab({ b }: { b: Backups }) {
 
 /** Days of history a period keeps; "Keep forever" (0) keeps everything. */
 const keeps = (days: number) => (days === 0 ? Infinity : days);
+
+type Regional = {
+    timezone: string; timezones: Record<string, string>; timezoneLog: string[]; timezoneReady: boolean;
+    currency: string; currencies: Record<string, string>; issuedOther: number;
+};
+
+function RegionalTab({ r }: { r: Regional }) {
+    const zone = useForm({ timezone: r.timezone });
+    const money = useForm({ currency: r.currency });
+    const ask = useConfirm();
+    const last = r.timezoneLog[r.timezoneLog.length - 1] ?? '';
+    const running = /(scheduled|started): /.test(last);
+
+    return (
+        <>
+            <Sheet
+                title="Time zone"
+                description="The server's clock and time zone: RADIUS, accounting, invoices, reports and scheduled jobs all use it."
+                icon="calendar"
+                meta={<Badge tone={running ? 'warning' : ''}>{running ? 'change in progress' : r.timezone}</Badge>}
+            >
+                <form
+                    className="form-grid"
+                    onSubmit={async (event) => {
+                        event.preventDefault();
+                        const ok = await ask({
+                            title: `Switch to ${zone.data.timezone}?`,
+                            message: 'A database backup is taken, then the portal pauses for about a minute while every stored time is converted to the new zone. '
+                                + 'RADIUS stops for a few seconds while session records are converted. Customer expiry, invoices and scheduled jobs follow the new zone afterwards.',
+                            confirmLabel: 'Switch time zone',
+                        });
+                        if (ok) zone.post('/settings/timezone', { preserveScroll: true });
+                    }}
+                >
+                    <Select label="Time zone" options={r.timezones} name="timezone" value={zone.data.timezone} error={zone.errors.timezone} onChange={(e) => zone.setData('timezone', e.target.value)} />
+                    <div className="span2 form-actions">
+                        <button className="primary" disabled={zone.processing || running || !r.timezoneReady || zone.data.timezone === r.timezone}>Switch time zone</button>
+                    </div>
+                    {!r.timezoneReady && <p className="span2 hint">To change it from here, run <code>sudo bash ops/apply-service-control.sh</code> on the server once.</p>}
+                    {r.timezoneLog.length > 0 && (
+                        <details className="span2" open={running}>
+                            <summary>Last change</summary>
+                            <pre className="mono">{r.timezoneLog.join('\n')}</pre>
+                        </details>
+                    )}
+                </form>
+            </Sheet>
+            <Sheet title="Currency" description="The currency the whole system bills in: service plans, static IP pools, invoices and payments." icon="billing" meta={<Badge>{r.currency}</Badge>}>
+                <form
+                    className="form-grid"
+                    onSubmit={async (event) => {
+                        event.preventDefault();
+                        const ok = await ask({
+                            title: `Bill in ${r.currencies[money.data.currency]}?`,
+                            message: 'Service plan and IP pool prices and draft invoices switch to the new currency. Amounts are not converted: check your prices afterwards. '
+                                + 'Invoices already issued, and their payments, keep their currency.',
+                            confirmLabel: 'Change currency',
+                        });
+                        if (ok) money.post('/settings/currency', { preserveScroll: true });
+                    }}
+                >
+                    <Select label="Currency" options={r.currencies} name="currency" value={money.data.currency} error={money.errors.currency} onChange={(e) => money.setData('currency', e.target.value)} />
+                    <div className="span2 form-actions">
+                        <button className="primary" disabled={money.processing || money.data.currency === r.currency}>Change currency</button>
+                    </div>
+                    {r.issuedOther > 0 && <p className="span2 hint">{r.issuedOther} issued invoice{r.issuedOther === 1 ? ' is' : 's are'} in an earlier currency; totals show each currency separately.</p>}
+                </form>
+            </Sheet>
+        </>
+    );
+}
 
 function RetentionTab({ r }: { r: Retention }) {
     const form = useForm({ sessions: String(r.periods.sessions), logins: String(r.periods.logins) });
@@ -495,8 +583,8 @@ function RetentionTab({ r }: { r: Retention }) {
                 </p>
                 <p className="span2 hint">
                     {last
-                        ? `Last cleanup ${last.at} UTC: ${last.sessions.toLocaleString()} session and ${last.logins.toLocaleString()} login records deleted${last.finished ? '.' : '; more remain and are deleted the next night.'}`
-                        : 'The cleanup runs every night at 03:45 UTC; it has not deleted anything yet.'}
+                        ? `Last cleanup ${last.at}: ${last.sessions.toLocaleString()} session and ${last.logins.toLocaleString()} login records deleted${last.finished ? '.' : '; more remain and are deleted the next night.'}`
+                        : 'The cleanup runs every night at 03:45 (server time); it has not deleted anything yet.'}
                 </p>
                 <div className="span2 form-actions"><button className="primary" disabled={form.processing}>Save retention</button></div>
             </form>
@@ -903,7 +991,7 @@ function History({ history }: { history: NonNullable<Notifications['history']> }
                     rowKey={(r) => r.id}
                     perPage={50}
                     columns={[
-                        { header: 'Queued (UTC)', cell: (r) => r.queued },
+                        { header: 'Queued', cell: (r) => r.queued },
                         { header: 'Customer', cell: (r) => r.username },
                         { header: 'Template', cell: (r) => r.template },
                         { header: 'Channel', cell: (r) => r.channel },
@@ -921,13 +1009,88 @@ function History({ history }: { history: NonNullable<Notifications['history']> }
     );
 }
 
+function AdminAlerts({ admin, ready }: { admin: NonNullable<Notifications['admin']>; ready: Notifications['ready'] }) {
+    const timeZone = useServerTimezone();
+    const { telegram_token_saved: tokenSaved, ...saved } = admin.settings;
+    const form = useForm({ ...saved, telegram_token: '', telegram_token_clear: false });
+    const toggleCheck = (key: string, on: boolean) => form.setData('checks', on ? [...form.data.checks, key] : form.data.checks.filter((c) => c !== key));
+    const gateway = (channel: 'email' | 'sms') => (ready[channel] ? null : <> · <Link href={`${NOTICES}&view=gateways&gateway=${channel}`}>set up the {channel === 'email' ? 'Email' : 'SMS'} gateway</Link></>);
+    return (
+        <>
+            <Sheet title="Admin alerts" description="Tell the team when something on the server or network needs attention, and send a daily report. Uses the same Email and SMS gateways as customer messages." icon="shield" meta={<Badge tone={admin.settings.enabled ? 'success' : undefined}>{admin.settings.enabled ? 'On' : 'Off'}</Badge>}>
+                <form className="form-grid" onSubmit={(event) => { event.preventDefault(); form.post('/settings/notifications/admin', { preserveScroll: true }); }}>
+                    <Check className="span2 checkbox" label={<strong>Send admin alerts and reports</strong>} name="enabled" checked={form.data.enabled} onChange={(e) => form.setData('enabled', e.target.checked)} />
+                    <TextArea className="" label="Email recipients" name="emails" rows={2} hint="Separate addresses with commas." value={form.data.emails} onChange={(e) => form.setData('emails', e.target.value)} />
+                    <TextArea className="" label="SMS recipients" name="phones" rows={2} hint="Phone numbers, separated with commas." value={form.data.phones} onChange={(e) => form.setData('phones', e.target.value)} />
+
+                    <div className="span2 notice-editor-channel"><h3>Alerts</h3></div>
+                    <p className="span2 hint">Checked every minute. A problem must still be there on the next check before it alerts, so a restart does not wake anyone. You also get a message when it is resolved.</p>
+                    <fieldset className="span2 admin-alert-checks">
+                        <legend>Alert me when</legend>
+                        {Object.entries(admin.checks).map(([key, label]) => (
+                            <Check key={key} className="checkbox" label={label} name="checks[]" value={key} checked={form.data.checks.includes(key)} onChange={(e) => toggleCheck(key, e.target.checked)} />
+                        ))}
+                    </fieldset>
+                    <fieldset className="span2 admin-alert-checks">
+                        <legend>Send alerts by</legend>
+                        <Check className="checkbox" label={<>Email{gateway('email')}</>} name="alert_email" checked={form.data.alert_email} onChange={(e) => form.setData('alert_email', e.target.checked)} />
+                        <Check className="checkbox" label={<>SMS{gateway('sms')}</>} name="alert_sms" checked={form.data.alert_sms} onChange={(e) => form.setData('alert_sms', e.target.checked)} />
+                        <Check className="checkbox" label="Telegram (set up below)" name="alert_telegram" checked={form.data.alert_telegram} onChange={(e) => form.setData('alert_telegram', e.target.checked)} />
+                    </fieldset>
+
+                    <div className="span2 notice-editor-channel"><h3>Telegram</h3>{tokenSaved ? <Badge tone="success">Bot token saved</Badge> : <Badge>Not set up</Badge>}<Link href="/docs#telegram">Setup guide</Link></div>
+                    <Field
+                        label="Bot token"
+                        name="telegram_token"
+                        type="password"
+                        autoComplete="off"
+                        placeholder={tokenSaved ? 'Saved. Leave empty to keep it' : '123456789:ABC…'}
+                        value={form.data.telegram_token}
+                        onChange={(e) => form.setData('telegram_token', e.target.value)}
+                    />
+                    <Field label="Telegram chat IDs" name="telegram_chats" placeholder="123456789, -1001234567890" hint="People, groups or channels; separate with commas." value={form.data.telegram_chats} onChange={(e) => form.setData('telegram_chats', e.target.value)} />
+                    {tokenSaved && <Check className="span2 checkbox" label="Remove the saved bot token" name="telegram_token_clear" checked={form.data.telegram_token_clear} onChange={(e) => form.setData('telegram_token_clear', e.target.checked)} />}
+                    {tokenSaved && <div className="span2"><PostButton action="/settings/notifications/admin/telegram-chats" className="" label="Find chat IDs" /></div>}
+
+                    <div className="span2 notice-editor-channel"><h3>Daily report</h3></div>
+                    <Check className="span2 checkbox" label="Email a daily report: open problems, services and uptime, server load, RADIUS logins, NAS status, customers expiring soon and background jobs" name="report_enabled" checked={form.data.report_enabled} onChange={(e) => form.setData('report_enabled', e.target.checked)} />
+                    <Check className="span2 checkbox" label="Also send the daily report to Telegram" name="report_telegram" checked={form.data.report_telegram} onChange={(e) => form.setData('report_telegram', e.target.checked)} />
+                    <Field label="Send at" name="report_time" type="time" required value={form.data.report_time} onChange={(e) => form.setData('report_time', e.target.value)} hint={`Server time (${timeZone}).`} />
+
+                    <div className="span2 form-actions">
+                        <button className="primary" disabled={form.processing}>Save admin alerts</button>
+                        <PostButton action="/settings/notifications/admin/test" className="" label="Send test alert" disabled={form.isDirty} title={form.isDirty ? 'Save first' : undefined} />
+                        <PostButton action="/settings/notifications/admin/report" className="" label="Send report now" disabled={form.isDirty} title={form.isDirty ? 'Save first' : undefined} />
+                    </div>
+                </form>
+            </Sheet>
+            <Sheet title="Recent alerts" description="The last 30 alerts, reports and tests, with who received them." icon="logs">
+                {admin.recent.length ? (
+                    <DataTable
+                        rows={admin.recent}
+                        perPage={30}
+                        columns={[
+                            { header: 'Time', cell: (r) => r.at },
+                            { header: 'Type', cell: (r) => <Tag tag={r.kind} /> },
+                            { header: 'What', cell: (r) => r.text },
+                            { header: 'Delivery', cell: (r) => r.sent },
+                        ]}
+                    />
+                ) : (
+                    <div className="settings-empty-state"><Icon name="shield" /><strong>No alerts yet</strong><p>Alerts, reports and tests will appear here.</p></div>
+                )}
+            </Sheet>
+        </>
+    );
+}
+
 function NotificationsTab({ n }: { n: Notifications }) {
     const anyReady = n.ready.email || n.ready.sms;
-    const views: [string, string][] = [['templates', 'Templates'], ['gateways', 'Gateways'], ['history', 'History']];
+    const views: [string, string][] = [['templates', 'Templates'], ['gateways', 'Gateways'], ['history', 'History'], ['admin', 'Admin alerts']];
     return (
         <div className="settings-notifications notice-workspace">
             <div className="notice-heading">
-                <div><h2>Customer notifications</h2><p>Useful messages, at the right moment.</p></div>
+                <div><h2>Notifications</h2><p>Messages to customers, and alerts and reports for your team.</p></div>
                 {anyReady
                     ? <Link className="button primary" href={`${NOTICES}&view=bulk`}><Icon name="message" /> Send bulk message</Link>
                     : <span className="notice-setup-label">Start with a gateway</span>}
@@ -945,18 +1108,20 @@ function NotificationsTab({ n }: { n: Notifications }) {
             {n.view === 'bulk' && n.bulk && <BulkComposer key={n.bulk.channel} bulk={n.bulk} ready={n.ready} />}
             {n.view === 'preview' && <BulkPreview preview={n.preview} />}
             {n.view === 'history' && n.history && <History history={n.history} />}
+            {n.view === 'admin' && n.admin && <AdminAlerts admin={n.admin} ready={n.ready} />}
         </div>
     );
 }
 
-export default function Settings({ tab, overview, users, usersSummary, roleDescriptions, branding, notifications, retention, backups }: {
-    tab: 'overview' | 'users' | 'notifications' | 'branding' | 'retention' | 'backups';
+export default function Settings({ tab, overview, users, usersSummary, roleDescriptions, branding, notifications, regional, retention, backups }: {
+    tab: 'overview' | 'users' | 'notifications' | 'branding' | 'regional' | 'retention' | 'backups';
     overview: Overview;
     users: Operator[] | null;
     usersSummary: { enabled: number; total: number };
     roleDescriptions: { role: string; description: string }[];
     branding: Branding;
     notifications: Notifications | null;
+    regional: Regional | null;
     retention: Retention | null;
     backups: Backups | null;
 }) {
@@ -969,6 +1134,7 @@ export default function Settings({ tab, overview, users, usersSummary, roleDescr
                     {tab === 'users' && <UsersTab users={users} usersSummary={usersSummary} roleDescriptions={roleDescriptions} />}
                     {tab === 'notifications' && notifications && <NotificationsTab n={notifications} />}
                     {tab === 'branding' && <BrandingTab branding={branding} />}
+                    {tab === 'regional' && regional && <RegionalTab r={regional} />}
                     {tab === 'retention' && retention && <RetentionTab r={retention} />}
                     {tab === 'backups' && backups && <BackupsTab b={backups} />}
                 </div>

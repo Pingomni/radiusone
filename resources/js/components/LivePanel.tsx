@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { formatInZone, toServerTime, useServerTimezone } from '@/lib/clock';
 import { slugKey } from '@/lib/format';
 
 type LiveState = 'live' | 'paused' | 'error' | 'expired';
 
-const clock = (ms: number) => new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+const clock = (ms: number, timeZone: string) => formatInZone(toServerTime(ms), timeZone, { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
 const ago = (ms: number) => {
     const s = Math.max(0, Math.round(ms / 1000));
     return s < 60 ? `${s}s ago` : `${Math.floor(s / 60)}m ago`;
@@ -23,6 +24,7 @@ export function LivePanel<T>({ title, url, interval, initial, render, headerLink
     headerLink?: ReactNode;
     className?: string;
 }) {
+    const timeZone = useServerTimezone();
     const [data, setData] = useState<T>(initial);
     const [state, setState] = useState<LiveState>('live');
     const [last, setLast] = useState(() => Date.now());
@@ -108,7 +110,7 @@ export function LivePanel<T>({ title, url, interval, initial, render, headerLink
     }, [url, every]);
 
     const age = now - last;
-    const when = `${clock(last)} (${ago(age)})`;
+    const when = `${clock(last, timeZone)} (${ago(age)})`;
     const stamp = {
         live: `Updated ${when}`,
         paused: `Paused · updated ${when}`,

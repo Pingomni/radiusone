@@ -14,22 +14,23 @@ use InvalidArgumentException;
  */
 final class BackupDestinations
 {
-    public const TYPES = ['gdrive' => 'Google Drive', 's3' => 'Amazon S3', 'sftp' => 'SFTP server'];
-    public const KEEP = [7 => '7 copies', 14 => '14 copies', 30 => '30 copies', 60 => '60 copies', 90 => '90 copies'];
+    public const TYPES = ['s3' => 'S3-compatible storage (Backblaze B2, Cloudflare R2, …)', 'sftp' => 'SFTP server'];
+    public const KEEP = [1 => '1 copy', 3 => '3 copies', 5 => '5 copies', 7 => '7 copies', 14 => '14 copies', 30 => '30 copies', 60 => '60 copies', 90 => '90 copies'];
     public const LOCAL_DAYS = [7 => '7 days', 14 => '14 days', 30 => '30 days', 60 => '60 days', 90 => '90 days'];
 
     private const FIELDS = [
-        'gdrive' => ['client_id', 'folder'],
-        's3' => ['region', 'bucket', 'prefix', 'access_key'],
+        's3' => ['provider', 'endpoint', 'region', 'bucket', 'prefix', 'access_key'],
         'sftp' => ['host', 'port', 'user', 'path'],
     ];
-    private const SECRETS = ['gdrive' => ['client_secret', 'refresh_token'], 's3' => ['secret_key'], 'sftp' => ['private_key']];
+    private const DEFAULTS = ['provider' => 'b2', 'prefix' => 'freeradius-web', 'port' => '22', 'path' => 'backups/freeradius-web'];
+    private const SECRETS = ['s3' => ['secret_key'], 'sftp' => ['private_key']];
 
     /** @return list<array<string, mixed>> */
     public static function all(): array
     {
         $saved = json_decode(Settings::value('backup_destinations', '[]'), true);
-        return is_array($saved) ? array_values($saved) : [];
+        // Retired types (Google Drive, and Amazon-only S3 without an endpoint) are dropped.
+        return is_array($saved) ? array_values(array_filter($saved, static fn ($d) => isset(self::TYPES[$d['type'] ?? '']) && ($d['type'] !== 's3' || ($d['endpoint'] ?? '') !== ''))) : [];
     }
 
     public static function find(string $id): ?array
@@ -54,36 +55,47 @@ final class BackupDestinations
         if (!isset(self::TYPES[$type])) {
             throw new InvalidArgumentException('Choose a destination type.');
         }
-        $name = trim((string) ($input['name'] ?? ''));
-        if ($name === '' || mb_strlen($name) > 60) {
-            throw new InvalidArgumentException('Give the destination a name of up to 60 characters.');
-        }
         $destination = $current ?? ['id' => bin2hex(random_bytes(6)), 'type' => $type];
-        $destination['name'] = $name;
-        $destination['enabled'] = !empty($input['enabled']);
-        $destination['keep'] = isset(self::KEEP[(int) ($input['keep'] ?? 0)]) ? (int) $input['keep'] : 14;
+        $destination['enabled'] = !empty($input['enabled']);   // an unchecked box is not sent
+        $destination['keep'] = isset(self::KEEP[(int) ($input['keep'] ?? 0)]) ? (int) $input['keep'] : ($current['keep'] ?? 7);
+        // A field that is not sent keeps its saved value (or the default for a new destination).
         foreach (self::FIELDS[$type] as $field) {
-            $destination[$field] = trim((string) ($input[$field] ?? ''));
+            $destination[$field] = trim((string) ($input[$field] ?? ($current[$field] ?? self::DEFAULTS[$field] ?? '')));
         }
         foreach (self::SECRETS[$type] as $field) {
             $typed = (string) ($input[$field] ?? '');
-            if ($field !== 'refresh_token' && $field !== 'private_key' && $typed !== '') {
+            if ($field !== 'private_key' && $typed !== '') {
                 $destination[$field] = $typed;
             }
             $destination[$field] ??= '';
         }
 
         if ($type === 's3') {
-            $destination['region'] = strtolower($destination['region']);
-            S3Target::validate($destination);
-        } elseif ($type === 'gdrive') {
-            GoogleDriveTarget::validate($destination);
-            // A different OAuth client or folder needs a new sign-in.
-            if ($current !== null && ($current['client_id'] !== $destination['client_id'] || $current['folder'] !== $destination['folder'])) {
-                $destination['refresh_token'] = '';
-                $destination['folder_id'] = '';
+            // The bucket address the provider shows names the provider, endpoint, bucket and optional folder.
+            $url = trim((string) ($input['url'] ?? ''));
+            if ($url !== '') {
+                $parsed = S3Target::fromUrl($url);
+                $destination = array_replace($destination, ['provider' => $parsed['provider'], 'endpoint' => $parsed['endpoint'], 'bucket' => $parsed['bucket'], 'region' => ''],
+                    $parsed['prefix'] !== '' ? ['prefix' => $parsed['prefix']] : []);
+            } elseif ($destination['provider'] === 'b2' && $destination['endpoint'] === '') {
+                // Backblaze: the key alone is enough.
+                $destination = array_replace($destination, S3Target::discoverB2($destination['access_key'], $destination['secret_key']), ['region' => '']);
             }
+            $destination['provider'] = isset(S3Target::PROVIDERS[$destination['provider']]) ? $destination['provider'] : '';
+            $destination['endpoint'] = S3Target::endpointHost($destination['endpoint']);
+            $destination['region'] = S3Target::regionFor($destination['endpoint'], $destination['region']);
+            S3Target::validate($destination);
         } else {
+            // "user@host" or "user@host:port" in one field.
+            $server = trim((string) ($input['server'] ?? ''));
+            if ($server !== '') {
+                if (!preg_match('/^(?:([A-Za-z0-9._-]{1,64})@)?([A-Za-z0-9.-]{1,253})(?::(\d{1,5}))?$/D', $server, $m)) {
+                    throw new InvalidArgumentException('Enter the server as user@host, or user@host:port when SSH does not listen on port 22.');
+                }
+                $destination['user'] = $m[1] !== '' ? $m[1] : $destination['user'];
+                $destination['host'] = $m[2];
+                $destination['port'] = ($m[3] ?? '') !== '' ? $m[3] : '22';
+            }
             $destination['port'] = (string) ((int) $destination['port'] ?: 22);
             SftpTarget::validate($destination);
             if ($current === null) {
@@ -94,6 +106,16 @@ final class BackupDestinations
                 $destination = array_replace($destination, SftpTarget::scanHostKey($destination['host'], (int) $destination['port']));
             }
         }
+
+        // The name is optional: "Backblaze B2 · isp-backups" or "backup@nas.example.net".
+        $name = trim((string) ($input['name'] ?? ''));
+        $name = $name !== '' ? $name : ($current['name'] ?? ($type === 's3'
+            ? S3Target::PROVIDERS[$destination['provider']] . ' · ' . $destination['bucket']
+            : $destination['user'] . '@' . $destination['host']));
+        if (mb_strlen($name) > 60) {
+            throw new InvalidArgumentException('Give the destination a name of up to 60 characters.');
+        }
+        $destination['name'] = $name;
 
         $all = array_values(array_filter(self::all(), static fn ($d) => $d['id'] !== $destination['id']));
         $all[] = $destination;
@@ -115,7 +137,6 @@ final class BackupDestinations
     {
         return match ($destination['type']) {
             's3' => new S3Target($destination),
-            'gdrive' => new GoogleDriveTarget($destination),
             'sftp' => new SftpTarget($destination),
             default => throw new InvalidArgumentException('Unknown destination type.'),
         };
@@ -149,7 +170,7 @@ final class BackupDestinations
                 unset($d[$field]);
             }
             unset($d['known_hosts']);
-            $d['connected'] = $d['type'] !== 'gdrive' || $d['refresh_token_saved'];
+            $d['connected'] = true;
             return $d;
         }, self::all());
     }
