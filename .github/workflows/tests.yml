@@ -11,7 +11,8 @@ permissions:
 
 jobs:
   ci:
-    runs-on: ubuntu-latest
+    # Same Ubuntu as production and install.sh (ubuntu-latest moves to 26.04).
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout code
@@ -32,9 +33,10 @@ jobs:
         with:
           node-version: '22'
 
-      # tests/run.sh starts its own throw-away MariaDB from these binaries.
+      # tests/run.sh starts its own throw-away MariaDB from these binaries; the backup tests need
+      # mysqldump, which is in mariadb-client (not -core).
       - name: Install MariaDB
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends mariadb-server-core mariadb-client-core
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends mariadb-server-core mariadb-client
 
       # phpunit.xml sets everything the tests need; no .env, key or Laravel migrations.
       - name: Install dependencies
