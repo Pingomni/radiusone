@@ -367,6 +367,8 @@ final class RadiusRepository
         foreach (['enabled', 'verified', 'email_alert', 'sms_alert', 'mac_lock', 'invoice_alert'] as $bool) {
             $data[$bool] = self::boolValue($input[$bool] ?? null);
         }
+        // No restriction unless one is given, as the RADIUS policy below already assumes.
+        $data['nas_restriction_type'] = ($input['nas_restriction_type'] ?? '') ?: 'all';
         foreach (['available_online_time', 'simultaneous_use', 'owner_operator_id'] as $integer) {
             $data[$integer] = self::intOrNull($data[$integer]);
         }
