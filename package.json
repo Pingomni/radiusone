@@ -5,6 +5,7 @@
     "scripts": {
         "build": "vite build",
         "dev": "vite",
+        "lint": "eslint resources/js",
         "types:check": "tsc --noEmit"
     },
     "dependencies": {
@@ -23,7 +24,12 @@
         "vite": "^8.0.0"
     },
     "devDependencies": {
-        "@types/node": "^22.13.5"
+        "@eslint/js": "^10.0.1",
+        "@types/node": "^22.13.5",
+        "eslint": "^10.13.0",
+        "eslint-plugin-react-hooks": "^7.1.1",
+        "globals": "^17.13.0",
+        "typescript-eslint": "^8.72.0"
     },
     "optionalDependencies": {
         "@rollup/rollup-linux-x64-gnu": "4.9.5",

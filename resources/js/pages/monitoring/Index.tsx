@@ -3,7 +3,7 @@ import Icon from '@/components/Icon';
 import { LivePanel } from '@/components/LivePanel';
 import { MetricCards, type Metric } from '@/components/metrics';
 import { PollButton } from '@/components/monitoring';
-import { Badge, Empty, HealthItem, Tag, type TagData } from '@/components/ui';
+import { Badge, Empty, HealthItem, type TagData } from '@/components/ui';
 import AppLayout from '@/layouts/AppLayout';
 import { useCan } from '@/lib/auth';
 
