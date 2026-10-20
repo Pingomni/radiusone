@@ -16,10 +16,10 @@ Schedule::command('frweb:poll-snmp')->everyMinute()->runInBackground()->appendOu
 Schedule::command('frweb:mark-nas-applied --auto')->everyMinute()->runInBackground()->appendOutputTo($log('nas-applied'));
 Schedule::command('frweb:admin-alerts')->everyMinute()->runInBackground()->appendOutputTo($log('admin-alerts'));
 Schedule::command('frweb:generate-billing')->dailyAt('03:15')->appendOutputTo($log('billing'));
-// Needs DELETE on job_runs (docs/operations/job-runs-retention-grants.sql).
+// Needs DELETE on job_runs (ops/install/grants.sql).
 Schedule::command('frweb:prune-job-runs')->dailyAt('03:30')->appendOutputTo($log('maintenance'));
 // Deletes only when a period is chosen under Settings → Data retention (default: keep forever).
-// Needs DELETE on radacct/radpostauth (docs/operations/radius-retention-grants.sql).
+// Needs DELETE on radacct/radpostauth (ops/install/grants.sql).
 Schedule::command('frweb:prune-radius')->dailyAt('03:45')->appendOutputTo($log('maintenance'));
 
 // Paused in the legacy cron (migration 018 rollout; notification delivery); enable explicitly.

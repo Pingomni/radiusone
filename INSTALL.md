@@ -83,7 +83,7 @@ sudo bash install.sh
 sudo bash install.sh --domain radius.example.com --email it@example.com --timezone Europe/Tirane
 
 # Your own administrator name
-sudo bash install.sh --domain radius.example.com --admin-user geraldo --admin-email geraldo@example.com
+sudo bash install.sh --domain radius.example.com --admin-user jane --admin-email jane@example.com
 ```
 
 ## What the installer does

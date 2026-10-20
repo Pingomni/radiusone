@@ -171,7 +171,7 @@ const SECTIONS: Section[] = [
                     <li>FreeRADIUS: logins pause for a few seconds; connected customers normally stay online. MariaDB: the portal and RADIUS logins fail for a few seconds (you type <code>restart</code> to confirm). Nginx / PHP-FPM: the portal is unreachable for a few seconds.</li>
                     <li>Every restart and failed attempt is written to the audit log.</li>
                 </ul>
-                <Note tone="warning">One-time server setup, as root: <code>sudo bash ops/apply-service-control.sh</code> (from the app directory). It installs a small helper and a sudo rule that lets the web server restart exactly these four services and nothing else. Undo: delete <code>/etc/sudoers.d/freeradius-web-services</code> and <code>/usr/local/sbin/frweb-service-restart</code>.</Note>
+                <Note>The installer (<code>install.sh</code>) sets this up: a small helper and a sudo rule that let the web server restart exactly these four services and nothing else. To set it up again by hand, as root: <code>sudo bash ops/apply-service-control.sh</code> from the app directory.</Note>
                 <h3>NAS monitor</h3>
                 <p>Each NAS has its own page with live health, the busiest interfaces, online sessions, history graphs and the SNMP OIDs used for its platform. <strong>Poll now</strong> records a sample immediately instead of waiting for the next minute.</p>
                 <h3 id="jobs">Background jobs</h3>
@@ -400,7 +400,7 @@ const SECTIONS: Section[] = [
                     <li>Run a backup now: <code>sudo FRWEB_OPERATOR_ENV_FILE=/etc/freeradius-web/backup.env php artisan frweb:backup</code></li>
                     <li>Open a downloaded copy: <code>php artisan frweb:backup-decrypt &lt;file.enc&gt;</code> (asks for the passphrase).</li>
                     <li>Restore the database: <code>php artisan frweb:restore &lt;file.sql.gz&gt;</code>. This replaces the current data; take a fresh backup first.</li>
-                    <li>The nightly root job is installed by <code>ops/apply-backups.sh</code>.</li>
+                    <li>The nightly job (02:15, as root) is in <code>/etc/cron.d/radiusone</code>, set up by the installer.</li>
                 </ul>
             </>
         ),
@@ -448,11 +448,10 @@ const SECTIONS: Section[] = [
                         [<code>php artisan schedule:list</code>, 'Shows every scheduled job and when it runs next.'],
                     ]}
                 />
-                <h3>Setup scripts (run once, as root)</h3>
+                <h3>Installing and setup</h3>
                 <ul>
-                    <li><code>ops/apply-service-control.sh</code>: enables the Restart buttons on Monitoring.</li>
-                    <li><code>ops/apply-backups.sh</code>: installs the nightly encrypted backup.</li>
-                    <li><code>ops/server-tuning.sh</code>: database buffer pool and slow log, PHP-FPM workers and upload limits.</li>
+                    <li><code>sudo bash install.sh</code>: installs and configures everything on a fresh Ubuntu 24.04 server (see INSTALL.md). Running it again repairs the setup and keeps all data.</li>
+                    <li><code>sudo bash ops/apply-service-control.sh</code>: re-installs only the helpers behind the Restart, time zone and Back up now buttons.</li>
                 </ul>
             </>
         ),
@@ -470,7 +469,7 @@ const SECTIONS: Section[] = [
                     ['A NAS shows "waiting for FreeRADIUS restart"', 'Restart FreeRADIUS (Monitoring → RADIUS server); the NAS shows Up to date within a minute.'],
                     ['Disconnect fails or times out', 'NAS → Device: CoA on and the right port; on MikroTik /radius incoming set accept=yes; the shared secret matches; the router clock is correct. With the API on: the API user and certificate.'],
                     ['Speed changes do nothing', 'Network operations: the router\'s answer.'],
-                    ['Restart button says restarts are not enabled', 'Run ops/apply-service-control.sh as root once.'],
+                    ['Restart button says restarts are not enabled', 'Run sudo bash ops/apply-service-control.sh from the app directory (install.sh does this).'],
                     ['Messages are not arriving', 'Gateways: send a test. History / Recent alerts: the provider\'s reason.'],
                     ['Monitoring graphs are empty', 'Background jobs: is the Monitoring poller running? Is SNMP set up on the NAS?'],
                 ]}

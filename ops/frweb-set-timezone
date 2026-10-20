@@ -4,7 +4,7 @@
 #   frweb-set-timezone schedule <Zone/Name>   what www-data may run through sudo: checks the zone and
 #                                             starts "apply" five seconds later in a transient systemd
 #                                             unit, so the web request that asked for it can answer first
-#   frweb-set-timezone apply <Zone/Name>      the change itself (also run by ops/apply-timezone.sh)
+#   frweb-set-timezone apply <Zone/Name>      the change itself (as root, to change the zone from the shell)
 # Installed by ops/apply-service-control.sh as /usr/local/sbin/frweb-set-timezone. Progress and the result
 # go to /var/log/freeradius-web/timezone.log, which the Settings page shows.
 #
