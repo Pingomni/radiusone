@@ -6,7 +6,7 @@ import { Badge, Check, ConnectionState, Empty, ErrorSummary, Field, Panel, Selec
 import AppLayout from '@/layouts/AppLayout';
 import { bind, bindCheck } from '@/lib/form';
 
-type Vendor = { label: string; summary: string; disconnect: string; demo?: boolean };
+type Vendor = { label: string; summary: string; disconnect: string; beta?: boolean };
 type Device = { id: number | ''; section: string; vendor: string; shortname: string; nasname: string; secret: string; description: string; enabled: boolean; coa_enabled: boolean; coa_port: string };
 type Stat = { label: string; value: string; note: string; tone: string };
 type NasInfo = { id: number; name: string; ip: string; vendor: string; vendorLabel: string; enabled: boolean; description: string; stats: Stat[] };
@@ -37,7 +37,7 @@ function DeviceForm({ device, vendors, canManage }: { device: Device; vendors: R
                     {Object.entries(vendors).map(([key, v]) => (
                         <label className="nas-vendor-option" key={key}>
                             <input type="radio" name="vendor" value={key} checked={form.data.vendor === key} disabled={!canManage} onChange={() => form.setData('vendor', key)} />
-                            <span><strong>{v.label}{v.demo && <> <span className="badge warning">Demo</span></>}</strong><small>{v.summary}</small></span>
+                            <span><strong>{v.label}{v.beta && <> <span className="badge warning">Beta</span></>}</strong><small>{v.summary}</small></span>
                         </label>
                     ))}
                 </fieldset>
@@ -181,7 +181,7 @@ export default function NasForm({ device, vendors, setupSteps, canManage, nas, a
                 </Panel>
                 <Panel title="Router checklist">
                     {Object.entries(setupSteps).map(([vendor, steps]) => (
-                        <div key={vendor}><h3>{vendors[vendor]?.label ?? vendor}{vendors[vendor]?.demo && <> <span className="badge warning">Demo</span></>}</h3><SetupGuide steps={steps} /></div>
+                        <div key={vendor}><h3>{vendors[vendor]?.label ?? vendor}{vendors[vendor]?.beta && <> <span className="badge warning">Beta</span></>}</h3><SetupGuide steps={steps} /></div>
                     ))}
                 </Panel>
             </AppLayout>

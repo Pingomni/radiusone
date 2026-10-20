@@ -127,7 +127,7 @@ const SECTIONS: Section[] = [
         body: (
             <>
                 <p>A NAS is a router (BRAS) that sends customer logins to RADIUS. RADIUS only answers NAS devices listed here.</p>
-                <p><strong>MikroTik RouterOS</strong> is tested end to end (login, IP, speed limits, disconnect). <strong>Cisco IOS XE</strong> is marked <strong>Demo</strong>: it follows Cisco's documentation but has not been tested on a real router yet, so check logins and disconnects carefully before relying on it.</p>
+                <p><strong>MikroTik RouterOS</strong> is tested end to end (login, IP, speed limits, disconnect). <strong>Cisco IOS XE</strong> is marked <strong>Beta</strong>: it follows Cisco's documentation but has not been tested on a real router yet, so check logins and disconnects carefully before relying on it.</p>
                 <h3>Add a NAS</h3>
                 <Steps>
                     <li>Open <Link href="/nas">NAS Devices</Link> → <strong>New NAS device</strong>.</li>

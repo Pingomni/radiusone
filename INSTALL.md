@@ -164,7 +164,7 @@ sudo bash install.sh --domain radius.example.com --admin-user geraldo --admin-em
    - `/radius incoming set accept=yes port=3799` (lets the portal disconnect sessions)
    - Optional: SNMP for monitoring (*NAS → SNMP* tab), and the RouterOS API (*NAS → API* tab)
 
-MikroTik RouterOS PPPoE is tested end to end. Cisco IOS XE is marked *Demo*: it follows Cisco's documentation
+MikroTik RouterOS PPPoE is tested end to end. Cisco IOS XE is marked *Beta*: it follows Cisco's documentation
 but has not been tested on a real router yet. DHCP (MAC) login is not finished yet; see the project notes.
 
 ## Where things are
