@@ -2,6 +2,16 @@ import { type TagData } from '@/components/ui';
 
 export type Overview = { engine: TagData; rows: [string, string][] };
 
+export type UpdateStatus = { state: string; step: string; message: string; from: string; to: string; at: string };
+export type SoftwareUpdate = {
+    current: string;
+    ready: boolean;
+    running: boolean;
+    check: { at: string; current: string; latest: string; newer: boolean; tag: string; notes: string; problem: string } | null;
+    status: UpdateStatus | null;
+    log: string[];
+};
+
 export type Operator = { id: number; name: string; email: string; username: string; role: string; enabled: boolean; twoFactor: TagData; lastLogin: string; self: boolean };
 
 export type Branding = { custom: boolean; remote: boolean; url: string; hasSetting: boolean; name: string; product: string };

@@ -52,6 +52,7 @@ final class SettingsController extends Controller
         return Inertia::render('settings/Settings', [
             'tab' => $tab,
             'overview' => fn () => $this->overview($userCount, $enabledUsers),
+            'update' => $tab === 'overview' ? SoftwareUpdateController::props() : null,
             'users' => fn () => Auth::can('portal_users.manage') ? $this->users() : null,
             'usersSummary' => ['enabled' => $enabledUsers, 'total' => $userCount],
             'roleDescriptions' => Operators::roleDescriptions(),

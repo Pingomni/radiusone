@@ -3,7 +3,8 @@ import { type ReactNode } from 'react';
 import Icon from '@/components/Icon';
 import { Sheet, SettingsRows } from '@/components/settings';
 import { Badge, Tag } from '@/components/ui';
-import type { Branding, Overview } from '@/settings/types';
+import { UpdateSheet } from '@/settings/UpdateSheet';
+import type { Branding, Overview, SoftwareUpdate } from '@/settings/types';
 
 function Destination({ title, href, icon, status }: { title: string; description?: string; href: string; icon: string; status: ReactNode }) {
     return (
@@ -16,7 +17,7 @@ function Destination({ title, href, icon, status }: { title: string; description
     );
 }
 
-export function OverviewTab({ overview, usersSummary, branding }: { overview: Overview; usersSummary: { enabled: number; total: number }; branding: Branding }) {
+export function OverviewTab({ overview, usersSummary, branding, update }: { overview: Overview; usersSummary: { enabled: number; total: number }; branding: Branding; update: SoftwareUpdate | null }) {
     return (
         <>
             <div className="settings-destinations">
@@ -29,6 +30,7 @@ export function OverviewTab({ overview, usersSummary, branding }: { overview: Ov
             <Sheet title="System information" description="Environment, operator access, and backup locations for this workspace." icon="server" meta={<Tag tag={overview.engine} />}>
                 <SettingsRows rows={overview.rows} />
             </Sheet>
+            {update && <UpdateSheet u={update} />}
         </>
     );
 }

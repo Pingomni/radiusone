@@ -34,6 +34,8 @@ $app = Application::configure(basePath: dirname(__DIR__))
         $middleware->remove(ConvertEmptyStringsToNull::class);
         // After TrustProxies (a default global middleware), so X-Forwarded-Proto is honoured.
         $middleware->append([SecurityHeaders::class, ForceHttps::class]);
+        // The update progress stays readable while an update holds the portal in maintenance mode.
+        $middleware->preventRequestsDuringMaintenance(except: ['settings/update/status']);
         $middleware->web(append: [
             HandleInertiaRequests::class,
         ]);

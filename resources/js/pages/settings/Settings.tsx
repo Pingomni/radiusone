@@ -8,11 +8,12 @@ import { OverviewTab } from '@/settings/OverviewTab';
 import { RegionalTab } from '@/settings/RegionalTab';
 import { RetentionTab } from '@/settings/RetentionTab';
 import { UsersTab } from '@/settings/UsersTab';
-import type { Backups, Branding, Documents, Notifications, Operator, Overview, Regional, Retention } from '@/settings/types';
+import type { Backups, Branding, Documents, Notifications, Operator, Overview, Regional, Retention, SoftwareUpdate } from '@/settings/types';
 
-export default function Settings({ tab, overview, users, usersSummary, roleDescriptions, branding, notifications, documents, regional, retention, backups }: {
+export default function Settings({ tab, overview, update, users, usersSummary, roleDescriptions, branding, notifications, documents, regional, retention, backups }: {
     tab: 'overview' | 'users' | 'notifications' | 'branding' | 'documents' | 'regional' | 'retention' | 'backups';
     overview: Overview;
+    update: SoftwareUpdate | null;
     users: Operator[] | null;
     usersSummary: { enabled: number; total: number };
     roleDescriptions: { role: string; description: string }[];
@@ -28,7 +29,7 @@ export default function Settings({ tab, overview, users, usersSummary, roleDescr
             <div className="settings-console">
                 <SettingsLinkNav active={tab} />
                 <div className="settings-menu-body">
-                    {tab === 'overview' && <OverviewTab overview={overview} usersSummary={usersSummary} branding={branding} />}
+                    {tab === 'overview' && <OverviewTab overview={overview} usersSummary={usersSummary} branding={branding} update={update} />}
                     {tab === 'users' && <UsersTab users={users} usersSummary={usersSummary} roleDescriptions={roleDescriptions} />}
                     {tab === 'notifications' && notifications && <NotificationsTab n={notifications} />}
                     {tab === 'branding' && <BrandingTab branding={branding} />}

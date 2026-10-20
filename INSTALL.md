@@ -206,7 +206,31 @@ re-applies the configuration. Use it to repair a broken setup, or to switch to L
 sudo bash install.sh --domain radius.example.com --email it@example.com
 ```
 
-To update to a newer version:
+### Updating from the portal
+
+*Settings → Overview → Software update* shows the installed version. **Check for updates** looks for a
+newer release on GitHub and shows what changed; **Update to x.y.z** installs it:
+
+1. The database is backed up.
+2. The portal pauses (maintenance mode) for a few minutes. RADIUS keeps authenticating customers.
+3. The new release is downloaded, its libraries installed and the web pages rebuilt.
+4. Database migrations and permissions are applied, and the portal comes back.
+
+The page shows the progress and reloads when it is done. If a step fails, the previous version comes back
+and the page says where it stopped; the full log is in `/var/log/freeradius-web/update.log`.
+
+Only **releases** are installed: version tags such as `v2.1.0` (see [CHANGELOG.md](CHANGELOG.md)). Commits on
+`main` without a new tag are not. A server whose files were changed by hand is not updated automatically.
+
+**Private repository:** the server needs read access to it. Add a read-only *deploy key* for the root user:
+
+```bash
+sudo ssh-keygen -t ed25519 -N '' -f /root/.ssh/id_ed25519 -C radiusone-updates
+sudo cat /root/.ssh/id_ed25519.pub   # GitHub → repository → Settings → Deploy keys → Add (read-only)
+cd /opt/radiusone && sudo git remote set-url origin git@github.com:<owner>/radiusone.git
+```
+
+### Updating by hand
 
 ```bash
 cd /opt/radiusone
@@ -227,4 +251,5 @@ The installer applies new database migrations and rebuilds the web pages.
 | The login page does not open | `systemctl status nginx php8.3-fpm`, then `tail /var/log/nginx/error.log` and `storage/logs/` |
 | Routers are rejected | `systemctl status freeradius`; is the NAS saved in the portal and FreeRADIUS restarted since? Check the shared secret, and watch live with `sudo systemctl stop freeradius && sudo freeradius -X` (start the service again afterwards). |
 | Lost the administrator password | Another superadmin can reset it under *Settings → Users*. |
+| *Check for updates* says it cannot reach the update server | The server needs read access to the repository: see *Private repository* above. Test with `cd /opt/radiusone && sudo git fetch`. |
 | Scheduled jobs do not run | `cat /etc/cron.d/radiusone` and `tail /var/log/freeradius-web/scheduler.log`; *Monitoring* shows when each job last ran. |

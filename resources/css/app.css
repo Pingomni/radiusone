@@ -2012,3 +2012,10 @@ td .list-menu > summary:hover { border-color: var(--line); background: var(--sur
   .docs-section { padding: var(--sp-4); }
 }
 
+
+/* Settings → Overview → Software update. */
+.success-text { color: var(--success); }
+.update-sheet { display: grid; gap: var(--sp-2); }
+.update-sheet p { margin: 0; }
+.update-sheet pre { max-height: 320px; overflow: auto; margin: var(--sp-2) 0 0; padding: var(--sp-2) var(--sp-3); border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-2); font-size: var(--fs-sm); white-space: pre-wrap; overflow-wrap: anywhere; }
+.update-sheet .form-actions { justify-content: flex-start; }

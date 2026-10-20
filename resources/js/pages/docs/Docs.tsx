@@ -451,7 +451,8 @@ const SECTIONS: Section[] = [
                 <h3>Installing and setup</h3>
                 <ul>
                     <li><code>sudo bash install.sh</code>: installs and configures everything on a fresh Ubuntu 24.04 server (see INSTALL.md). Running it again repairs the setup and keeps all data.</li>
-                    <li><code>sudo bash ops/apply-service-control.sh</code>: re-installs only the helpers behind the Restart, time zone and Back up now buttons.</li>
+                    <li><code>sudo bash ops/apply-service-control.sh</code>: re-installs only the helpers behind the Restart, time zone, Back up now and Software update buttons.</li>
+                    <li><strong>Updates</strong>: <em>Settings → Overview → Software update</em> checks GitHub for a newer release and installs it (database backup first, a few minutes of maintenance, automatic roll-back if a step fails). Log: <code>/var/log/freeradius-web/update.log</code>.</li>
                 </ul>
             </>
         ),

@@ -13,6 +13,7 @@ use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ReportsController;
 use App\Http\Controllers\ServiceController;
 use App\Http\Controllers\SettingsController;
+use App\Http\Controllers\SoftwareUpdateController;
 use App\Http\Controllers\UserController;
 use App\Support\NasTables;
 use Illuminate\Support\Facades\Route;
@@ -70,6 +71,8 @@ Route::middleware('frweb.auth')->group(function () {
         Route::post('/settings/documents', [SettingsController::class, 'saveDocuments']);
         Route::get('/settings/documents/preview/{kind}', [SettingsController::class, 'previewDocument'])->whereIn('kind', ['request', 'receipt']);
         Route::post('/settings/backups/run', [BackupSettingsController::class, 'runNow']);
+        Route::post('/settings/update/check', [SoftwareUpdateController::class, 'check']);
+        Route::get('/settings/update/status', [SoftwareUpdateController::class, 'status']);
         Route::post('/settings/backups/destinations/{id}/test', [BackupSettingsController::class, 'test'])->where('id', '[0-9a-f]{12}');
         foreach (['general', 'sms-template', 'email-template', 'send-sms'] as $legacy) {
             Route::post('/settings/notifications/' . $legacy, [SettingsController::class, 'notificationLegacy']);
@@ -82,6 +85,7 @@ Route::middleware('frweb.auth')->group(function () {
             Route::post('/settings/currency', [SettingsController::class, 'saveCurrency']);
             Route::post('/settings/timezone', [SettingsController::class, 'saveTimezone']);
             Route::post('/settings/backups/passphrase', [BackupSettingsController::class, 'passphrase']);
+            Route::post('/settings/update/start', [SoftwareUpdateController::class, 'start']);
             Route::post('/settings/backups/local', [BackupSettingsController::class, 'local']);
             Route::post('/settings/backups/destinations', [BackupSettingsController::class, 'save']);
             Route::post('/settings/backups/destinations/{id}/delete', [BackupSettingsController::class, 'delete'])->where('id', '[0-9a-f]{12}');

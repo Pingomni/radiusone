@@ -8,6 +8,7 @@ use App\Support\Backup\BackupNow;
 use App\Support\Db;
 use App\Support\MigrationRunner;
 use App\Support\Security;
+use App\Support\SoftwareUpdate;
 use App\Support\TimeZone;
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
 use RuntimeException;
@@ -38,6 +39,11 @@ abstract class TestCase extends BaseTestCase
         TimeZone::$command = [$dir . '/no-timezone-helper'];
         BackupNow::$command = [$dir . '/no-backup-helper'];
         BackupNow::$isActive = ['false'];
+        // Nor the update helper: a test must not update this server.
+        SoftwareUpdate::$command = [$dir . '/no-update-helper'];
+        SoftwareUpdate::$isActive = ['false'];
+        SoftwareUpdate::$statusFile = $dir . '/update-status.json';
+        SoftwareUpdate::$logFile = $dir . '/update.log';
     }
 
     protected function tearDown(): void
