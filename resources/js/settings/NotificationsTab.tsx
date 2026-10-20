@@ -5,6 +5,7 @@ import Icon from '@/components/Icon';
 import { Sheet } from '@/components/settings';
 import { DataTable } from '@/components/table';
 import { Badge, Check, Field, Select, Tag, TextArea } from '@/components/ui';
+import { useShared } from '@/lib/auth';
 import { bind } from '@/lib/form';
 import { useServerTimezone } from '@/lib/clock';
 import { SecretField, TemplateField } from '@/settings/fields';
@@ -85,6 +86,7 @@ function SmsGatewayForm({ g, providers, ready }: { g: SmsGateway; providers: Rec
 }
 
 function EmailGatewayForm({ g, providers, ready }: { g: EmailGateway; providers: Record<string, string>; ready: boolean }) {
+    const { appName } = useShared();
     const form = useForm({
         email_gateway_enabled: g.enabled === '1',
         email_gateway_provider: g.provider,
@@ -96,7 +98,6 @@ function EmailGatewayForm({ g, providers, ready }: { g: EmailGateway; providers:
         email_gateway_username: g.username,
         email_gateway_password: '',
         email_gateway_from_email: g.from_email,
-        email_gateway_from_name: g.from_name,
         email_gateway_reply_to: g.reply_to,
         email_gateway_mailgun_domain: g.mailgun_domain,
         email_gateway_mailgun_region: g.mailgun_region,
@@ -132,7 +133,7 @@ function EmailGatewayForm({ g, providers, ready }: { g: EmailGateway; providers:
                 )}
                 <h3 className="form-section-title">Sender</h3>
                 <Field label="From email" type="email" hint={provider === 'mailgun' ? 'An address on your Mailgun sending domain.' : undefined} {...bind(form, 'email_gateway_from_email')} />
-                <Field label="From name" {...bind(form, 'email_gateway_from_name')} />
+                <p className="span2 hint">Emails are sent as <strong>{appName}</strong>: the company name under <Link href="/settings?tab=branding">Branding</Link>.</p>
                 <Field label="Reply-to email" type="email" {...bind(form, 'email_gateway_reply_to')} />
                 <div className="span2 form-actions"><button className="primary" disabled={form.processing}>Save email gateway</button></div>
             </form>

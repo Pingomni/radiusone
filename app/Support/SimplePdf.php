@@ -14,7 +14,7 @@ final class SimplePdf
         $body = [
             'title' => $title,
             'subtitle' => '',
-            'app_name' => 'FreeRADIUS Web',
+            'app_name' => Branding::name(),
             'logo_path' => null,
             'meta' => [],
             'items' => array_map(fn (string $line): array => [$line, '', ''], $lines),
@@ -66,7 +66,7 @@ final class SimplePdf
         $catalogId = count($objects) + 1;
         $objects[] = "<< /Type /Catalog /Pages {$pagesId} 0 R >>";
         $infoId = count($objects) + 1;
-        $objects[] = '<< /Title (' . self::pdfText((string) $data['title']) . ') /Producer (FreeRADIUS Web) >>';
+        $objects[] = '<< /Title (' . self::pdfText((string) $data['title']) . ') /Author (' . self::pdfText((string) $data['app_name']) . ') /Producer (' . self::pdfText((string) $data['app_name']) . ') >>';
 
         $xObject = $imageId ? "/XObject << /Logo {$imageId} 0 R >>" : '';
         $objects[$pageId - 1] = "<< /Type /Page /Parent {$pagesId} 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 {$fontRegularId} 0 R /F2 {$fontBoldId} 0 R >> {$xObject} >> /Contents {$contentId} 0 R >>";

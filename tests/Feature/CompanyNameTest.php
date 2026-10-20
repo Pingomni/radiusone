@@ -8,6 +8,8 @@ use App\Support\AdminAlerts;
 use App\Support\BillingDocuments;
 use App\Support\Branding;
 use App\Support\NotificationService;
+use App\Support\Settings;
+use App\Support\SimplePdf;
 use Tests\TestCase;
 
 final class CompanyNameTest extends TestCase
@@ -27,6 +29,10 @@ final class CompanyNameTest extends TestCase
         $this->get('/settings?tab=branding')->assertInertia(fn ($page) => $page->where('appName', 'Optix Net')->where('branding.name', 'Optix Net'));
         $this->assertSame('Optix Net', BillingDocuments::settings()['company_name']);
         $this->assertSame('Optix Net', NotificationService::emailGatewaySettings()['from_name']);
+        // A From name posted with the gateway (the old field) is ignored: emails always use the brand name.
+        Settings::save('email_gateway_from_name', 'Old Name');
+        $this->assertSame('Optix Net', NotificationService::emailGatewaySettings()['from_name']);
+        $this->assertStringContainsString('/Author (Optix Net) /Producer (Optix Net)', SimplePdf::document(['Line']));
         $this->assertStringStartsWith('[Optix Net] Daily report', AdminAlerts::report(time())[0]);
 
         // Signed out, the sign-in page shows it too.

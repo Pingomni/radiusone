@@ -71,7 +71,8 @@ final class NotificationService
             'username' => self::setting('email_gateway_username', ''),
             'password' => self::setting('email_gateway_password', ''),
             'from_email' => self::setting('email_gateway_from_email', ''),
-            'from_name' => self::setting('email_gateway_from_name', Branding::name()),
+            // Emails go out under the brand name (Settings → Branding → Company name, else RadiusOne).
+            'from_name' => Branding::name(),
             'reply_to' => self::setting('email_gateway_reply_to', ''),
             'timeout' => self::setting('email_gateway_timeout', '12'),
             'mailgun_domain' => self::setting('email_gateway_mailgun_domain', ''),
@@ -196,7 +197,6 @@ final class NotificationService
             'encryption' => in_array($encryption, ['tls', 'ssl', 'none'], true) ? $encryption : 'tls',
             'username' => trim((string) ($input['email_gateway_username'] ?? '')),
             'from_email' => trim((string) ($input['email_gateway_from_email'] ?? '')),
-            'from_name' => trim((string) ($input['email_gateway_from_name'] ?? '')),
             'reply_to' => trim((string) ($input['email_gateway_reply_to'] ?? '')),
             'timeout' => (string) max(3, min(60, (int) ($input['email_gateway_timeout'] ?? 12))),
             'mailgun_domain' => strtolower(trim((string) ($input['email_gateway_mailgun_domain'] ?? ''))),

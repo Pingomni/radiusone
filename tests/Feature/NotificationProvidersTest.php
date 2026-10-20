@@ -34,7 +34,7 @@ final class NotificationProvidersTest extends TestCase
     private function email(array $values): void
     {
         $this->post('/settings/notifications/email-gateway', $values + [
-            'email_gateway_enabled' => true, 'email_gateway_from_email' => 'billing@example.test', 'email_gateway_from_name' => 'Example ISP', 'email_gateway_reply_to' => '',
+            'email_gateway_enabled' => true, 'email_gateway_from_email' => 'billing@example.test', 'email_gateway_reply_to' => '',
         ])->assertSessionHas('flash.type', 'success');
     }
 
@@ -62,7 +62,7 @@ final class NotificationProvidersTest extends TestCase
         $this->assertSame('https://api.eu.mailgun.net/v3/mg.example.test/messages', $this->sent[0]['url']);
         $this->assertSame('Basic ' . base64_encode('api:key-123'), $this->sent[0]['headers']['Authorization']);
         parse_str($this->sent[0]['body'], $fields);
-        $this->assertSame(['Example ISP <billing@example.test>', 'bob@example.test', 'Hi'], [$fields['from'], $fields['to'], $fields['subject']]);
+        $this->assertSame(['RadiusOne <billing@example.test>', 'bob@example.test', 'Hi'], [$fields['from'], $fields['to'], $fields['subject']]);
 
         $this->provider([401, '{"message":"Invalid private key"}']);
         $this->post('/settings/notifications/email-test', ['to' => 'alice@example.test'])

@@ -259,7 +259,7 @@ const SECTIONS: Section[] = [
                         ['Mailgun', 'Sending domain, API key and region (US or EU).'],
                     ]}
                 />
-                <p>Set a <strong>from email</strong> your provider allows (for example <code>noc@example.com</code>) and a from name customers recognize.</p>
+                <p>Set a <strong>from email</strong> your provider allows (for example <code>noc@example.com</code>) Emails go out under your company name from <em>Settings → Branding</em> (RadiusOne when none is set); invoice and receipt PDFs and the brand name in SMS texts use the same name.</p>
                 <h3>SMS</h3>
                 <Table
                     head={['Provider', 'What you need']}
