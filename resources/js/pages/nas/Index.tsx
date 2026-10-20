@@ -6,7 +6,7 @@ import { Badge, Panel, Tag, type TagData } from '@/components/ui';
 import AppLayout from '@/layouts/AppLayout';
 import { useCan } from '@/lib/auth';
 
-type Device = { id: number; name: string; ip: string; vendor: string; enabled: boolean; update: TagData; disconnect: TagData | null; online: number; description: string; pendingDelete: boolean };
+type Device = { id: number; name: string; ip: string; vendor: string; enabled: boolean; update: TagData; disconnect: TagData | null; online: number; snmp: TagData | null; description: string; pendingDelete: boolean };
 
 export default function NasIndex({ devices }: { devices: Device[] }) {
     const can = useCan();
@@ -29,6 +29,7 @@ export default function NasIndex({ devices }: { devices: Device[] }) {
                         { header: 'RADIUS update', cell: (d) => <Tag tag={d.update} /> },
                         { header: 'Disconnect', cell: (d) => (d.disconnect ? <Tag tag={d.disconnect} /> : <span className="muted-action">after the update</span>) },
                         { header: 'Online now', cell: (d) => d.online },
+                        { header: 'SNMP', cell: (d) => (d.snmp ? <Tag tag={d.snmp} /> : '') },
                         { header: 'Description', cell: (d) => <span className="cell-truncate" title={d.description}>{d.description}</span> },
                         {
                             header: 'Actions',

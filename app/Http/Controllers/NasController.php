@@ -35,8 +35,10 @@ final class NasController extends Controller
     public function index(): Response
     {
         $rows = Db::select('SELECT n.*, m.config_revision, m.applied_revision, m.pending_delete, m.vendor, m.enabled, m.coa_enabled, m.coa_port, m.api_host, m.api_user, (COALESCE(m.api_password, "") <> "") AS api_password_saved, ' . NasRepository::apiEnabledSql('m') . ' AS api_enabled, COUNT(r.radacctid) AS online_users FROM nas n LEFT JOIN nas_metadata m ON m.nas_id=n.id LEFT JOIN radacct r ON ' . Accounting::freshSql('r') . ' AND (r.nasipaddress=n.nasname OR r.nasipaddress=n.shortname) GROUP BY n.id ORDER BY n.shortname');
+        $snmp = NasMonitor::available() ? array_column(Db::select('SELECT * FROM nas_snmp'), null, 'nas_id') : null;
+        $manage = Auth::can('nas.manage');
         return Inertia::render('nas/Index', [
-            'devices' => array_map(static function (array $r) {
+            'devices' => array_map(static function (array $r) use ($snmp, $manage) {
                 $deployed = $r['applied_revision'] !== null && $r['applied_revision'] == $r['config_revision'];
                 return [
                     'id' => (int) $r['id'],
@@ -47,11 +49,29 @@ final class NasController extends Controller
                     'update' => $deployed ? Present::tag($r['pending_delete'] ? 'Removed' : 'Up to date', null) : Present::tag('Waiting for update', 'warning'),
                     'disconnect' => $deployed && $r['enabled'] ? Present::nasDisconnect($r) : null,
                     'online' => (int) $r['online_users'],
+                    'snmp' => $snmp === null ? null : self::snmpTag((int) $r['id'], $snmp[(int) $r['id']] ?? null, $manage),
                     'description' => (string) $r['description'],
                     'pendingDelete' => (bool) $r['pending_delete'],
                 ];
             }, $rows),
         ]);
+    }
+
+    /**
+     * SNMP state for the NAS list; "Not set up" links managers to the SNMP tab.
+     *
+     * @param  array<string, mixed>|null  $settings
+     * @return array<string, string>
+     */
+    private static function snmpTag(int $id, ?array $settings, bool $manage): array
+    {
+        if (NasMonitor::configured($settings)) {
+            return Present::tag('v' . $settings['version'], 'success', 'Monitoring enabled', '/nas/' . $id . '/monitor');
+        }
+        $setup = $manage ? '/nas/' . $id . '/edit?tab=snmp' : null;
+        return $settings && empty($settings['enabled'])
+            ? Present::tag('Off', 'warning', 'SNMP monitoring is switched off', $setup)
+            : Present::tag('Not set up', 'info', 'SNMP monitoring is not set up', $setup);
     }
 
     public function health(): RedirectResponse

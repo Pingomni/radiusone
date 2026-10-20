@@ -29,7 +29,9 @@ final class NasTest extends TestCase
         $this->get('/nas')->assertOk()->assertInertia(fn ($page) => $page
             ->component('nas/Index')
             ->where('devices.0.name', 'bras-01')
-            ->where('devices.0.update.text', 'Waiting for update'));
+            ->where('devices.0.update.text', 'Waiting for update')
+            ->where('devices.0.snmp.text', 'Not set up')
+            ->where('devices.0.snmp.href', '/nas/' . $id . '/edit?tab=snmp'));
 
         $this->get('/nas/' . $id . '/edit')->assertOk()->assertInertia(fn ($page) => $page
             ->where('nas.ip', '10.10.0.1')
@@ -141,6 +143,7 @@ final class NasTest extends TestCase
         $id = $this->createNas();
         $this->post('/nas/' . $id . '/snmp', ['snmp_enabled' => true, 'snmp_port' => '161', 'snmp_host' => '', 'snmp_version' => '2c', 'snmp_timeout_ms' => '1500', 'snmp_community' => 'ro-community'])
             ->assertRedirect('/nas/' . $id . '/edit?tab=snmp');
+        $this->get('/nas')->assertInertia(fn ($page) => $page->where('devices.0.snmp.text', 'v2c')->where('devices.0.snmp.href', '/nas/' . $id . '/monitor'));
         $this->get('/nas/' . $id . '/edit')->assertOk()->assertInertia(fn ($page) => $page
             ->where('snmp.values.snmp_enabled', true)
             ->where('snmp.values.snmp_community', 'ro-community')
