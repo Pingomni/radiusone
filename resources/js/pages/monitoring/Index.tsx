@@ -81,7 +81,6 @@ function OverviewBody({ data, canManage }: { data: Overview; canManage: boolean 
                         <small>{job.detail}</small>
                     </div>
                 ))}
-                <p className="hint">Jobs run from cron on this server; see <Link href="/docs#server">Documentation → Server operations</Link> for the schedule.</p>
             </section>
         </div>
     );

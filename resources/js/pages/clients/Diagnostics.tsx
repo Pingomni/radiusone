@@ -59,7 +59,6 @@ export default function Diagnostics({ username, signals, operations, sources }: 
                 />
             </Panel>
             <Panel title="Service restriction">
-                <p className="hint">Disconnect ends one session and permits reconnection under its entitlement. Suspend persists a restriction; payment never clears manual or security suspension.</p>
                 {can('clients.suspend') && <RestrictionForm username={username} sources={sources} />}
             </Panel>
         </AppLayout>

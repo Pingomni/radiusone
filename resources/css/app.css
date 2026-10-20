@@ -581,6 +581,7 @@ details > summary { cursor: pointer; font-weight: 600; }
   gap: var(--sp-2) var(--sp-4);
 }
 .workspace-intro h2 { font-size: var(--fs-xl); }
+.workspace-intro > .workspace-actions:only-child { margin-left: auto; }
 .workspace-intro p { color: var(--text-muted); font-size: var(--fs-sm); }
 .page-description { color: var(--text-muted); font-size: var(--fs-sm); }
 

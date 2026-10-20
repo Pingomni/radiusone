@@ -17,7 +17,6 @@ export default function Operations({ worker, metrics, operations }: { worker: { 
                     <strong>The network worker is not running.</strong> {worker.detail} Queued changes stay here until the network operations worker is scheduled.
                 </div>
             )}
-            <p className="hint">The latest 100 router changes queued by the portal (for example speed changes or disconnects).</p>
             <MetricCards metrics={metrics} />
             <Panel title="Operations">
                 <DataTable

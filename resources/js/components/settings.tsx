@@ -4,8 +4,9 @@ import Icon from './Icon';
 
 // Settings-style building blocks (legacy settingsSheet, settingsRows, settingsDestination, profile fields).
 
-export function Sheet({ title, description, icon = 'settings', meta, className = '', children }: {
+export function Sheet({ title, icon = 'settings', meta, className = '', children }: {
     title: string;
+    /** Not shown: headers are kept to the title (details live in Documentation). */
     description?: string;
     icon?: string;
     meta?: ReactNode;
@@ -19,7 +20,6 @@ export function Sheet({ title, description, icon = 'settings', meta, className =
                     <span className="account-section-icon"><Icon name={icon} /></span>
                     <div>
                         <h2>{title}</h2>
-                        {description && <p>{description}</p>}
                     </div>
                 </div>
                 {meta && <div className="settings-sheet-meta">{meta}</div>}

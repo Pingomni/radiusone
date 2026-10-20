@@ -48,10 +48,6 @@ export default function Dashboard({ kpis, nas, rejects, topUsers }: { kpis: Metr
     return (
         <AppLayout title="Dashboard">
             <div className="workspace-intro">
-                <div>
-                    <h2>Network overview</h2>
-                    <p>Clients, network access and usage at a glance.</p>
-                </div>
                 <div className="workspace-actions">
                     {can('clients.manage') && <Link className="button primary" href="/clients/create"><Icon name="plus" />New client</Link>}
                     {can('billing.view') && <Link className="button" href="/billing?status=overdue">Review overdue invoices</Link>}

@@ -45,7 +45,6 @@ export default function ServiceForm({ service, clientCount, expiredOptions, canM
                     <Check label="Enabled" disabled={disabled} {...bindCheck(form, 'enabled')} />
                     {field('Customer download (Mbps)', 'download_speed')}
                     {field('Customer upload (Mbps)', 'upload_speed')}
-                    <p className="span2">Vendor rates are generated from customer download/upload speeds. RouterOS receives upload/download; IOS XE uses ingress policing and egress shaping after release validation.</p>
                     <Select label="IP behavior" disabled={disabled} options={{ pool: 'Dynamic pool', static: 'Static per client', none: 'No IP attribute' }} {...bind(form, 'ip_mode')} />
                     {field('IP pool name', 'ip_pool')}
                     {field('Session timeout', 'session_timeout', { type: 'number' })}

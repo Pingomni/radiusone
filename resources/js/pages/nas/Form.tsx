@@ -161,8 +161,6 @@ function Summary({ nas }: { nas: NasInfo }) {
     );
 }
 
-const intro = (text: string) => <p className="nas-tab-intro">{text}</p>;
-
 export default function NasForm({ device, vendors, setupSteps, canManage, nas, api, snmp, sessions }: {
     device: Device;
     vendors: Record<string, Vendor>;
@@ -201,14 +199,14 @@ export default function NasForm({ device, vendors, setupSteps, canManage, nas, a
                 label="NAS settings"
                 className="tabs nas-tabs"
                 tabs={[
-                    { key: 'device', title: 'Device', icon: 'server', content: <>{intro('How FreeRADIUS recognises this router. Address, name, type, secret and on/off take effect after a FreeRADIUS restart; CoA settings apply at once.')}<DeviceForm device={device} vendors={vendors} canManage={canManage} /></> },
-                    { key: 'api', title: 'API', icon: 'settings', content: <>{intro('Optional RouterOS API access. When it is on, disconnects use the API instead of RADIUS CoA.')}{api && <ApiForm values={api} vendor={nas.vendor} ip={nas.ip} canManage={canManage} />}</> },
-                    { key: 'snmp', title: 'SNMP', icon: 'signal', content: <>{intro('Read-only monitoring for the Monitoring page, live monitor and graphs. Changes here apply immediately; no FreeRADIUS restart is needed.')}<SnmpForm snmp={snmp ?? null} nasId={nas.id} ip={nas.ip} canManage={canManage} /></> },
+                    { key: 'device', title: 'Device', icon: 'server', content: <><DeviceForm device={device} vendors={vendors} canManage={canManage} /></> },
+                    { key: 'api', title: 'API', icon: 'settings', content: <>{api && <ApiForm values={api} vendor={nas.vendor} ip={nas.ip} canManage={canManage} />}</> },
+                    { key: 'snmp', title: 'SNMP', icon: 'signal', content: <><SnmpForm snmp={snmp ?? null} nasId={nas.id} ip={nas.ip} canManage={canManage} /></> },
                     {
                         key: 'sessions', title: 'Sessions', icon: 'clients', count: sessions?.length ?? 0,
                         content: (
                             <>
-                                {intro('Accounting sessions without a stop record from this NAS.')}
+                                
                                 {sessions?.length ? (
                                     <DataTable
                                         rows={sessions}
@@ -224,7 +222,7 @@ export default function NasForm({ device, vendors, setupSteps, canManage, nas, a
                             </>
                         ),
                     },
-                    { key: 'setup', title: 'Router setup', icon: 'settings', content: <>{intro('What to configure on the router so it works with this portal.')}<SetupGuide steps={setupSteps[nas.vendor]} /></> },
+                    { key: 'setup', title: 'Router setup', icon: 'settings', content: <><SetupGuide steps={setupSteps[nas.vendor]} /></> },
                 ]}
             />
         </AppLayout>

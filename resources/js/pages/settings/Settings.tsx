@@ -74,12 +74,11 @@ type Retention = {
 
 const NOTICES = '/settings?tab=notifications';
 
-function Destination({ title, description, href, icon, status }: { title: string; description: string; href: string; icon: string; status: ReactNode }) {
+function Destination({ title, href, icon, status }: { title: string; description?: string; href: string; icon: string; status: ReactNode }) {
     return (
         <Link className="settings-destination" href={href}>
             <span className="account-section-icon"><Icon name={icon} /></span>
             <h3>{title}</h3>
-            <p>{description}</p>
             <span className="settings-destination-status">{status}</span>
             <span className="settings-destination-action">Configure <span aria-hidden="true">→</span></span>
         </Link>
@@ -196,23 +195,20 @@ function BrandingTab({ branding }: { branding: Branding }) {
                 <div className="branding-preview-panel">
                     <span className="workspace-eyebrow">YOUR WORKSPACE</span>
                     <div className="brand-preview-stage"><BrandLogo className="preview-logo" /><strong>{shown}</strong><span>{shown === branding.product ? 'Client management' : branding.product}</span></div>
-                    <h3>Your name. A familiar workspace.</h3>
-                    <p>Your company name and logo appear on the sign-in screen and sidebar for everyone on your team.</p>
-                    <p className="hint">Uploaded logos also appear on PDF invoices. Use an upload if you need your logo on invoices.</p>
                     {branding.hasSetting && (
                         <PostButton action="/settings/branding/logo/delete" label="Reset to default logo" confirm={{ message: 'Remove custom logo and use the default mark?', confirmLabel: 'Reset logo' }} />
                     )}
                 </div>
                 <div className="branding-methods">
                     <section className="branding-method branding-name">
-                        <div className="branding-method-title"><span className="method-number"><Icon name="clients" /></span><div><h3>Company name</h3><p>Shown in the sidebar, on the sign-in page and in the browser tab, and used in emails, alerts, invoices and authenticator apps.</p></div></div>
+                        <div className="branding-method-title"><span className="method-number"><Icon name="clients" /></span><h3>Company name</h3></div>
                         <form className="branding-form" onSubmit={(event) => { event.preventDefault(); company.post('/settings/branding/name', { preserveScroll: true }); }}>
                             <Field label="Company name" name="company_name" maxLength={60} placeholder={branding.product} hint={`Leave empty to use ${branding.product}.`} value={company.data.company_name} error={company.errors.company_name} onChange={(e) => company.setData('company_name', e.target.value)} />
                             <div className="form-actions"><button className="primary" disabled={company.processing || !company.isDirty}>Save name</button></div>
                         </form>
                     </section>
                     <section className="branding-method">
-                        <div className="branding-method-title"><span className="method-number">01</span><div><h3>Upload your logo</h3><p>Keep a copy in your workspace.</p></div></div>
+                        <div className="branding-method-title"><span className="method-number">01</span><h3>Upload your logo</h3></div>
                         <form
                             className="branding-form"
                             onSubmit={(event) => {
@@ -244,7 +240,7 @@ function BrandingTab({ branding }: { branding: Branding }) {
                         </form>
                     </section>
                     <section className="branding-method">
-                        <div className="branding-method-title"><span className="method-number">02</span><div><h3>Use an image URL</h3><p>Connect a logo hosted on your website.</p></div></div>
+                        <div className="branding-method-title"><span className="method-number">02</span><h3>Use an image URL</h3></div>
                         <form className="branding-form" onSubmit={(event) => { event.preventDefault(); link.post('/settings/branding/logo/url', { preserveScroll: true }); }}>
                             <label htmlFor="portal-logo-url">
                                 HTTPS image URL
@@ -856,7 +852,7 @@ function Gateways({ n }: { n: Notifications }) {
     ];
     return (
         <>
-            <div className="settings-section-intro"><h3>{anyReady ? 'Your delivery channels' : '1. Connect a gateway'}</h3><p>Enable Email, SMS, or both. Then choose the channels for each template.</p></div>
+            <div className="settings-section-intro"><h3>{anyReady ? 'Delivery channels' : '1. Connect a gateway'}</h3></div>
             <div className="notice-gateways">
                 {channels.map(([key, label, copy, icon]) => (
                     <article className="notice-gateway" key={key}>
@@ -941,7 +937,7 @@ function Templates({ n }: { n: Notifications }) {
     }
     return (
         <>
-            <div className="settings-section-intro"><h3>Three messages. One clear workflow.</h3><p>Welcome and Service extended send automatically when enabled. Custom is sent only after your review.</p></div>
+            <div className="settings-section-intro"><h3>Templates</h3></div>
             <div className="notice-template-list">
                 {Object.entries(labels).map(([key, label]) => {
                     const t = templates[key];
@@ -961,7 +957,6 @@ function Templates({ n }: { n: Notifications }) {
                     );
                 })}
             </div>
-            <p className="notice-footnote">Customer Email and SMS alert preferences are always respected.</p>
         </>
     );
 }
@@ -1111,7 +1106,6 @@ function AdminAlerts({ admin, ready }: { admin: NonNullable<Notifications['admin
                     <TextArea className="" label="SMS recipients" name="phones" rows={2} hint="Phone numbers, separated with commas." value={form.data.phones} onChange={(e) => form.setData('phones', e.target.value)} />
 
                     <div className="span2 notice-editor-channel"><h3>Alerts</h3></div>
-                    <p className="span2 hint">Checked every minute. A problem must still be there on the next check before it alerts, so a restart does not wake anyone. You also get a message when it is resolved.</p>
                     <fieldset className="span2 admin-alert-checks">
                         <legend>Alert me when</legend>
                         {Object.entries(admin.checks).map(([key, label]) => (
@@ -1146,7 +1140,6 @@ function AdminAlerts({ admin, ready }: { admin: NonNullable<Notifications['admin
 
                     <details className="span2">
                         <summary>Message templates</summary>
-                        <p className="hint">Edit the text in use. Placeholders in braces are filled in when the message is sent; an empty field goes back to the default.</p>
                         <div className="form-grid template-fields">
                             {Object.entries(admin.templates).map(([key, t]) => (
                                 <TemplateField
@@ -1197,7 +1190,7 @@ function NotificationsTab({ n }: { n: Notifications }) {
     return (
         <div className="settings-notifications notice-workspace">
             <div className="notice-heading">
-                <div><h2>Notifications</h2><p>Messages to customers, and alerts and reports for your team.</p></div>
+                <h2>Notifications</h2>
                 {anyReady
                     ? <Link className="button primary" href={`${NOTICES}&view=bulk`}><Icon name="message" /> Send bulk message</Link>
                     : <span className="notice-setup-label">Start with a gateway</span>}
