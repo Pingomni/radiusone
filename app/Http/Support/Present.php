@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Support;
 
-use App\Support\RadiusRepository;
+use App\Support\SessionDisconnect;
 
 /**
  * Presentation data shared by several pages. A "tag" is ['text' => …, 'tone' => …|null, 'title' => …?];
@@ -29,7 +29,7 @@ final class Present
         if (($row['applied_revision'] ?? null) === null || (int) $row['applied_revision'] !== (int) ($row['config_revision'] ?? 0)) {
             return self::tag('waiting for FreeRADIUS restart', 'warning');
         }
-        $method = RadiusRepository::disconnectMethod($row);
+        $method = SessionDisconnect::disconnectMethod($row);
         return match ($method['method']) {
             'api' => self::tag('RouterOS API', null),
             'coa' => self::tag('CoA', null),

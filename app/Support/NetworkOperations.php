@@ -214,7 +214,7 @@ final class NetworkOperations
         $sent = 0;
         foreach ($sessions as $session) {
             try {
-                RadiusRepository::disconnectUser((string) $session['username'], null, (int) $session['radacctid']);
+                SessionDisconnect::disconnectUser((string) $session['username'], null, (int) $session['radacctid']);
                 $sent++;
             } catch (\Throwable $e) {
                 // A session whose accounting went quiet is not online any more: the new policy applies at its next login.

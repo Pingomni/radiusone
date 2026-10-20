@@ -7,7 +7,7 @@ namespace Tests\Feature;
 use App\Http\Controllers\NasController;
 use App\Http\Support\Nas;
 use App\Support\Db;
-use App\Support\RadiusRepository;
+use App\Support\NasRepository;
 use Tests\TestCase;
 
 final class NasTest extends TestCase
@@ -53,15 +53,15 @@ final class NasTest extends TestCase
         $revision = (int) Db::value('SELECT config_revision FROM nas_metadata WHERE nas_id=?', [$id]);
 
         // FreeRADIUS started before the save: still waiting.
-        $this->assertSame([], RadiusRepository::recordLoadedNasRevisions(time() - 1200));
+        $this->assertSame([], NasRepository::recordLoadedNasRevisions(time() - 1200));
         $this->get('/nas')->assertInertia(fn ($page) => $page->where('devices.0.update.text', 'Waiting for update'));
 
         // Started after it: in effect, with the evidence recorded.
-        $this->assertSame([$id => $revision], RadiusRepository::recordLoadedNasRevisions(time() - 60));
+        $this->assertSame([$id => $revision], NasRepository::recordLoadedNasRevisions(time() - 60));
         $this->assertSame($revision, (int) Db::value('SELECT applied_revision FROM nas_metadata WHERE nas_id=?', [$id]));
         $this->assertStringContainsString('recorded automatically', (string) Db::value('SELECT applied_evidence FROM nas_metadata WHERE nas_id=?', [$id]));
         $this->get('/nas')->assertInertia(fn ($page) => $page->where('devices.0.update.text', 'Up to date'));
-        $this->assertSame([], RadiusRepository::recordLoadedNasRevisions(time()));
+        $this->assertSame([], NasRepository::recordLoadedNasRevisions(time()));
 
         // A CoA-only change needs no restart.
         $this->post('/nas/save', ['id' => $id, 'section' => 'device', 'vendor' => 'mikrotik', 'shortname' => 'bras-01', 'nasname' => '10.10.0.1', 'secret' => '', 'enabled' => true, 'coa_enabled' => true, 'coa_port' => '1700'])

@@ -1795,6 +1795,24 @@ parameters:
 			path: app/Support/NasMonitor.php
 
 		-
+			message: '#^Method App\\Support\\NasRepository\:\:saveNas\(\) has parameter \$input with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Support/NasRepository.php
+
+		-
+			message: '#^Method App\\Support\\NasRepository\:\:saveNasLocked\(\) has parameter \$input with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Support/NasRepository.php
+
+		-
+			message: '#^Variable \$id on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.variable
+			count: 2
+			path: app/Support/NasRepository.php
+
+		-
 			message: '#^Call to an undefined method object\:\:walk\(\)\.$#'
 			identifier: method.notFound
 			count: 1
@@ -2437,18 +2455,6 @@ parameters:
 			path: app/Support/RadiusRepository.php
 
 		-
-			message: '#^Cannot access offset 1 on array\|false\.$#'
-			identifier: offsetAccess.nonOffsetAccessible
-			count: 1
-			path: app/Support/RadiusRepository.php
-
-		-
-			message: '#^Comparison operation "\>" between int\<1, 65535\> and 65535 is always false\.$#'
-			identifier: greater.alwaysFalse
-			count: 1
-			path: app/Support/RadiusRepository.php
-
-		-
 			message: '#^Method App\\Support\\RadiusRepository\:\:assertNoManagedConflicts\(\) has parameter \$managed with no value type specified in iterable type array\.$#'
 			identifier: missingType.iterableValue
 			count: 1
@@ -2461,43 +2467,7 @@ parameters:
 			path: app/Support/RadiusRepository.php
 
 		-
-			message: '#^Method App\\Support\\RadiusRepository\:\:disconnectFailureMessage\(\) has parameter \$session with no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: app/Support/RadiusRepository.php
-
-		-
-			message: '#^Method App\\Support\\RadiusRepository\:\:disconnectMethod\(\) has parameter \$nas with no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: app/Support/RadiusRepository.php
-
-		-
-			message: '#^Method App\\Support\\RadiusRepository\:\:disconnectUser\(\) return type has no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: app/Support/RadiusRepository.php
-
-		-
-			message: '#^Method App\\Support\\RadiusRepository\:\:disconnectUserViaMikrotikApi\(\) has parameter \$session with no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: app/Support/RadiusRepository.php
-
-		-
 			message: '#^Method App\\Support\\RadiusRepository\:\:isExpiredAccount\(\) has parameter \$input with no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: app/Support/RadiusRepository.php
-
-		-
-			message: '#^Method App\\Support\\RadiusRepository\:\:mikrotikDisconnectApiStatus\(\) has parameter \$nas with no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: app/Support/RadiusRepository.php
-
-		-
-			message: '#^Method App\\Support\\RadiusRepository\:\:mikrotikDisconnectApiStatus\(\) return type has no value type specified in iterable type array\.$#'
 			identifier: missingType.iterableValue
 			count: 1
 			path: app/Support/RadiusRepository.php
@@ -2557,121 +2527,7 @@ parameters:
 			path: app/Support/RadiusRepository.php
 
 		-
-			message: '#^Method App\\Support\\RadiusRepository\:\:routerApiAssertOk\(\) has parameter \$reply with no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: app/Support/RadiusRepository.php
-
-		-
-			message: '#^Method App\\Support\\RadiusRepository\:\:routerApiConnect\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: app/Support/RadiusRepository.php
-
-		-
-			message: '#^Method App\\Support\\RadiusRepository\:\:routerApiDeadline\(\) has parameter \$socket with no type specified\.$#'
-			identifier: missingType.parameter
-			count: 1
-			path: app/Support/RadiusRepository.php
-
-		-
-			message: '#^Method App\\Support\\RadiusRepository\:\:routerApiFindActivePpp\(\) has parameter \$socket with no type specified\.$#'
-			identifier: missingType.parameter
-			count: 1
-			path: app/Support/RadiusRepository.php
-
-		-
-			message: '#^Method App\\Support\\RadiusRepository\:\:routerApiFindActivePpp\(\) return type has no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: app/Support/RadiusRepository.php
-
-		-
-			message: '#^Method App\\Support\\RadiusRepository\:\:routerApiParseSentence\(\) has parameter \$sentence with no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: app/Support/RadiusRepository.php
-
-		-
-			message: '#^Method App\\Support\\RadiusRepository\:\:routerApiParseSentence\(\) return type has no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: app/Support/RadiusRepository.php
-
-		-
-			message: '#^Method App\\Support\\RadiusRepository\:\:routerApiReadBytes\(\) has parameter \$socket with no type specified\.$#'
-			identifier: missingType.parameter
-			count: 1
-			path: app/Support/RadiusRepository.php
-
-		-
-			message: '#^Method App\\Support\\RadiusRepository\:\:routerApiReadReply\(\) has parameter \$socket with no type specified\.$#'
-			identifier: missingType.parameter
-			count: 1
-			path: app/Support/RadiusRepository.php
-
-		-
-			message: '#^Method App\\Support\\RadiusRepository\:\:routerApiReadReply\(\) return type has no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: app/Support/RadiusRepository.php
-
-		-
-			message: '#^Method App\\Support\\RadiusRepository\:\:routerApiReadSentence\(\) has parameter \$socket with no type specified\.$#'
-			identifier: missingType.parameter
-			count: 1
-			path: app/Support/RadiusRepository.php
-
-		-
-			message: '#^Method App\\Support\\RadiusRepository\:\:routerApiReadSentence\(\) return type has no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: app/Support/RadiusRepository.php
-
-		-
-			message: '#^Method App\\Support\\RadiusRepository\:\:routerApiReadWord\(\) has parameter \$socket with no type specified\.$#'
-			identifier: missingType.parameter
-			count: 1
-			path: app/Support/RadiusRepository.php
-
-		-
-			message: '#^Method App\\Support\\RadiusRepository\:\:routerApiReadWord\(\) never returns null so it can be removed from the return type\.$#'
-			identifier: return.unusedType
-			count: 1
-			path: app/Support/RadiusRepository.php
-
-		-
-			message: '#^Method App\\Support\\RadiusRepository\:\:routerApiWriteSentence\(\) has parameter \$socket with no type specified\.$#'
-			identifier: missingType.parameter
-			count: 1
-			path: app/Support/RadiusRepository.php
-
-		-
-			message: '#^Method App\\Support\\RadiusRepository\:\:routerApiWriteSentence\(\) has parameter \$words with no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: app/Support/RadiusRepository.php
-
-		-
-			message: '#^Method App\\Support\\RadiusRepository\:\:routerApiWriteWord\(\) has parameter \$socket with no type specified\.$#'
-			identifier: missingType.parameter
-			count: 1
-			path: app/Support/RadiusRepository.php
-
-		-
 			message: '#^Method App\\Support\\RadiusRepository\:\:saveClient\(\) has parameter \$input with no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: app/Support/RadiusRepository.php
-
-		-
-			message: '#^Method App\\Support\\RadiusRepository\:\:saveNas\(\) has parameter \$input with no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: app/Support/RadiusRepository.php
-
-		-
-			message: '#^Method App\\Support\\RadiusRepository\:\:saveNasLocked\(\) has parameter \$input with no value type specified in iterable type array\.$#'
 			identifier: missingType.iterableValue
 			count: 1
 			path: app/Support/RadiusRepository.php
@@ -2737,39 +2593,9 @@ parameters:
 			path: app/Support/RadiusRepository.php
 
 		-
-			message: '#^Parameter \#2 \$length of function fread expects int\<1, max\>, int\<\-65534, 65536\> given\.$#'
-			identifier: argument.type
-			count: 1
-			path: app/Support/RadiusRepository.php
-
-		-
-			message: '#^Static method App\\Support\\RadiusRepository\:\:disconnectFailureMessage\(\) is unused\.$#'
-			identifier: method.unused
-			count: 1
-			path: app/Support/RadiusRepository.php
-
-		-
-			message: '#^Static method App\\Support\\RadiusRepository\:\:routerUptimeSeconds\(\) is unused\.$#'
-			identifier: method.unused
-			count: 1
-			path: app/Support/RadiusRepository.php
-
-		-
-			message: '#^Static property App\\Support\\RadiusRepository\:\:\$routerSocketFactory \(Closure\|null\) is never assigned Closure so it can be removed from the property type\.$#'
-			identifier: property.unusedType
-			count: 1
-			path: app/Support/RadiusRepository.php
-
-		-
 			message: '#^Strict comparison using \!\=\= between mixed and null will always evaluate to true\.$#'
 			identifier: notIdentical.alwaysTrue
 			count: 1
-			path: app/Support/RadiusRepository.php
-
-		-
-			message: '#^Variable \$id on left side of \?\? always exists and is not nullable\.$#'
-			identifier: nullCoalesce.variable
-			count: 2
 			path: app/Support/RadiusRepository.php
 
 		-
@@ -2783,6 +2609,132 @@ parameters:
 			identifier: missingType.iterableValue
 			count: 1
 			path: app/Support/Retention.php
+
+		-
+			message: '#^Cannot access offset 1 on array\|false\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 1
+			path: app/Support/RouterOsApi.php
+
+		-
+			message: '#^Comparison operation "\>" between int\<1, 65535\> and 65535 is always false\.$#'
+			identifier: greater.alwaysFalse
+			count: 1
+			path: app/Support/RouterOsApi.php
+
+		-
+			message: '#^Method App\\Support\\RouterOsApi\:\:assertOk\(\) has parameter \$reply with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Support/RouterOsApi.php
+
+		-
+			message: '#^Method App\\Support\\RouterOsApi\:\:connect\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Support/RouterOsApi.php
+
+		-
+			message: '#^Method App\\Support\\RouterOsApi\:\:deadline\(\) has parameter \$socket with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: app/Support/RouterOsApi.php
+
+		-
+			message: '#^Method App\\Support\\RouterOsApi\:\:findActivePpp\(\) has parameter \$socket with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: app/Support/RouterOsApi.php
+
+		-
+			message: '#^Method App\\Support\\RouterOsApi\:\:findActivePpp\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Support/RouterOsApi.php
+
+		-
+			message: '#^Method App\\Support\\RouterOsApi\:\:parseSentence\(\) has parameter \$sentence with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Support/RouterOsApi.php
+
+		-
+			message: '#^Method App\\Support\\RouterOsApi\:\:parseSentence\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Support/RouterOsApi.php
+
+		-
+			message: '#^Method App\\Support\\RouterOsApi\:\:readBytes\(\) has parameter \$socket with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: app/Support/RouterOsApi.php
+
+		-
+			message: '#^Method App\\Support\\RouterOsApi\:\:readReply\(\) has parameter \$socket with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: app/Support/RouterOsApi.php
+
+		-
+			message: '#^Method App\\Support\\RouterOsApi\:\:readReply\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Support/RouterOsApi.php
+
+		-
+			message: '#^Method App\\Support\\RouterOsApi\:\:readSentence\(\) has parameter \$socket with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: app/Support/RouterOsApi.php
+
+		-
+			message: '#^Method App\\Support\\RouterOsApi\:\:readSentence\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Support/RouterOsApi.php
+
+		-
+			message: '#^Method App\\Support\\RouterOsApi\:\:readWord\(\) has parameter \$socket with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: app/Support/RouterOsApi.php
+
+		-
+			message: '#^Method App\\Support\\RouterOsApi\:\:readWord\(\) never returns null so it can be removed from the return type\.$#'
+			identifier: return.unusedType
+			count: 1
+			path: app/Support/RouterOsApi.php
+
+		-
+			message: '#^Method App\\Support\\RouterOsApi\:\:writeSentence\(\) has parameter \$socket with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: app/Support/RouterOsApi.php
+
+		-
+			message: '#^Method App\\Support\\RouterOsApi\:\:writeSentence\(\) has parameter \$words with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Support/RouterOsApi.php
+
+		-
+			message: '#^Method App\\Support\\RouterOsApi\:\:writeWord\(\) has parameter \$socket with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: app/Support/RouterOsApi.php
+
+		-
+			message: '#^Parameter \#2 \$length of function fread expects int\<1, max\>, int\<\-65534, 65536\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Support/RouterOsApi.php
+
+		-
+			message: '#^Static property App\\Support\\RouterOsApi\:\:\$socketFactory \(Closure\|null\) is never assigned Closure so it can be removed from the property type\.$#'
+			identifier: property.unusedType
+			count: 1
+			path: app/Support/RouterOsApi.php
 
 		-
 			message: '#^Method App\\Support\\SchemaCompatibility\:\:problems\(\) return type has no value type specified in iterable type array\.$#'
@@ -2873,6 +2825,36 @@ parameters:
 			identifier: argument.type
 			count: 1
 			path: app/Support/ServerMonitor.php
+
+		-
+			message: '#^Method App\\Support\\SessionDisconnect\:\:disconnectMethod\(\) has parameter \$nas with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Support/SessionDisconnect.php
+
+		-
+			message: '#^Method App\\Support\\SessionDisconnect\:\:disconnectUser\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Support/SessionDisconnect.php
+
+		-
+			message: '#^Method App\\Support\\SessionDisconnect\:\:disconnectUserViaMikrotikApi\(\) has parameter \$session with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Support/SessionDisconnect.php
+
+		-
+			message: '#^Method App\\Support\\SessionDisconnect\:\:mikrotikDisconnectApiStatus\(\) has parameter \$nas with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Support/SessionDisconnect.php
+
+		-
+			message: '#^Method App\\Support\\SessionDisconnect\:\:mikrotikDisconnectApiStatus\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Support/SessionDisconnect.php
 
 		-
 			message: '#^Strict comparison using \=\=\= between mixed and null will always evaluate to false\.$#'

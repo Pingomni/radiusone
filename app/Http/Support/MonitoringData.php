@@ -10,9 +10,10 @@ use App\Support\Db;
 use App\Support\JobHealth;
 use App\Support\MicroCache;
 use App\Support\NasMonitor;
+use App\Support\NasRepository;
 use App\Support\NasTraffic;
-use App\Support\RadiusRepository;
 use App\Support\ServerMonitor;
+use App\Support\SessionDisconnect;
 
 /**
  * Data for the Monitoring pages and their live panels (legacy app/Http/monitoring.php). Everything is
@@ -111,7 +112,7 @@ final class MonitoringData
         if (($nas['applied_revision'] ?? null) === null || (int) $nas['applied_revision'] !== (int) ($nas['config_revision'] ?? 0)) {
             return 'waiting for FreeRADIUS restart';
         }
-        $method = RadiusRepository::disconnectMethod($nas);
+        $method = SessionDisconnect::disconnectMethod($nas);
         return $method['ok'] ? 'ready (' . ($method['method'] === 'api' ? 'API' : 'CoA') . ')' : ($method['label'] === 'off' ? 'off' : $method['label']);
     }
 
@@ -189,7 +190,7 @@ final class MonitoringData
         ];
 
         $nasRows = Db::select('SELECT n.id, n.nasname, n.shortname, n.type, n.secret, COALESCE(m.vendor, n.type) AS vendor, COALESCE(m.enabled, 1) AS enabled, m.pending_delete, m.config_revision, m.applied_revision,
-                COALESCE(m.coa_enabled, 1) AS coa_enabled, m.coa_port, m.api_host, m.api_user, (COALESCE(m.api_password, "") <> "") AS api_password_saved, ' . RadiusRepository::apiEnabledSql('m') . ' AS api_enabled
+                COALESCE(m.coa_enabled, 1) AS coa_enabled, m.coa_port, m.api_host, m.api_user, (COALESCE(m.api_password, "") <> "") AS api_password_saved, ' . NasRepository::apiEnabledSql('m') . ' AS api_enabled
             FROM nas n LEFT JOIN nas_metadata m ON m.nas_id=n.id WHERE COALESCE(m.pending_delete, 0)=0 ORDER BY n.shortname, n.id');
         $lastAccountingAt = self::lastAccounting($nasRows);
         $snmp = NasMonitor::available() ? array_column(Db::select('SELECT * FROM nas_snmp'), null, 'nas_id') : [];

@@ -13,7 +13,7 @@ use App\Support\Db;
 use App\Support\Entitlement;
 use App\Support\MicroCache;
 use App\Support\NasMonitor;
-use App\Support\RadiusRepository;
+use App\Support\NasRepository;
 use Illuminate\Http\JsonResponse;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -92,7 +92,7 @@ final class DashboardController extends Controller
 
     public static function nasRows(): array
     {
-        return Db::select('SELECT n.id, n.shortname, n.nasname, n.type, m.config_revision, m.applied_revision, m.pending_delete, COALESCE(m.vendor, n.type) AS vendor, COALESCE(m.enabled, 1) AS enabled, COALESCE(m.coa_enabled, 1) AS coa_enabled, m.coa_port, (COALESCE(n.secret, "") <> "") AS secret_saved, m.api_host, m.api_user, (COALESCE(m.api_password, "") <> "") AS api_password_saved, ' . RadiusRepository::apiEnabledSql('m') . ' AS api_enabled, COUNT(r.radacctid) AS online_users FROM nas n LEFT JOIN nas_metadata m ON m.nas_id=n.id LEFT JOIN radacct r ON ' . Accounting::freshSql('r') . ' AND (r.nasipaddress=n.nasname OR r.nasipaddress=n.shortname) GROUP BY n.id, m.enabled, m.coa_enabled, m.coa_port, m.vendor, m.api_host, m.api_user, m.api_password ORDER BY n.shortname LIMIT 6');
+        return Db::select('SELECT n.id, n.shortname, n.nasname, n.type, m.config_revision, m.applied_revision, m.pending_delete, COALESCE(m.vendor, n.type) AS vendor, COALESCE(m.enabled, 1) AS enabled, COALESCE(m.coa_enabled, 1) AS coa_enabled, m.coa_port, (COALESCE(n.secret, "") <> "") AS secret_saved, m.api_host, m.api_user, (COALESCE(m.api_password, "") <> "") AS api_password_saved, ' . NasRepository::apiEnabledSql('m') . ' AS api_enabled, COUNT(r.radacctid) AS online_users FROM nas n LEFT JOIN nas_metadata m ON m.nas_id=n.id LEFT JOIN radacct r ON ' . Accounting::freshSql('r') . ' AND (r.nasipaddress=n.nasname OR r.nasipaddress=n.shortname) GROUP BY n.id, m.enabled, m.coa_enabled, m.coa_port, m.vendor, m.api_host, m.api_user, m.api_password ORDER BY n.shortname LIMIT 6');
     }
 
     /** NAS status cards; one parallel SNMP GET for the listed devices (at most 6), bounded at 1.5 s. */

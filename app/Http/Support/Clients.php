@@ -10,8 +10,9 @@ use App\Support\Auth;
 use App\Support\ClientQuery;
 use App\Support\Db;
 use App\Support\Entitlement;
-use App\Support\RadiusRepository;
+use App\Support\NasRepository;
 use App\Support\SchemaCompatibility;
+use App\Support\SessionDisconnect;
 use App\Support\StaticIpPool;
 
 /** Client presentation shared by the client pages, Billing and diagnostics (legacy app/Http/clients.php). */
@@ -130,7 +131,7 @@ final class Clients
             'SELECT r.*, n.id AS nas_id, n.shortname AS nas_shortname, n.nasname AS nas_name, n.type AS nas_type, n.secret AS nas_secret,
                     m.vendor AS nas_vendor, COALESCE(m.enabled, 1) AS nas_enabled,
                     COALESCE(m.coa_enabled, 1) AS coa_enabled, COALESCE(m.coa_port, 3799) AS coa_port,
-                    m.config_revision, m.applied_revision, m.pending_delete, m.api_host, m.api_user, m.api_password, ' . RadiusRepository::apiEnabledSql('m') . ' AS api_enabled
+                    m.config_revision, m.applied_revision, m.pending_delete, m.api_host, m.api_user, m.api_password, ' . NasRepository::apiEnabledSql('m') . ' AS api_enabled
              FROM radacct r
              LEFT JOIN nas n ON n.nasname = r.nasipaddress OR n.shortname = r.nasipaddress
              LEFT JOIN nas_metadata m ON m.nas_id = n.id
@@ -146,7 +147,7 @@ final class Clients
         // With an access profile the certified network worker disconnects; without one the portal sends
         // the disconnect itself (RADIUS CoA, or the RouterOS API when it is switched on for the NAS).
         $capability = $profile ? AccessPolicy::capability($profile, 'disconnect') : null;
-        $method = $online && !$profile ? RadiusRepository::disconnectMethod($online) : null;
+        $method = $online && !$profile ? SessionDisconnect::disconnectMethod($online) : null;
         $authMethod = (string) ($row['auth_method'] ?? 'pppoe');
         $state = $online ? Accounting::state($online) : ($last ? Accounting::state($last) : 'unknown');
         $status = self::statusLabel($row);

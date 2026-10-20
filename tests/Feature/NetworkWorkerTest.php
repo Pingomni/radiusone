@@ -6,8 +6,8 @@ namespace Tests\Feature;
 
 use App\Support\CertifiedNetworkDriver;
 use App\Support\Db;
+use App\Support\NasRepository;
 use App\Support\NetworkOperations;
-use App\Support\RadiusRepository;
 use Tests\TestCase;
 
 /** Customers without an access profile: a policy change disconnects them so they reconnect with it. */
@@ -63,7 +63,7 @@ final class NetworkWorkerTest extends TestCase
         ])->assertSessionHas('flash.type', 'success');
         $this->post('/nas/save', ['id' => '', 'section' => 'device', 'vendor' => 'mikrotik', 'shortname' => 'bras-01', 'nasname' => '192.0.2.10', 'secret' => 'radius-secret-1',
             'enabled' => true, 'coa_enabled' => true, 'coa_port' => '3799'])->assertSessionHas('flash.type', 'success');
-        RadiusRepository::recordLoadedNasRevisions(time() + 60);
+        NasRepository::recordLoadedNasRevisions(time() + 60);
         $this->post('/clients/save', [
             'old_username' => '', 'auth_method' => 'pppoe', 'username' => 'alice', 'password' => 'pppoe-pass-1', 'verified' => '0', 'account_status' => 'enabled',
             'expiry_date' => date('Y-m-d', strtotime('+30 days')), 'service_group' => 'home50', 'framed_ip_address' => '', 'framed_pool' => '',

@@ -23,6 +23,7 @@ use App\Support\Documents;
 use App\Support\NetworkOperations;
 use App\Support\RadiusRepository;
 use App\Support\SchemaCompatibility;
+use App\Support\SessionDisconnect;
 use App\Support\SubscriberPolicy;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -365,7 +366,7 @@ final class ClientController extends Controller
         if (!$profiled) {
             // No access profile: disconnect now, like a RADIUS manager does (CoA, or the RouterOS API).
             try {
-                $result = RadiusRepository::disconnectUser($username, $nasId ?: null, $accountingId ?: null);
+                $result = SessionDisconnect::disconnectUser($username, $nasId ?: null, $accountingId ?: null);
             } catch (Throwable $e) {
                 Audit::log('disconnect_failed', 'client', $username, null, ['nas_id' => $nasId, 'radacctid' => $accountingId, 'error' => mb_substr($e->getMessage(), 0, 300)]);
                 return $this->fail(mb_substr($e->getMessage(), 0, 220), $back);

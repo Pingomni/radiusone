@@ -12,8 +12,9 @@ use App\Support\Audit;
 use App\Support\Auth;
 use App\Support\Db;
 use App\Support\NasMonitor;
-use App\Support\RadiusRepository;
+use App\Support\NasRepository;
 use App\Support\Secrets;
+use App\Support\SessionDisconnect;
 use App\Support\Snmp;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -28,12 +29,12 @@ final class NasController extends Controller
     private static function rowSql(): string
     {
         return 'SELECT n.*, m.config_revision, m.applied_revision, m.pending_delete, m.vendor, m.enabled, m.coa_enabled, m.coa_port, m.api_host, m.api_user, (COALESCE(m.api_password, "") <> "") AS api_password_saved, '
-            . RadiusRepository::apiEnabledSql('m') . ' AS api_enabled FROM nas n LEFT JOIN nas_metadata m ON m.nas_id=n.id';
+            . NasRepository::apiEnabledSql('m') . ' AS api_enabled FROM nas n LEFT JOIN nas_metadata m ON m.nas_id=n.id';
     }
 
     public function index(): Response
     {
-        $rows = Db::select('SELECT n.*, m.config_revision, m.applied_revision, m.pending_delete, m.vendor, m.enabled, m.coa_enabled, m.coa_port, m.api_host, m.api_user, (COALESCE(m.api_password, "") <> "") AS api_password_saved, ' . RadiusRepository::apiEnabledSql('m') . ' AS api_enabled, COUNT(r.radacctid) AS online_users FROM nas n LEFT JOIN nas_metadata m ON m.nas_id=n.id LEFT JOIN radacct r ON ' . Accounting::freshSql('r') . ' AND (r.nasipaddress=n.nasname OR r.nasipaddress=n.shortname) GROUP BY n.id ORDER BY n.shortname');
+        $rows = Db::select('SELECT n.*, m.config_revision, m.applied_revision, m.pending_delete, m.vendor, m.enabled, m.coa_enabled, m.coa_port, m.api_host, m.api_user, (COALESCE(m.api_password, "") <> "") AS api_password_saved, ' . NasRepository::apiEnabledSql('m') . ' AS api_enabled, COUNT(r.radacctid) AS online_users FROM nas n LEFT JOIN nas_metadata m ON m.nas_id=n.id LEFT JOIN radacct r ON ' . Accounting::freshSql('r') . ' AND (r.nasipaddress=n.nasname OR r.nasipaddress=n.shortname) GROUP BY n.id ORDER BY n.shortname');
         return Inertia::render('nas/Index', [
             'devices' => array_map(static function (array $r) {
                 $deployed = $r['applied_revision'] !== null && $r['applied_revision'] == $r['config_revision'];
@@ -127,7 +128,7 @@ final class NasController extends Controller
     private function summary(array $nas, string $vendor, int $sessions): array
     {
         $deployed = $nas['applied_revision'] !== null && $nas['applied_revision'] == $nas['config_revision'];
-        $disconnect = RadiusRepository::disconnectMethod($nas);
+        $disconnect = SessionDisconnect::disconnectMethod($nas);
         $snmp = NasMonitor::available() ? NasMonitor::settings((int) $nas['id']) : null;
         $snmpLabel = !NasMonitor::configured($snmp) ? 'Off' : ($snmp['version'] === '3'
             ? 'v3 · ' . (($snmp['v3_priv_protocol'] ?? 'none') !== 'none' ? 'authPriv' : (($snmp['v3_auth_protocol'] ?? 'none') !== 'none' ? 'authNoPriv' : 'noAuthNoPriv'))
@@ -194,7 +195,7 @@ final class NasController extends Controller
         $back = $id ? '/nas/' . $id . '/edit?tab=' . $section : '/nas/create';
         if ($id) {
             // Each tab posts only its own fields; everything else keeps its stored value.
-            $stored = Db::row('SELECT n.*, m.vendor, m.enabled, m.coa_enabled, m.coa_port, m.api_user, ' . RadiusRepository::apiEnabledSql('m') . ' AS api_enabled FROM nas n LEFT JOIN nas_metadata m ON m.nas_id=n.id WHERE n.id=?', [$id]);
+            $stored = Db::row('SELECT n.*, m.vendor, m.enabled, m.coa_enabled, m.coa_port, m.api_user, ' . NasRepository::apiEnabledSql('m') . ' AS api_enabled FROM nas n LEFT JOIN nas_metadata m ON m.nas_id=n.id WHERE n.id=?', [$id]);
             if (!$stored) {
                 return $this->fail('NAS device not found.', '/nas');
             }
@@ -225,7 +226,7 @@ final class NasController extends Controller
             return $this->failKeepingInput(new RuntimeException('Enter the API user (and its password) before turning the API on.'), $back, ['api_user' => '/./']);
         }
         try {
-            $saved = RadiusRepository::saveNas($post, $id);
+            $saved = NasRepository::saveNas($post, $id);
         } catch (Throwable $e) {
             return $this->failKeepingInput($e, $back, ['nasname' => '/\bIP\b|address|nasname/i', 'secret' => '/secret/i', 'shortname' => '/name/i']);
         }
@@ -264,7 +265,7 @@ final class NasController extends Controller
         Auth::requireCan('danger.delete');
         $before = Db::row('SELECT * FROM nas WHERE id=?', [$id]);
         try {
-            RadiusRepository::deleteNas((int) $id);
+            NasRepository::deleteNas((int) $id);
         } catch (RuntimeException $e) {
             return $this->fail($e->getMessage(), '/nas');
         }

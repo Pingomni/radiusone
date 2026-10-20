@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Console\Commands;
 
-use App\Support\RadiusRepository;
+use App\Support\NasRepository;
 use RuntimeException;
 use Throwable;
 
@@ -17,13 +17,13 @@ final class MarkNasApplied extends FrwebCommand
     {
         try {
             if ($this->option('auto')) {
-                $this->json(['recorded' => RadiusRepository::recordLoadedNasRevisions()]);
+                $this->json(['recorded' => NasRepository::recordLoadedNasRevisions()]);
                 return self::SUCCESS;
             }
             if (!$this->option('verified-activation') || !$this->option('id') || !$this->option('revision') || !$this->option('evidence')) {
                 throw new RuntimeException('Require --id, --revision, --evidence and --verified-activation after an independently verified deployment.');
             }
-            RadiusRepository::markNasApplied((int) $this->option('id'), (int) $this->option('revision'), (string) $this->option('evidence'));
+            NasRepository::markNasApplied((int) $this->option('id'), (int) $this->option('revision'), (string) $this->option('evidence'));
             $this->line('Verified NAS revision recorded. No activation or network operation was performed.');
             return self::SUCCESS;
         } catch (Throwable $e) {

@@ -92,7 +92,7 @@ final class DemoSeeder
             }
 
             if ((int) Db::value('SELECT COUNT(*) FROM nas WHERE nasname = ?', ['192.0.2.10']) === 0) {
-                RadiusRepository::saveNas([
+                NasRepository::saveNas([
                     'nasname' => '192.0.2.10',
                     'shortname' => 'mk-bras-01',
                     'type' => 'mikrotik',
