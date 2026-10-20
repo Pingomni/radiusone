@@ -6,6 +6,7 @@ namespace App\Console\Commands;
 
 use App\Support\BillingRepository;
 use App\Support\JobRunner;
+use Illuminate\Support\Facades\Log;
 use Throwable;
 
 final class GenerateBilling extends FrwebCommand
@@ -17,7 +18,11 @@ final class GenerateBilling extends FrwebCommand
     {
         $username = (string) $this->option('username');
         try {
-            return $this->jobResult(JobRunner::run('billing', static fn () => BillingRepository::generateRecurringInvoices($username !== '' ? $username : null)));
+            $run = JobRunner::run('billing', static fn () => BillingRepository::generateRecurringInvoices($username !== '' ? $username : null));
+            foreach ($run['summary']['review'] ?? [] as $item) {
+                Log::warning('Billing skipped ' . $item['username'] . ' (needs review): ' . $item['reason']);
+            }
+            return $this->jobResult($run);
         } catch (Throwable $e) {
             return $this->failure('Billing job failed', $e);
         }

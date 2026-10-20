@@ -67,6 +67,7 @@ final class BillingController extends Controller
 
         return Inertia::render('billing/Index', [
             'filters' => $filters,
+            'lastRun' => self::lastRunNotice(),
             'metrics' => [
                 Present::metric('To collect', Currency::totals($totals['outstanding']), 'billing', array_sum($totals['outstanding']) > 0 ? 'warning' : '', '/billing?status=unpaid'),
                 Present::metric('Overdue', Currency::totals($totals['overdue']), 'billing', array_sum($totals['overdue']) > 0 ? 'danger' : '', '/billing?status=overdue'),
@@ -118,6 +119,33 @@ final class BillingController extends Controller
             static fn (array $r) => [$r['invoice_number'], $r['username'], Clients::displayName($r), $r['service_name'] ?: $r['service_group'], $r['issue_date'], $r['due_date'], $r['total_amount'], $r['amount_paid'], $r['balance_due'], $r['currency'], $r['status']]);
     }
 
+    /**
+     * The latest recurring billing run, when it needs attention: it failed, or skipped customers whose
+     * invoice history needs an operator decision. Null when it went through cleanly.
+     *
+     * @return array{tone:string,title:string,at:string,review:list<array{username:string,reason:string}>}|null
+     */
+    private static function lastRunNotice(): ?array
+    {
+        $run = Db::row('SELECT state, started_at, summary_json FROM job_runs WHERE job_name="billing" AND state IN ("succeeded","failed") ORDER BY id DESC LIMIT 1');
+        if (!$run) {
+            return null;
+        }
+        if ($run['state'] === 'failed') {
+            return ['tone' => 'danger', 'title' => 'The last billing run failed', 'at' => (string) $run['started_at'], 'review' => []];
+        }
+        $review = array_values(array_filter((array) (json_decode((string) $run['summary_json'], true)['review'] ?? []), 'is_array'));
+        if (!$review) {
+            return null;
+        }
+        return [
+            'tone' => 'warning',
+            'title' => count($review) . ' customer' . (count($review) === 1 ? '' : 's') . ' not billed: invoice history needs review',
+            'at' => (string) $run['started_at'],
+            'review' => array_map(static fn (array $r) => ['username' => (string) ($r['username'] ?? ''), 'reason' => (string) ($r['reason'] ?? '')], $review),
+        ];
+    }
+
     public function generate(): RedirectResponse
     {
         Auth::requireCan('billing.manage');
@@ -127,7 +155,9 @@ final class BillingController extends Controller
         }
         $result = $run['summary'];
         Audit::log('generate_recurring', 'billing_invoice', 'bulk', null, $result);
-        return $this->ok('/billing', "Generated {$result['created']} invoice(s); skipped {$result['skipped']} existing or non-billable account(s).");
+        $review = count($result['review']);
+        return $this->ok('/billing', "Generated {$result['created']} invoice(s); skipped {$result['skipped']} existing or non-billable account(s)."
+            . ($review ? " {$review} customer(s) need review; see the notice on this page." : ''));
     }
 
     public function form(Request $request, ?string $id = null): Response|RedirectResponse

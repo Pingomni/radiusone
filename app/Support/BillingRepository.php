@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Support;
 
+use PDOException;
 use RuntimeException;
 
 final class BillingRepository
@@ -306,12 +307,21 @@ final class BillingRepository
 
         $created = 0;
         $skipped = 0;
+        $review = [];
         foreach ($clients as $client) {
-            $id = self::createServiceInvoice((string) $client['username']);
+            // A customer whose invoice history needs an operator decision must not stop billing for everyone else.
+            try {
+                $id = self::createServiceInvoice((string) $client['username']);
+            } catch (PDOException $e) {
+                throw $e;
+            } catch (RuntimeException $e) {
+                $review[] = ['username' => (string) $client['username'], 'reason' => $e->getMessage()];
+                continue;
+            }
             $id ? $created++ : $skipped++;
         }
 
-        return ['created' => $created, 'skipped' => $skipped, 'checked' => count($clients)];
+        return ['created' => $created, 'skipped' => $skipped, 'checked' => count($clients), 'review' => $review];
     }
 
     /** Record an explicit operator review; never infer historical origin, keys or anchors. */

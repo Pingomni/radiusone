@@ -6,6 +6,7 @@ namespace App\Console\Commands;
 
 use App\Support\SchemaMismatch;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Log;
 use Throwable;
 
 /** Shared output for the frweb:* operator commands (ported from the legacy bin/*.php scripts). */
@@ -23,6 +24,8 @@ abstract class FrwebCommand extends Command
     protected function failure(string $prefix, Throwable $error, bool $verbose = false, int $code = self::FAILURE): int
     {
         $reason = $verbose || $error instanceof SchemaMismatch ? $error->getMessage() : get_class($error);
+        // stderr stays terse; the server log keeps the full reason, which job_runs (class only) does not.
+        Log::error($prefix . ': ' . $error->getMessage(), ['exception' => $error]);
         $this->getOutput()->getErrorStyle()->writeln($prefix . ': ' . $reason);
         return $code;
     }

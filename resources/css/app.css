@@ -1523,6 +1523,8 @@ td .list-menu > summary:hover { border-color: var(--line); background: var(--sur
 .invoice-status-banner.tone-warning strong { color: var(--warning); }
 .invoice-status-banner.tone-danger { border-color: var(--danger-line); border-left-color: var(--danger); background: var(--danger-bg); }
 .invoice-status-banner.tone-danger strong { color: var(--danger); }
+.billing-run-notice ul { margin: var(--sp-2) 0 0; padding-left: 1.2em; }
+.billing-run-notice li { margin: 2px 0; }
 .invoice-status-banner.tone-info { border-color: var(--accent-line); border-left-color: var(--accent); background: var(--accent-bg); }
 .invoice-status-banner.tone-info strong { color: var(--accent); }
 .invoice-total-preview { display: grid; padding: var(--sp-2) var(--sp-3); border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-2); }

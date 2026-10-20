@@ -159,6 +159,23 @@ final class BillingTest extends TestCase
         $this->assertSame(1, (int) Db::value('SELECT COUNT(*) FROM billing_invoices WHERE username="alice"'));
     }
 
+    public function test_a_customer_needing_review_does_not_stop_billing_for_the_others(): void
+    {
+        $this->actingAsOperator();
+        $this->customer('alice');
+        $this->post('/billing/generate');
+        // A voided generated cycle without its anchor day needs an operator decision before it is replaced.
+        Db::exec('UPDATE billing_invoices SET status="void", billing_anchor_day=NULL WHERE username="alice"');
+        $this->customer('bob');
+
+        $this->post('/billing/generate')->assertSessionHas('flash.message', fn (string $m) => str_contains($m, '1 customer(s) need review'));
+        $this->assertSame(1, (int) Db::value('SELECT COUNT(*) FROM billing_invoices WHERE username="bob"'));
+        $this->get('/billing')->assertInertia(fn ($page) => $page
+            ->where('lastRun.tone', 'warning')
+            ->where('lastRun.review.0.username', 'alice')
+            ->where('lastRun.review.0.reason', 'Voided cycle anchor requires reviewed classification before replacement.'));
+    }
+
     public function test_view_role_is_read_only(): void
     {
         $this->actingAsOperator();

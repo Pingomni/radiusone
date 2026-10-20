@@ -38,8 +38,10 @@ function Filters({ filters, statuses }: { filters: Filters; statuses: StatusTab[
     );
 }
 
-export default function Billing({ filters, metrics, statuses, result, payments }: {
-    filters: Filters; metrics: Metric[]; statuses: StatusTab[]; result: Paginated<Row>; payments: Payment[];
+type LastRun = { tone: string; title: string; at: string; review: { username: string; reason: string }[] };
+
+export default function Billing({ filters, lastRun, metrics, statuses, result, payments }: {
+    filters: Filters; lastRun: LastRun | null; metrics: Metric[]; statuses: StatusTab[]; result: Paginated<Row>; payments: Payment[];
 }) {
     const can = useCan();
     const manage = can('billing.manage');
@@ -49,6 +51,26 @@ export default function Billing({ filters, metrics, statuses, result, payments }
     return (
         <AppLayout title="Billing">
             <div className="clean-list billing-page">
+                {lastRun && (
+                    <section className={`invoice-status-banner billing-run-notice tone-${lastRun.tone}`} role="status">
+                        <div>
+                            <strong>{lastRun.title}</strong>
+                            <p>
+                                Recurring billing, {lastRun.at}.{' '}
+                                {lastRun.review.length > 0
+                                    ? 'Everyone else was billed. Open each customer\'s invoices and classify or correct the one named; the next run bills them.'
+                                    : 'No recurring invoices were created. The reason is in the server log (storage/logs); the next run retries.'}
+                            </p>
+                            {lastRun.review.length > 0 && (
+                                <ul>
+                                    {lastRun.review.map((r) => (
+                                        <li key={r.username}><Link href={`/billing?q=${encodeURIComponent(r.username)}`}>{r.username}</Link>: {r.reason}</li>
+                                    ))}
+                                </ul>
+                            )}
+                        </div>
+                    </section>
+                )}
                 <MetricCards metrics={metrics} />
                 <ListPanel
                     title="Invoices"
