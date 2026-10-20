@@ -1,11 +1,13 @@
 {
     "$schema": "https://getcomposer.org/schema.json",
-    "name": "laravel/react-starter-kit",
+    "name": "frweb/radiusweb",
     "type": "project",
-    "description": "The skeleton application for the Laravel framework.",
+    "description": "RadiusWeb: client, billing and NAS management for FreeRADIUS (Laravel + Inertia React).",
     "keywords": [
-        "laravel",
-        "framework"
+        "freeradius",
+        "radius",
+        "isp",
+        "billing"
     ],
     "license": "MIT",
     "require": {
@@ -42,7 +44,6 @@
             "composer install",
             "@php -r \"file_exists('.env') || copy('.env.example', '.env');\"",
             "@php artisan key:generate",
-            "@php artisan migrate --force",
             "npm install",
             "npm run build"
         ],
@@ -78,14 +79,6 @@
         "post-update-cmd": [
             "@php artisan vendor:publish --tag=laravel-assets --ansi --force"
         ],
-        "post-root-package-install": [
-            "@php -r \"file_exists('.env') || copy('.env.example', '.env');\""
-        ],
-        "post-create-project-cmd": [
-            "@php artisan key:generate --ansi",
-            "@php -r \"file_exists('database/database.sqlite') || touch('database/database.sqlite');\"",
-            "@php artisan migrate --graceful --ansi"
-        ],
         "pre-package-uninstall": [
             "Illuminate\\Foundation\\ComposerScripts::prePackageUninstall"
         ]
@@ -94,8 +87,7 @@
         "laravel": {
             "dont-discover": [],
             "installer": {
-                "post-create-project": [
-                ]
+                "post-create-project": []
             }
         }
     },
