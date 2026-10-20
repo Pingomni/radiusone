@@ -52,6 +52,7 @@ final class DashboardController extends Controller
             'dashboard-kpis' => self::kpis(),
             'dashboard-nas' => self::nasCards(),
             'dashboard-rejects' => self::rejects(),
+            default => abort(404),
         })->header('Cache-Control', 'no-store');
     }
 
