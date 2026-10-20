@@ -181,6 +181,9 @@ export default function NasMonitor({ nas, snapshot, history, vendorLabel, oids, 
     basics: { label: string; value: string; tone: string }[] | null;
 }) {
     const noSnmp = snapshot.status === 'off';
+    // The network tables are read live from the device, so they are hidden while it does not answer SNMP.
+    const [down, setDown] = useState(snapshot.status === 'down');
+    useEffect(() => setDown(snapshot.status === 'down'), [snapshot]);
     // A NAS whose SNMP was switched off may still have recorded history worth showing.
     const recorded = history.available && [history.health?.data, history.temperature?.data, history.traffic.data].some((d) => d !== undefined && 'chart' in d);
     return (
@@ -197,8 +200,8 @@ export default function NasMonitor({ nas, snapshot, history, vendorLabel, oids, 
                 </>
             ) : (
                 <>
-                    <LivePanel title={`${nas.name} ${nas.ip}`} url={`/nas/${nas.id}/monitor/live`} interval={15} initial={snapshot} className="nas-monitor" render={(s) => <SnapshotBody snap={s} />} />
-                    {tables && <NetworkTables nasId={nas.id} tables={tables} />}
+                    <LivePanel title={`${nas.name} ${nas.ip}`} url={`/nas/${nas.id}/monitor/live`} interval={15} initial={snapshot} className="nas-monitor" render={(s) => <SnapshotBody snap={s} />} onData={(s) => setDown(s.status === 'down')} />
+                    {tables && !down && <NetworkTables nasId={nas.id} tables={tables} />}
                     <HistorySection history={history} pageUrl={`/nas/${nas.id}/monitor`} />
                 </>
             )}

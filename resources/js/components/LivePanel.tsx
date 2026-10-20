@@ -15,7 +15,7 @@ const ago = (ms: number) => {
  * hidden, a dialog is open, or the operator points at or is focused inside the panel, so rows never move
  * under a cursor about to click. Failures back off exponentially (max 5 min); an expired login stops it.
  */
-export function LivePanel<T>({ title, url, interval, initial, render, headerLink, className = '' }: {
+export function LivePanel<T>({ title, url, interval, initial, render, headerLink, className = '', onData }: {
     title: string;
     url: string;
     interval: number;
@@ -23,6 +23,8 @@ export function LivePanel<T>({ title, url, interval, initial, render, headerLink
     render: (data: T) => ReactNode;
     headerLink?: ReactNode;
     className?: string;
+    /** Called with each refreshed payload, for page content outside the panel that depends on it. */
+    onData?: (data: T) => void;
 }) {
     const timeZone = useServerTimezone();
     const [data, setData] = useState<T>(initial);
@@ -74,7 +76,9 @@ export function LivePanel<T>({ title, url, interval, initial, render, headerLink
                 return;
             }
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
-            setData((await response.json()) as T);
+            const next = (await response.json()) as T;
+            setData(next);
+            onData?.(next);
             setLast(Date.now());
             failures.current = 0;
             change('live');
