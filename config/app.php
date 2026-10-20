@@ -15,6 +15,9 @@ return [
 
     'name' => env('APP_NAME', 'Laravel'),
 
+    // RadiusWeb release (major.minor.patch), from the VERSION file at the project root.
+    'version' => is_file(base_path('VERSION')) ? trim((string) file_get_contents(base_path('VERSION'))) : 'dev',
+
     /*
     |--------------------------------------------------------------------------
     | Application Environment

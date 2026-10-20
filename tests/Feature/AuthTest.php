@@ -15,7 +15,7 @@ final class AuthTest extends TestCase
     {
         $this->get('/')->assertRedirect('/login');
         $this->get('/clients')->assertRedirect('/login');
-        $this->get('/login')->assertOk()->assertInertia(fn ($page) => $page->component('auth/Login'));
+        $this->get('/login')->assertOk()->assertInertia(fn ($page) => $page->component('auth/Login')->where('appVersion', null));
     }
 
     public function test_plain_http_is_redirected_to_the_canonical_https_url(): void

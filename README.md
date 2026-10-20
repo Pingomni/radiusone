@@ -2,7 +2,7 @@
 
 Client, billing and NAS management for FreeRADIUS: customers and service plans, PPPoE and DHCP access,
 invoices and payments, NAS monitoring over SNMP, notifications and encrypted backups.
-Built with Laravel 13, Inertia and React.
+Built with Laravel 13, Inertia and React. The release number is in `VERSION`; what changed is in [CHANGELOG.md](CHANGELOG.md).
 
 ## Install
 

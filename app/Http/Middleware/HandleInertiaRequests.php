@@ -26,6 +26,8 @@ class HandleInertiaRequests extends Middleware
         return [
             ...parent::share($request),
             'appName' => fn () => Branding::name(),
+            // Signed-in operators only: the sign-in page does not tell visitors which release runs here.
+            'appVersion' => $user ? (string) config('app.version') : null,
             'auth' => [
                 'user' => $user ? [
                     'id' => (int) $user['id'],

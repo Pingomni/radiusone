@@ -113,7 +113,7 @@ function useMobileNav() {
 
 /** Workspace shell: sidebar, topbar and page feedback (legacy render()). */
 export default function AppLayout({ title, children }: { title: string; children: ReactNode }) {
-    const { auth, flash, clock, appName } = useShared();
+    const { auth, flash, clock, appName, appVersion } = useShared();
     const time = useServerClock();
     const can = useCan();
     const { url } = usePage();
@@ -200,6 +200,7 @@ export default function AppLayout({ title, children }: { title: string; children
                         );
                     })}
                 </nav>
+                {appVersion && <div className="sidebar-version">RadiusWeb v{appVersion}</div>}
             </aside>
             <button type="button" className="nav-backdrop" tabIndex={-1} aria-hidden="true" hidden={!open} onClick={() => setOpen(false)} />
             <main className="main" inert={open ? true : undefined}>

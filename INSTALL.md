@@ -43,7 +43,7 @@ stops there and says which one.
 At the end you see a summary like this:
 
 ```
-==> RadiusWeb is installed.
+==> RadiusWeb v2.0.0 is installed.
 
     nginx          running
     php8.3-fpm     running

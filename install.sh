@@ -59,7 +59,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 # --- checks ------------------------------------------------------------------------------------------
-step 'Checking the server'
+step "Checking the server (RadiusWeb v$(cat "$APP/VERSION" 2>/dev/null || echo dev))"
 [[ $EUID -eq 0 ]] || fail 'run as root: sudo bash install.sh'
 . /etc/os-release
 [[ "${ID:-}" == ubuntu && "${VERSION_ID:-}" == 24.04 ]] || fail "Ubuntu 24.04 is required (this is ${PRETTY_NAME:-unknown})."
@@ -439,7 +439,7 @@ trap - ERR
 check() { systemctl is-active --quiet "$1" && printf '    %-14s running\n' "$1" || printf '    %-14s NOT RUNNING\n' "$1"; }
 code=$(curl -sk -o /dev/null -w '%{http_code}' "https://127.0.0.1/login" -H "Host: $DOMAIN" || true)
 
-printf '\n\033[1;32m==> RadiusWeb is installed.\033[0m\n\n'
+printf '\n\033[1;32m==> RadiusWeb %s is installed.\033[0m\n\n' "v$(cat "$APP/VERSION" 2>/dev/null || echo dev)"
 check nginx; check "php$PHP-fpm"; check mariadb; check freeradius; check cron
 printf '    %-14s %s\n' 'login page' "HTTP $code"
 printf '\n    Portal:    https://%s\n' "$DOMAIN"

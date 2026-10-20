@@ -471,6 +471,7 @@ details > summary { cursor: pointer; font-weight: 600; }
 .brand small { display: block; color: var(--sidebar-muted); font-size: var(--fs-xs); line-height: 1.2; }
 .brand .mark, .brand .brand-logo { width: 26px; height: 26px; }
 .sidebar nav { display: grid; gap: 1px; padding: var(--sp-2) var(--sp-2) 0; }
+.sidebar-version { margin-top: auto; padding: var(--sp-3) var(--sp-4) 0; color: var(--sidebar-muted); font-size: var(--fs-xs); }
 .nav-group-label {
   padding: var(--sp-3) var(--sp-2) var(--sp-1);
   color: var(--sidebar-muted);
