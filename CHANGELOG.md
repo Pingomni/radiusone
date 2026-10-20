@@ -4,6 +4,12 @@ RadiusOne follows [semantic versioning](https://semver.org): **major** for chang
 upgrading, **minor** for new features, **patch** for fixes. The version is in the `VERSION` file and shows in
 the portal's sidebar and under Settings → System information.
 
+## 2.0.1 (2026-10-20)
+
+- Emails, SMS texts and PDFs use the brand name: the company name under Settings → Branding, or RadiusOne
+  when none is set. The email sender name always follows it (the separate From name field, which kept an
+  old name once saved, is gone), and PDF file properties name it instead of "FreeRADIUS Web".
+
 ## 2.0.0 (2026-10-20)
 
 Version 2 is a rewrite of the plain-PHP portal (version 1) on Laravel 13, Inertia and React, on the same
