@@ -1,6 +1,6 @@
 // Regenerates public/favicon.*, public/icon-*.png, public/apple-touch-icon.png and public/brand/*.
 // Needs (outside the app): npm i @resvg/resvg-js@2.6.2 opentype.js@1.3.4 @fontsource/inter@5.0.18; writes to ./out.
-// Builds the RadiusWeb mark, wordmark lockups, favicons and app icons into ./out.
+// Builds the RadiusOne mark, wordmark lockups, favicons and app icons into ./out.
 import fs from 'node:fs';
 import opentype from 'opentype.js';
 import { Resvg } from '@resvg/resvg-js';
@@ -33,7 +33,7 @@ function padded({ size, pad }) {
     return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 64 64"><defs>${defs('rwp')}</defs><rect width="64" height="64" fill="url(#rwp)"/><g transform="translate(${pad} ${pad}) scale(${inner / 64})">${markShapes()}</g></svg>`;
 }
 
-// Wordmark: Inter Bold converted to outlines, "Radius" in ink, "Web" in brand blue.
+// Wordmark: Inter Bold converted to outlines, "Radius" in ink, "One" in brand blue.
 const font = opentype.loadSync(new URL('./node_modules/@fontsource/inter/files/inter-latin-700-normal.woff', import.meta.url).pathname);
 function word(text, x, baseline, sizePx, tracking = -0.02) {
     let d = '';
@@ -49,9 +49,9 @@ function word(text, x, baseline, sizePx, tracking = -0.02) {
 function lockup({ dark = false } = {}) {
     const size = 64, gap = 18, fs_ = 40, baseline = 46;
     const a = word('Radius', size + gap, baseline, fs_);
-    const b = word('Web', a.end, baseline, fs_);
+    const b = word('One', a.end, baseline, fs_);
     const width = Math.ceil(b.end + 2);
-    return `<svg xmlns="http://www.w3.org/2000/svg" width="${width * 4}" height="${size * 4}" viewBox="0 0 ${width} ${size}" role="img" aria-label="RadiusWeb">
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="${width * 4}" height="${size * 4}" viewBox="0 0 ${width} ${size}" role="img" aria-label="RadiusOne">
 <defs>${defs('rwl')}</defs><rect width="64" height="64" rx="15" fill="url(#rwl)"/>${markShapes()}
 <path d="${a.d}" fill="${dark ? '#ffffff' : INK}"/><path d="${b.d}" fill="${dark ? '#7fb0ff' : '#1f5fd6'}"/></svg>`;
 }
@@ -60,7 +60,7 @@ const png = (svg, width) => new Resvg(svg, { fitTo: { mode: 'width', value: widt
 const write = (name, data) => { fs.writeFileSync(out + name, data); };
 
 // Favicon SVG: full mark; browsers scale it.
-write('favicon.svg', mark({ size: 64 }).replace('<svg ', '<svg role="img" aria-label="RadiusWeb" '));
+write('favicon.svg', mark({ size: 64 }).replace('<svg ', '<svg role="img" aria-label="RadiusOne" '));
 write('logo-mark.svg', mark({ size: 64, id: 'rwm' }));
 write('logo.svg', lockup());
 write('logo-dark.svg', lockup({ dark: true }));

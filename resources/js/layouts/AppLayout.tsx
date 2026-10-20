@@ -49,7 +49,7 @@ export function BrandLogo({ className = 'brand-logo' }: { className?: string }) 
     return <span className={`mark ${className}`}><BrandMark /></span>;
 }
 
-/** The RadiusWeb mark (public/brand/logo-mark.svg): an R whose leg runs out as a network link to a node. */
+/** The RadiusOne mark (public/brand/logo-mark.svg): an R whose leg runs out as a network link to a node. */
 export function BrandMark() {
     const id = `rw-${useId().replace(/:/g, '')}`;
     const line = { stroke: '#fff', strokeWidth: 6.5, strokeLinecap: 'round', strokeLinejoin: 'round', fill: 'none' } as const;
@@ -182,7 +182,7 @@ export default function AppLayout({ title, children }: { title: string; children
                 <div className="brand">
                     <BrandLogo />
                     {/* A company name keeps the product name underneath, so people still know what this is. */}
-                    <div><strong>{appName}</strong><small>{appName === 'RadiusWeb' ? 'Client management' : 'RadiusWeb'}</small></div>
+                    <div><strong>{appName}</strong><small>{appName === 'RadiusOne' ? 'Client management' : 'RadiusOne'}</small></div>
                 </div>
                 <nav aria-label="Primary">
                     {NAV.filter(([, , permission]) => can(permission)).map(([href, label, , icon, navGroup]) => {
@@ -200,7 +200,7 @@ export default function AppLayout({ title, children }: { title: string; children
                         );
                     })}
                 </nav>
-                {appVersion && <div className="sidebar-version">RadiusWeb v{appVersion}</div>}
+                {appVersion && <div className="sidebar-version">RadiusOne v{appVersion}</div>}
             </aside>
             <button type="button" className="nav-backdrop" tabIndex={-1} aria-hidden="true" hidden={!open} onClick={() => setOpen(false)} />
             <main className="main" inert={open ? true : undefined}>

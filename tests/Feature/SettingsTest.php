@@ -55,7 +55,7 @@ final class SettingsTest extends TestCase
     {
         $this->actingAsOperator();
         $this->get('/settings')->assertOk()->assertInertia(fn ($page) => $page->component('settings/Settings')->where('tab', 'overview')->has('overview.rows', 8)
-            ->where('overview.rows.0', ['Version', 'RadiusWeb ' . trim((string) file_get_contents(base_path('VERSION')))])
+            ->where('overview.rows.0', ['Version', 'RadiusOne ' . trim((string) file_get_contents(base_path('VERSION')))])
             ->where('appVersion', trim((string) file_get_contents(base_path('VERSION')))));
         $this->get('/settings?tab=users')->assertOk()->assertInertia(fn ($page) => $page->where('tab', 'users')->has('users', 1));
         $this->get('/settings?tab=notifications')->assertOk()->assertInertia(fn ($page) => $page->where('notifications.view', 'gateways'));

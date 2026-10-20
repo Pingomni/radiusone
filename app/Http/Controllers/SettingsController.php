@@ -101,7 +101,7 @@ final class SettingsController extends Controller
         return [
             'engine' => Present::tag('engine ' . $engine, $engine === 'nginx' ? 'success' : ''),
             'rows' => [
-                ['Version', 'RadiusWeb ' . config('app.version')],
+                ['Version', 'RadiusOne ' . config('app.version')],
                 ['Environment', (string) App::env('APP_ENV', 'production')],
                 ['Operators', $enabledUsers . '/' . $userCount . ' enabled - ' . $twoFactorUsers . ' with 2FA'],
                 ['Last backup', $lastBackup ? basename($lastBackup) : 'none'],

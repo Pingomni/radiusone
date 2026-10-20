@@ -22,7 +22,7 @@ done
 fpm=$(basename "$(ls /lib/systemd/system/php*-fpm.service | sort -V | tail -n 1)" .service)
 tmp=$(mktemp)
 cat > "$tmp" <<EOF
-# Restart buttons in the RadiusWeb portal (ops/apply-service-control.sh). One line per allowed unit.
+# Restart buttons in the RadiusOne portal (ops/apply-service-control.sh). One line per allowed unit.
 www-data ALL=(root) NOPASSWD: $helper freeradius, $helper mariadb, $helper nginx, $helper $fpm
 www-data ALL=(root) NOPASSWD: $timezone schedule *
 www-data ALL=(root) NOPASSWD: $backup

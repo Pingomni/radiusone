@@ -17,9 +17,9 @@ final class CompanyNameTest extends TestCase
         $this->actingAsOperator();
         // Before a name is set: the product name.
         $this->get('/settings?tab=branding')->assertOk()->assertInertia(fn ($page) => $page
-            ->where('appName', 'RadiusWeb')
+            ->where('appName', 'RadiusOne')
             ->where('branding.name', '')
-            ->where('branding.product', 'RadiusWeb'));
+            ->where('branding.product', 'RadiusOne'));
 
         $this->post('/settings/branding/name', ['company_name' => '  Optix   Net  '])->assertRedirect('/settings?tab=branding')->assertSessionHas('flash.type', 'success');
         $this->assertSame('Optix Net', Branding::name());
@@ -39,11 +39,11 @@ final class CompanyNameTest extends TestCase
         $this->actingAsOperator();
         $this->post('/settings/branding/name', ['company_name' => str_repeat('A', 61)])->assertSessionHas('flash.type', 'danger');
         $this->post('/settings/branding/name', ['company_name' => '<script>'])->assertSessionHas('flash.type', 'danger');
-        $this->assertSame('RadiusWeb', Branding::name());
+        $this->assertSame('RadiusOne', Branding::name());
 
         $this->post('/settings/branding/name', ['company_name' => 'Optix Net']);
-        $this->post('/settings/branding/name', ['company_name' => ''])->assertSessionHas('flash.message', fn (string $m) => str_contains($m, 'RadiusWeb again'));
-        $this->assertSame('RadiusWeb', Branding::name());
+        $this->post('/settings/branding/name', ['company_name' => ''])->assertSessionHas('flash.message', fn (string $m) => str_contains($m, 'RadiusOne again'));
+        $this->assertSame('RadiusOne', Branding::name());
 
         $this->actingAsOperator('view');
         $this->post('/settings/branding/name', ['company_name' => 'X'])->assertForbidden();

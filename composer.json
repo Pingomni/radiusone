@@ -1,8 +1,8 @@
 {
     "$schema": "https://getcomposer.org/schema.json",
-    "name": "frweb/radiusweb",
+    "name": "frweb/radiusone",
     "type": "project",
-    "description": "RadiusWeb: client, billing and NAS management for FreeRADIUS (Laravel + Inertia React).",
+    "description": "RadiusOne: client, billing and NAS management for FreeRADIUS (Laravel + Inertia React).",
     "keywords": [
         "freeradius",
         "radius",

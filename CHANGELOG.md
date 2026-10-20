@@ -1,6 +1,6 @@
 # Changelog
 
-RadiusWeb follows [semantic versioning](https://semver.org): **major** for changes that need action when
+RadiusOne follows [semantic versioning](https://semver.org): **major** for changes that need action when
 upgrading, **minor** for new features, **patch** for fixes. The version is in the `VERSION` file and shows in
 the portal's sidebar and under Settings → System information.
 

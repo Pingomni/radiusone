@@ -7,7 +7,7 @@ namespace App\Support;
 final class Branding
 {
     /** The product name, shown when no company name is set. */
-    public const PRODUCT = 'RadiusWeb';
+    public const PRODUCT = 'RadiusOne';
 
     /**
      * The name the portal goes by (Settings → Branding → Company name): sidebar, sign-in page, browser

@@ -1,4 +1,4 @@
--- Database permissions for RadiusWeb. Applied by install.sh as the MariaDB administrator after the
+-- Database permissions for RadiusOne. Applied by install.sh as the MariaDB administrator after the
 -- migrations, because the tables must exist first. One least-privilege identity per role, as in production:
 --   frweb_portal     the web app and its scheduled jobs
 --   frweb_radius     FreeRADIUS (reads users, groups and NAS clients; writes accounting and post-auth)

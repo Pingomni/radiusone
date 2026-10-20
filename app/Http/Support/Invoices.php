@@ -163,7 +163,7 @@ final class Invoices
             'app_name' => $words['company_name'],
             'company_details' => $words['company_details'] !== '' ? explode("\n", $words['company_details']) : [],
             'note' => $note !== '' ? explode("\n", BillingDocuments::fill($note, $invoice)) : [],
-            // An uploaded logo wins; otherwise the RadiusWeb logo (white background: the PDF writer drops transparency).
+            // An uploaded logo wins; otherwise the RadiusOne logo (white background: the PDF writer drops transparency).
             'logo_path' => str_starts_with($logo, '/uploads/branding/') ? Branding::file(basename($logo)) : ($logo === '' ? public_path('brand/logo-invoice.png') : null),
             'meta' => [
                 'Invoice' => (string) $invoice['invoice_number'],

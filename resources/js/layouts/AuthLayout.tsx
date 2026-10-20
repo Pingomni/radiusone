@@ -13,7 +13,7 @@ export function AuthLayout({ title, children }: { title: string; children: React
             <main className="login">
                 <div className="login-shell">
                     {children}
-                    <p className="login-footnote">RadiusWeb &middot; Secure operator access</p>
+                    <p className="login-footnote">RadiusOne &middot; Secure operator access</p>
                 </div>
             </main>
         </>

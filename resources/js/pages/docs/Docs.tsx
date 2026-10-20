@@ -37,7 +37,7 @@ const SECTIONS: Section[] = [
         icon: 'dashboard',
         body: (
             <>
-                <p>RadiusWeb is the operator portal for the FreeRADIUS server: customers and their internet plans, the routers (NAS) they connect through, billing, monitoring, and messages to customers and to your team. Everything a page changes is stored in the same database FreeRADIUS reads, so most changes apply to the next customer login.</p>
+                <p>RadiusOne is the operator portal for the FreeRADIUS server: customers and their internet plans, the routers (NAS) they connect through, billing, monitoring, and messages to customers and to your team. Everything a page changes is stored in the same database FreeRADIUS reads, so most changes apply to the next customer login.</p>
                 <h3>Signing in</h3>
                 <Steps>
                     <li>Open the portal and sign in with your operator username and password.</li>
@@ -365,7 +365,7 @@ const SECTIONS: Section[] = [
                 <Steps>
                     <li>Create an account at <a href="https://www.backblaze.com/sign-up/cloud-storage" target="_blank" rel="noreferrer">backblaze.com</a> (B2 Cloud Storage) and choose a region close to you, for example <em>EU Central</em>.</li>
                     <li><strong>Create a bucket</strong>: <em>B2 Cloud Storage → Buckets → Create a Bucket</em>. Give it a unique name (for example <code>isp-name-radius-backups</code>), set <strong>Files in Bucket</strong> to <strong>Private</strong>, leave encryption and object lock off, and create it.</li>
-                    <li><strong>Create a key</strong>: <em>Application Keys → Add a New Application Key</em>. Name it (for example <em>radiusweb</em>), allow access to <strong>this bucket only</strong>, type of access <strong>Read and Write</strong>, and create it.</li>
+                    <li><strong>Create a key</strong>: <em>Application Keys → Add a New Application Key</em>. Name it (for example <em>radiusone</em>), allow access to <strong>this bucket only</strong>, type of access <strong>Read and Write</strong>, and create it.</li>
                     <li><strong>Copy both values now</strong>: <strong>keyID</strong> and <strong>applicationKey</strong>. The applicationKey is shown only once.</li>
                     <li><strong>In the portal</strong>: <em>Settings → Backups → Add destination</em>, <strong>Store backups in</strong> <strong>Backblaze B2</strong>. Paste the <strong>keyID</strong> and <strong>applicationKey</strong> and save: the bucket and its endpoint are found from the key. (If the key can reach several buckets, also paste the bucket address, for example <code>https://s3.eu-central-003.backblazeb2.com/my-bucket</code>.)</li>
                     <li>Press <strong>Test</strong>. It uploads, lists and deletes a small file.</li>

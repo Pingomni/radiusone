@@ -1,6 +1,6 @@
 /* Legacy portal stylesheet (app.css), carried over unchanged. */
 /* ==========================================================================
-   RadiusWeb design system: tokens, base, app shell and shared components.
+   RadiusOne design system: tokens, base, app shell and shared components.
    The rules are documented in docs/UI_STANDARD.md; page modules are in crm.css.
    Components only use tokens, so the dark theme is a token swap.
    ========================================================================== */
@@ -1142,7 +1142,7 @@ td .list-menu > summary:hover { border-color: var(--line); background: var(--sur
 
 /* Legacy CRM stylesheet (crm.css). */
 /* ==========================================================================
-   RadiusWeb page modules. Built only from the tokens and components in
+   RadiusOne page modules. Built only from the tokens and components in
    app.css; see docs/UI_STANDARD.md before adding anything here.
    ========================================================================== */
 

@@ -16,7 +16,7 @@ export interface AuthUser {
 
 export interface SharedProps {
     appName: string;
-    /** RadiusWeb release, e.g. "2.0.0"; null when signed out. */
+    /** RadiusOne release, e.g. "2.0.0"; null when signed out. */
     appVersion: string | null;
     auth: { user: AuthUser | null; permissions: string[] };
     flash: Flash | null;

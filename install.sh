@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# RadiusWeb installer: sets up a complete, running system on a fresh Ubuntu 24.04 server.
+# RadiusOne installer: sets up a complete, running system on a fresh Ubuntu 24.04 server.
 #
-#   git clone <repo> /opt/radiusweb && cd /opt/radiusweb && sudo bash install.sh [options]
+#   git clone <repo> /opt/radiusone && cd /opt/radiusone && sudo bash install.sh [options]
 #
 # Installs and configures nginx (HTTPS), PHP 8.3-FPM, MariaDB, FreeRADIUS (SQL backend) and Node 22
 # (to build the web assets), creates the database with one least-privilege user per role, generates
@@ -15,7 +15,7 @@
 #   --admin-user NAME    First administrator's username (default: admin)
 #   --admin-email ADDR   First administrator's email (default: admin@<domain>)
 #   --timezone ZONE      Set the server time zone first, e.g. Europe/Tirane (default: leave as is)
-#   --force              Run on a server that already has a RadiusWeb or FreeRADIUS database not made by
+#   --force              Run on a server that already has a RadiusOne or FreeRADIUS database not made by
 #                        this script (it is not overwritten, but its configuration files are)
 #
 # Running it again is safe: existing keys, passwords, data and administrators are kept.
@@ -59,7 +59,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 # --- checks ------------------------------------------------------------------------------------------
-step "Checking the server (RadiusWeb v$(cat "$APP/VERSION" 2>/dev/null || echo dev))"
+step "Checking the server (RadiusOne v$(cat "$APP/VERSION" 2>/dev/null || echo dev))"
 [[ $EUID -eq 0 ]] || fail 'run as root: sudo bash install.sh'
 . /etc/os-release
 [[ "${ID:-}" == ubuntu && "${VERSION_ID:-}" == 24.04 ]] || fail "Ubuntu 24.04 is required (this is ${PRETTY_NAME:-unknown})."
@@ -136,7 +136,7 @@ RADIUS_PASS=$(saved "$ETC/radius.env" DB_PASSWORD); RADIUS_PASS=${RADIUS_PASS:-$
 identity() {  # $1 file, $2 user, $3 password, $4 group, $5 mode
   local tmp; tmp=$(mktemp)
   cat > "$tmp" <<EOF
-# RadiusWeb database identity ($2), written by install.sh. Keep this file private.
+# RadiusOne database identity ($2), written by install.sh. Keep this file private.
 DB_HOST=127.0.0.1
 DB_PORT=3306
 DB_DATABASE=$DB
@@ -172,7 +172,7 @@ install -d -o www-data -g www-data -m 0750 "$DATA" "$DATA/documents" "$DATA/bran
 install -d -o www-data -g adm -m 0750 "$LOGS"
 if [[ ! -f "$APP/.env" ]]; then
   cat > "$APP/.env" <<EOF
-APP_NAME=RadiusWeb
+APP_NAME=RadiusOne
 APP_ENV=production
 APP_KEY=
 APP_DEBUG=false
@@ -239,7 +239,7 @@ for f in mods-config/sql/main/mysql/queries.conf sites-available/default; do
   [[ -f "$RADDB/$f.frweb-orig" ]] || cp -a "$RADDB/$f" "$RADDB/$f.frweb-orig"
 done
 cat > "$RADDB/mods-available/sql" <<EOF
-# Written by RadiusWeb install.sh: the SQL backend (users, groups, accounting and the NAS list).
+# Written by RadiusOne install.sh: the SQL backend (users, groups, accounting and the NAS list).
 sql {
 	dialect = "mysql"
 	driver = "rlm_sql_\${dialect}"
@@ -302,7 +302,7 @@ systemctl restart freeradius
 
 # --- web server --------------------------------------------------------------------------------------
 step 'Configuring HTTPS and the web server'
-cert_dir=/etc/ssl/radiusweb
+cert_dir=/etc/ssl/radiusone
 if [[ ! -f "$cert_dir/cert.pem" ]]; then
   install -d -m 0755 "$cert_dir"
   [[ $is_ip == 1 ]] && san="IP:$DOMAIN" || san="DNS:$DOMAIN"
@@ -314,8 +314,8 @@ cert="$cert_dir/cert.pem" key="$cert_dir/key.pem"
 [[ -f "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" ]] && cert="/etc/letsencrypt/live/$DOMAIN/fullchain.pem" key="/etc/letsencrypt/live/$DOMAIN/privkey.pem"
 
 write_site() {
-  cat > /etc/nginx/sites-available/radiusweb <<EOF
-# RadiusWeb, written by install.sh.
+  cat > /etc/nginx/sites-available/radiusone <<EOF
+# RadiusOne, written by install.sh.
 server {
     listen 80 default_server;
     listen [::]:80 default_server;
@@ -360,7 +360,7 @@ server {
     }
 }
 EOF
-  ln -sfn /etc/nginx/sites-available/radiusweb /etc/nginx/sites-enabled/radiusweb
+  ln -sfn /etc/nginx/sites-available/radiusone /etc/nginx/sites-enabled/radiusone
   rm -f /etc/nginx/sites-enabled/default
   nginx -t 2>/dev/null || { nginx -t; fail 'the nginx configuration check failed.'; }
   systemctl reload nginx
@@ -368,7 +368,7 @@ EOF
 
 # The app accepts ID documents up to 8 MB each, two per client form.
 cat > "/etc/php/$PHP/fpm/conf.d/99-frweb.ini" <<'EOF'
-; RadiusWeb (install.sh)
+; RadiusOne (install.sh)
 upload_max_filesize = 10M
 post_max_size = 24M
 EOF
@@ -390,16 +390,16 @@ fi
 
 # --- jobs, backups, server controls ------------------------------------------------------------------
 step 'Scheduling jobs and backups'
-cat > /etc/cron.d/radiusweb <<EOF
+cat > /etc/cron.d/radiusone <<EOF
 SHELL=/bin/sh
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-# RadiusWeb (install.sh). Every app job (billing, SNMP, alerts, expiry...) runs from the scheduler
+# RadiusOne (install.sh). Every app job (billing, SNMP, alerts, expiry...) runs from the scheduler
 # (routes/console.php); the nightly backup runs as root with the read-only backup identity.
 * * * * * www-data cd $APP && /usr/bin/php artisan schedule:run >>$LOGS/scheduler.log 2>&1
 15 2 * * * root cd $APP && FRWEB_OPERATOR_ENV_FILE=$ETC/backup.env LOG_CHANNEL=stderr /usr/bin/php artisan frweb:backup >/var/log/freeradius-web-backup.log 2>&1
 EOF
-chmod 0644 /etc/cron.d/radiusweb
-cat > /etc/logrotate.d/radiusweb <<EOF
+chmod 0644 /etc/cron.d/radiusone
+cat > /etc/logrotate.d/radiusone <<EOF
 $LOGS/*.log {
     weekly
     rotate 8
@@ -439,7 +439,7 @@ trap - ERR
 check() { systemctl is-active --quiet "$1" && printf '    %-14s running\n' "$1" || printf '    %-14s NOT RUNNING\n' "$1"; }
 code=$(curl -sk -o /dev/null -w '%{http_code}' "https://127.0.0.1/login" -H "Host: $DOMAIN" || true)
 
-printf '\n\033[1;32m==> RadiusWeb %s is installed.\033[0m\n\n' "v$(cat "$APP/VERSION" 2>/dev/null || echo dev)"
+printf '\n\033[1;32m==> RadiusOne %s is installed.\033[0m\n\n' "v$(cat "$APP/VERSION" 2>/dev/null || echo dev)"
 check nginx; check "php$PHP-fpm"; check mariadb; check freeradius; check cron
 printf '    %-14s %s\n' 'login page' "HTTP $code"
 printf '\n    Portal:    https://%s\n' "$DOMAIN"

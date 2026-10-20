@@ -1,4 +1,4 @@
-# RadiusWeb
+# RadiusOne
 
 Client, billing and NAS management for FreeRADIUS: customers and service plans, PPPoE and DHCP access,
 invoices and payments, NAS monitoring over SNMP, notifications and encrypted backups.
@@ -9,8 +9,8 @@ Built with Laravel 13, Inertia and React. The release number is in `VERSION`; wh
 On a fresh **Ubuntu 24.04** server, as root:
 
 ```bash
-git clone <this repository> /opt/radiusweb
-cd /opt/radiusweb
+git clone <this repository> /opt/radiusone
+cd /opt/radiusone
 sudo bash install.sh
 ```
 
@@ -47,7 +47,7 @@ Where things are:
 | Uploaded documents and logos | `/var/lib/freeradius-web/` |
 | Backups | `/var/backups/freeradius-web/` (nightly at 02:15; remote copies under Settings → Backups) |
 | Logs | `/var/log/freeradius-web/`, and `storage/logs/` in the project folder |
-| Scheduled jobs | `/etc/cron.d/radiusweb` |
+| Scheduled jobs | `/etc/cron.d/radiusone` |
 
 After installing, add your routers under **NAS**, then restart FreeRADIUS from **Monitoring → RADIUS
 server** so it loads them. RADIUS listens on UDP 1812 (authentication) and 1813 (accounting).

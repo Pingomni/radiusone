@@ -1,6 +1,6 @@
-# Installing RadiusWeb
+# Installing RadiusOne
 
-One script, `install.sh`, turns a fresh Ubuntu 24.04 server into a running RadiusWeb system: web portal,
+One script, `install.sh`, turns a fresh Ubuntu 24.04 server into a running RadiusOne system: web portal,
 database and FreeRADIUS, connected and secured. Nothing needs to be installed beforehand.
 
 - [Requirements](#requirements)
@@ -24,26 +24,26 @@ database and FreeRADIUS, connected and secured. Nothing needs to be installed be
 | Server | A fresh server is best. 2 CPU cores, 4 GB RAM and 20 GB disk are enough to start; give the database more memory for thousands of clients. |
 | Domain (optional) | A DNS name pointing at the server, if you want a trusted Let's Encrypt certificate |
 
-The script refuses to run on a server that already has a `radius` database or an older RadiusWeb install
+The script refuses to run on a server that already has a `radius` database or an older RadiusOne install
 that it did not create, so it cannot overwrite an existing system by accident (see `--force`).
 
 ## Install
 
 ```bash
 sudo apt-get install -y git          # if git is not there yet
-git clone <repository URL> /opt/radiusweb
-cd /opt/radiusweb
+git clone <repository URL> /opt/radiusone
+cd /opt/radiusone
 sudo bash install.sh
 ```
 
-The project can live in any folder; `/opt/radiusweb` is only a suggestion. The install takes a few
+The project can live in any folder; `/opt/radiusone` is only a suggestion. The install takes a few
 minutes. Each stage is printed as it runs (`==> Installing packages ...`). If a stage fails, the script
 stops there and says which one.
 
 At the end you see a summary like this:
 
 ```
-==> RadiusWeb v2.0.0 is installed.
+==> RadiusOne v2.0.0 is installed.
 
     nginx          running
     php8.3-fpm     running
@@ -171,16 +171,16 @@ but has not been tested on a real router yet. DHCP (MAC) login is not finished y
 
 | What | Where |
 | --- | --- |
-| Project (code, `.env`) | the folder you cloned, e.g. `/opt/radiusweb` |
+| Project (code, `.env`) | the folder you cloned, e.g. `/opt/radiusone` |
 | Keys and database passwords | `/etc/freeradius-web/portal.env`, `radius.env`, `migration.env`, `backup.env` |
 | Customer documents, logos | `/var/lib/freeradius-web/` |
 | Backups | `/var/backups/freeradius-web/` (status in `status.json`; remote copies under *Settings → Backups*) |
 | Job logs | `/var/log/freeradius-web/` (scheduler, billing, SNMP, alerts...) |
 | Backup log | `/var/log/freeradius-web-backup.log` |
 | App log | `storage/logs/` in the project folder |
-| Scheduled jobs | `/etc/cron.d/radiusweb` |
-| Web server | `/etc/nginx/sites-available/radiusweb` |
-| Certificate | `/etc/ssl/radiusweb/` (self-signed) or `/etc/letsencrypt/live/<domain>/` |
+| Scheduled jobs | `/etc/cron.d/radiusone` |
+| Web server | `/etc/nginx/sites-available/radiusone` |
+| Certificate | `/etc/ssl/radiusone/` (self-signed) or `/etc/letsencrypt/live/<domain>/` |
 | FreeRADIUS | `/etc/freeradius/3.0/mods-available/sql`, `mods-config/sql/main/mysql/queries.conf`, `sites-available/default` |
 | Portal helpers | `/usr/local/sbin/frweb-*`, `/etc/sudoers.d/freeradius-web-services` |
 
@@ -209,7 +209,7 @@ sudo bash install.sh --domain radius.example.com --email it@example.com
 To update to a newer version:
 
 ```bash
-cd /opt/radiusweb
+cd /opt/radiusone
 sudo FRWEB_OPERATOR_ENV_FILE=/etc/freeradius-web/backup.env LOG_CHANNEL=stderr php artisan frweb:backup --no-upload
 sudo git pull
 sudo bash install.sh
@@ -227,4 +227,4 @@ The installer applies new database migrations and rebuilds the web pages.
 | The login page does not open | `systemctl status nginx php8.3-fpm`, then `tail /var/log/nginx/error.log` and `storage/logs/` |
 | Routers are rejected | `systemctl status freeradius`; is the NAS saved in the portal and FreeRADIUS restarted since? Check the shared secret, and watch live with `sudo systemctl stop freeradius && sudo freeradius -X` (start the service again afterwards). |
 | Lost the administrator password | Another superadmin can reset it under *Settings → Users*. |
-| Scheduled jobs do not run | `cat /etc/cron.d/radiusweb` and `tail /var/log/freeradius-web/scheduler.log`; *Monitoring* shows when each job last ran. |
+| Scheduled jobs do not run | `cat /etc/cron.d/radiusone` and `tail /var/log/freeradius-web/scheduler.log`; *Monitoring* shows when each job last ran. |

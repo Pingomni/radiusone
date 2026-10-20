@@ -186,7 +186,7 @@ final class BackupsTest extends TestCase
         $calls = count($this->sent);
         $this->post('/settings/backups/destinations', ['type' => 's3', 'provider' => 'b2', 'access_key' => 'b771a2c3d4e5', 'secret_key' => 'master-key'])
             ->assertSessionHas('flash.message', fn (string $m) => str_contains($m, 'master application key'));
-        $this->post('/settings/backups/destinations', ['type' => 's3', 'provider' => 'b2', 'url' => 'https://s3.us-east-005.backblazeb2.com/radiusweb-gn', 'access_key' => 'b771a2c3d4e5', 'secret_key' => 'master-key'])
+        $this->post('/settings/backups/destinations', ['type' => 's3', 'provider' => 'b2', 'url' => 'https://s3.us-east-005.backblazeb2.com/radiusone-gn', 'access_key' => 'b771a2c3d4e5', 'secret_key' => 'master-key'])
             ->assertSessionHas('flash.message', fn (string $m) => str_contains($m, 'master application key'));
         $this->assertCount($calls, $this->sent);
 
