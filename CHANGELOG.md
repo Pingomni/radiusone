@@ -4,6 +4,14 @@ RadiusOne follows [semantic versioning](https://semver.org): **major** for chang
 upgrading, **minor** for new features, **patch** for fixes. The version is in the `VERSION` file and shows in
 the portal's sidebar and under Settings → System information.
 
+## 2.1.0 (2026-10-20)
+
+- **Software update from the portal:** Settings → Overview → Software update checks GitHub for a newer
+  release, shows what changed and installs it: database backup first, a few minutes of maintenance mode
+  (RADIUS keeps working), automatic roll-back to the previous version if a step fails. Only tagged releases
+  are installed. A private repository needs a read-only deploy key on the server (see INSTALL.md).
+- CI runs on Ubuntu 24.04, like production and the installer.
+
 ## 2.0.1 (2026-10-20)
 
 - Emails, SMS texts and PDFs use the brand name: the company name under Settings → Branding, or RadiusOne
