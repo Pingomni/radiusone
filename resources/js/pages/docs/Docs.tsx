@@ -196,13 +196,13 @@ const SECTIONS: Section[] = [
         icon: 'billing',
         body: (
             <>
-                <p><Link href="/billing">Billing</Link> holds invoices and payments.</p>
+                <p><Link href="/billing">Billing</Link> holds invoices and payments. The cards at the top show what is still to collect, what is overdue and what came in this month; click one to see those invoices. The tabs above the list filter by status, with a count on each.</p>
                 <Steps>
-                    <li><strong>New invoice</strong>: choose the customer, the service plan (or no internet charge for static-IP-only invoices), the optional static IP add-on, the billing period, discount and tax. The due date follows the issue date and period.</li>
-                    <li>Open the issued invoice to <strong>record a payment</strong> (amount, date, method, reference). Full payment of a renewal extends the service end date.</li>
+                    <li><strong>New invoice</strong>: choose the customer, the service plan (or no internet charge for static-IP-only invoices), the optional static IP add-on, the billing period and the issue date (discount, tax and notes are under the fold). The summary on the right shows the total and the due date; click <strong>Issue invoice</strong> to bill the customer, or <strong>Save as draft</strong> to finish it later.</li>
+                    <li>Use <strong>Record payment</strong> on an unpaid invoice (or open it) (amount, date, method, reference). Full payment of a renewal extends the service end date.</li>
                     <li>A draft can be deleted; an issued invoice can only be cancelled, so the numbering stays complete.</li>
                 </Steps>
-                <p><strong>Recurring invoices</strong> are created every night at 03:15 (server time) for customers whose period is due, and overdue invoices are marked. <strong>Generate recurring</strong> runs the same step now. Invoices and payment receipts can be downloaded as PDF, with your uploaded logo.</p>
+                <p><strong>Recurring invoices</strong> are created every night at 03:15 (server time) for customers whose period is due, and overdue invoices are marked. Invoices and payment receipts can be downloaded as PDF, with your uploaded logo.</p>
             </>
         ),
     },

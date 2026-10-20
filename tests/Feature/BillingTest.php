@@ -67,6 +67,12 @@ final class BillingTest extends TestCase
             ->where('result.rows.0.canDelete', false)
             ->where('metrics.0.value', '20.00 EUR'));
         $this->get('/billing?status=paid')->assertOk()->assertInertia(fn ($page) => $page->where('result.total', 0));
+        $this->get('/billing?status=unpaid')->assertOk()->assertInertia(fn ($page) => $page
+            ->where('result.total', 1)
+            ->where('result.rows.0.owed', true)
+            ->where('statuses.1.label', 'To collect')
+            ->where('statuses.1.count', 1)
+            ->where('payments', []));
 
         $csv = $this->get('/billing/export?q=alice')->assertOk()->streamedContent();
         $this->assertStringContainsString('alice,"Alice Doe"', $csv);
@@ -78,6 +84,9 @@ final class BillingTest extends TestCase
             ->where('payment.recorded', null)
             ->where('payment.values.amount', '20.00')
             ->where('canEdit', false)
+            ->where('invoice.customer', 'Alice Doe')
+            // No discount or tax: only the total and the balance due.
+            ->where('invoice.totals', [['Total', '20.00 EUR', 'total'], ['Balance due', '20.00 EUR', 'balance']])
             ->has('items', 1));
 
         $pdf = $this->get('/billing/invoices/' . $id . '/draft-pdf')->assertOk()->assertHeader('Content-Type', 'application/pdf');

@@ -130,7 +130,7 @@ final class Invoices
         $paid = Format::money($invoice['amount_paid']) . $currency;
         $lastPayment = $payments ? max(array_column($payments, 'payment_date')) : '';
         [$tone, $title, $text] = match ((string) $invoice['status']) {
-            'draft' => ['info', 'Draft — not issued to the customer', 'This invoice is not billed yet and does not count toward the customer balance. Edit it, then save it with status "Issue now" to bill the customer.'],
+            'draft' => ['info', 'Draft — not issued to the customer', 'This invoice is not billed yet and does not count toward the customer balance. Use Edit draft, then Issue invoice to bill the customer.'],
             'open' => ['warning', 'Unpaid — ' . $balance . ' due', 'No payment recorded yet. Payment is due by ' . $invoice['due_date'] . '.'],
             'partial' => ['warning', 'Partially paid — ' . $balance . ' still due', $paid . ' received so far. The remainder is due by ' . $invoice['due_date'] . '.'],
             'overdue' => ['danger', 'Overdue — ' . $balance . ' outstanding', 'The due date ' . $invoice['due_date'] . ' has passed' . ((float) $invoice['amount_paid'] > 0 ? ' with ' . $paid . ' paid.' : ' and nothing has been paid.')],

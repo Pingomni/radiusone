@@ -1,5 +1,7 @@
 <?php
+
 declare(strict_types=1);
+
 namespace App\Support;
 
 final class InvoiceQuery
@@ -12,6 +14,9 @@ final class InvoiceQuery
         if (in_array($status, ['draft', 'open', 'partial', 'paid', 'void', 'overdue'], true)) {
             $conditions[] = 'i.status = ?';
             $params[] = $status;
+        } elseif ($status === 'unpaid') {
+            // Everything the customer still owes: unpaid, partially paid and overdue.
+            $conditions[] = 'i.status IN ("open", "partial", "overdue")';
         }
         if (($q = trim((string) ($filters['q'] ?? ''))) !== '') {
             $conditions[] = '(i.invoice_number LIKE ? OR i.username LIKE ? OR c.first_name LIKE ? OR c.last_name LIKE ? OR c.company_name LIKE ?)';
@@ -37,6 +42,7 @@ final class InvoiceQuery
 
     /**
      * Every match, newest first, in primary-key chunks (exports): each row is read once.
+     *
      * @return \Generator<array>
      */
     public static function each(array $filters, int $chunk = 1000): \Generator

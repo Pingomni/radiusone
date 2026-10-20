@@ -34,91 +34,98 @@ export default function InvoiceForm({ values, customers, services, staticPools, 
     const { data } = form;
     const service = services.find((s) => s.value === data.service_group);
     const pool = staticPools.find((p) => p.value === data.static_ip_pool_key);
+    const customer = customers.find((c) => c.value === data.username);
 
     // Mirrors BillingRepository::saveInvoice: (plan + static IP) x months - discount + tax.
     const months = MONTHS[data.billing_period] ?? 1;
     const amount = (value: string) => Math.max(0, Number(value) || 0);
     const currency = data.currency.toUpperCase();
     const format = (value: number) => `${value.toFixed(2)} ${currency}`.trim();
-    const suffix = months > 1 ? ` (${months} months)` : '';
+    const suffix = months > 1 ? ` × ${months}` : '';
     const serviceTotal = (service?.price ?? 0) * months;
     const staticTotal = (pool?.price ?? 0) * months;
     const discount = amount(data.discount_amount);
     const tax = amount(data.tax_amount);
+    const total = Math.max(0, serviceTotal + staticTotal - discount + tax);
+    const due = dueDate(data.issue_date, data.billing_period);
+
+    // The two buttons choose the status: issue now (unpaid) or keep as a draft.
+    const save = (status: string) => {
+        form.transform((d) => ({ ...d, status }));
+        form.post('/billing/invoices/save', { preserveScroll: true });
+    };
 
     return (
-        <AppLayout title={values.id ? 'Edit Invoice' : 'New Invoice'}>
-            <Panel title="Invoice">
-                <ErrorSummary errors={form.errors} />
-                <form
-                    id="invoice-form"
-                    className="form-grid"
-                    onSubmit={(event) => {
-                        event.preventDefault();
-                        form.post('/billing/invoices/save', { preserveScroll: true });
-                    }}
-                >
-                    {/* Type to search: a plain select of every customer does not scale to thousands. */}
-                    <Field label="Customer" required list="invoice-customers" autoComplete="off" placeholder="Type a name or username" hint="Choose from the suggestions; the username is saved." {...bind(form, 'username')} />
-                    <datalist id="invoice-customers">
-                        {customers.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
-                    </datalist>
-                    <Select
-                        label="Service plan"
-                        hint="Choose a service for internet billing, or no internet charge for static-IP-only invoices."
-                        placeholder="No internet charge"
-                        options={services}
-                        {...bind(form, 'service_group')}
-                        onChange={(e) => {
-                            const next = services.find((s) => s.value === e.target.value);
-                            form.setData((d) => ({
-                                ...d,
-                                service_group: e.target.value,
-                                currency: next?.currency || (!e.target.value && pool?.currency) || d.currency,
-                                description: next ? `${next.name} service` : d.description,
-                            }));
-                        }}
-                    />
-                    <Select
-                        label="Static IP add-on"
-                        hint="Use with internet for new orders, or without internet for static-IP-only billing."
-                        placeholder="No static IP charge"
-                        options={staticPools}
-                        {...bind(form, 'static_ip_pool_key')}
-                        onChange={(e) => {
-                            const next = staticPools.find((p) => p.value === e.target.value);
-                            form.setData((d) => ({ ...d, static_ip_pool_key: e.target.value, currency: !d.service_group && next?.currency ? next.currency : d.currency }));
-                        }}
-                    />
-                    <Select label="Billing period" options={periods} {...bind(form, 'billing_period')} />
-                    <Field label="Description" required {...bind(form, 'description')} />
-                    <Field label="Currency" readOnly name="currency" value={currency} hint="From the plan, or the system currency (Settings → Regional)." />
-                    <Field label="Discount" type="number" step="0.01" min="0" {...bind(form, 'discount_amount')} />
-                    <Field label="Tax" type="number" step="0.01" min="0" {...bind(form, 'tax_amount')} />
-                    <Field label="Issue date" type="date" required {...bind(form, 'issue_date')} />
-                    <Field label="Due date" type="date" required readOnly name="due_date" value={dueDate(data.issue_date, data.billing_period)} hint="Follows the issue date and billing period." />
-                    <Select
-                        label="Status"
-                        hint="Payments are recorded on the invoice page after it is issued."
-                        options={{ open: 'Issue now (unpaid)', draft: 'Draft (not billed yet)' }}
-                        {...bind(form, 'status')}
-                    />
-                    <section className="span2 invoice-total-preview" aria-live="polite">
-                        <h3>Price summary</h3>
-                        <div className="kv"><span>Internet service</span><strong>{serviceTotal ? format(serviceTotal) + suffix : 'None'}</strong></div>
-                        <div className="kv"><span>Static IP add-on</span><strong>{staticTotal ? format(staticTotal) + suffix : 'None'}</strong></div>
-                        <div className="kv"><span>Discount</span><strong>{discount ? `− ${format(discount)}` : 'None'}</strong></div>
-                        <div className="kv"><span>Tax</span><strong>{tax ? `+ ${format(tax)}` : 'None'}</strong></div>
-                        <div className="kv invoice-total-line"><span>Total to bill</span><strong>{format(Math.max(0, serviceTotal + staticTotal - discount + tax))}</strong></div>
-                        <small className="hint">Estimate from the selected plan prices; the saved invoice is the final amount.</small>
-                    </section>
-                    <TextArea label="Notes" {...bind(form, 'notes')} />
-                    <div className="span2 form-actions">
-                        <button className="primary" disabled={form.processing}>Save invoice</button>
-                        <Link className="button" href="/billing">Cancel</Link>
+        <AppLayout title={values.id ? 'Edit draft invoice' : 'New invoice'}>
+            <div className="toolbar"><Link href="/billing">← Billing</Link></div>
+            <form id="invoice-form" className="invoice-form-layout" onSubmit={(e) => { e.preventDefault(); save('open'); }}>
+                <Panel>
+                    <ErrorSummary errors={form.errors} />
+                    <div className="form-grid">
+                        <h3 className="form-section-title span2">Who and what</h3>
+                        {/* Type to search: a plain select of every customer does not scale to thousands. */}
+                        <Field label="Customer" required list="invoice-customers" autoComplete="off" placeholder="Type a name or username" hint={customer ? customer.label : 'Pick from the suggestions.'} {...bind(form, 'username')} />
+                        <datalist id="invoice-customers">
+                            {customers.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+                        </datalist>
+                        <Select
+                            label="Service plan"
+                            placeholder="No internet charge"
+                            options={services}
+                            {...bind(form, 'service_group')}
+                            onChange={(e) => {
+                                const next = services.find((s) => s.value === e.target.value);
+                                form.setData((d) => ({
+                                    ...d,
+                                    service_group: e.target.value,
+                                    currency: next?.currency || (!e.target.value && pool?.currency) || d.currency,
+                                    description: next ? `${next.name} service` : d.description,
+                                }));
+                            }}
+                        />
+                        {staticPools.length > 0 && (
+                            <Select
+                                label="Static IP add-on"
+                                placeholder="None"
+                                options={staticPools}
+                                {...bind(form, 'static_ip_pool_key')}
+                                onChange={(e) => {
+                                    const next = staticPools.find((p) => p.value === e.target.value);
+                                    form.setData((d) => ({ ...d, static_ip_pool_key: e.target.value, currency: !d.service_group && next?.currency ? next.currency : d.currency }));
+                                }}
+                            />
+                        )}
+                        <Select label="Billing period" options={periods} {...bind(form, 'billing_period')} />
+                        <Field label="Issue date" type="date" required hint={due ? `Due ${due}` : undefined} {...bind(form, 'issue_date')} />
+
+                        <details className="span2" open={discount > 0 || tax > 0 || data.notes !== '' || undefined}>
+                            <summary>Discount, tax, description and notes</summary>
+                            <div className="form-grid">
+                                <Field label={`Discount (${currency})`} type="number" step="0.01" min="0" {...bind(form, 'discount_amount')} />
+                                <Field label={`Tax (${currency})`} type="number" step="0.01" min="0" {...bind(form, 'tax_amount')} />
+                                <Field label="Line description" required hint="Printed on the PDF." {...bind(form, 'description')} />
+                                <TextArea label="Notes" {...bind(form, 'notes')} />
+                            </div>
+                        </details>
                     </div>
-                </form>
-            </Panel>
+                </Panel>
+
+                <aside className="panel invoice-preview" aria-live="polite">
+                    <h2>Summary</h2>
+                    <div className="invoice-totals">
+                        <div className="kv"><span>{service ? service.name : 'Internet'}{service && suffix}</span><strong>{serviceTotal ? format(serviceTotal) : '—'}</strong></div>
+                        {pool && <div className="kv"><span>Static IP{suffix}</span><strong>{format(staticTotal)}</strong></div>}
+                        {discount > 0 && <div className="kv"><span>Discount</span><strong>− {format(discount)}</strong></div>}
+                        {tax > 0 && <div className="kv"><span>Tax</span><strong>+ {format(tax)}</strong></div>}
+                        <div className="kv invoice-total"><span>Total</span><strong>{format(total)}</strong></div>
+                    </div>
+                    {due && <p className="hint">Due {due}. The saved invoice is the final amount.</p>}
+                    <div className="invoice-preview-actions">
+                        <button type="submit" className="primary" disabled={form.processing}>Issue invoice</button>
+                        <button type="button" disabled={form.processing} onClick={() => save('draft')}>Save as draft</button>
+                    </div>
+                </aside>
+            </form>
         </AppLayout>
     );
 }

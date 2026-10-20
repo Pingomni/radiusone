@@ -51,27 +51,34 @@ final class BillingController extends Controller
         // Per currency: invoices issued before a currency change keep theirs.
         $sums = Db::select(
             'SELECT currency,
-                COUNT(*) AS invoices,
                 COALESCE(SUM(CASE WHEN status NOT IN ("paid", "void", "draft") THEN balance_due ELSE 0 END),0) AS outstanding,
                 COALESCE(SUM(CASE WHEN status = "overdue" THEN balance_due ELSE 0 END),0) AS overdue
              FROM billing_invoices GROUP BY currency'
         );
         $totals = [
-            'invoices' => array_sum(array_column($sums, 'invoices')),
             'outstanding' => array_column($sums, 'outstanding', 'currency'),
             'overdue' => array_column($sums, 'overdue', 'currency'),
             // Money actually received this month, including partial payments and payments on older invoices.
             'paid_month' => array_column(Db::select('SELECT currency, SUM(amount) AS amount FROM billing_payments WHERE payment_date >= DATE_FORMAT(CURDATE(), "%Y-%m-01") GROUP BY currency'), 'amount', 'currency'),
         ];
+        $byStatus = array_map('intval', array_column(Db::select('SELECT status, COUNT(*) AS n FROM billing_invoices GROUP BY status'), 'n', 'status'));
+        $count = static fn (string ...$statuses) => array_sum(array_map(static fn ($s) => $byStatus[$s] ?? 0, $statuses));
         $manage = Auth::can('billing.manage');
 
         return Inertia::render('billing/Index', [
             'filters' => $filters,
             'metrics' => [
-                Present::metric('Outstanding', Currency::totals($totals['outstanding']), 'billing', array_sum($totals['outstanding']) > 0 ? 'warning' : ''),
-                Present::metric('Overdue', Currency::totals($totals['overdue']), 'billing', array_sum($totals['overdue']) > 0 ? 'danger' : ''),
+                Present::metric('To collect', Currency::totals($totals['outstanding']), 'billing', array_sum($totals['outstanding']) > 0 ? 'warning' : '', '/billing?status=unpaid'),
+                Present::metric('Overdue', Currency::totals($totals['overdue']), 'billing', array_sum($totals['overdue']) > 0 ? 'danger' : '', '/billing?status=overdue'),
                 Present::metric('Received this month', Currency::totals($totals['paid_month']), 'billing', 'success'),
-                Present::metric('Invoices', (int) $totals['invoices'], 'billing'),
+            ],
+            'statuses' => [
+                ['value' => '', 'label' => 'All', 'count' => array_sum($byStatus)],
+                ['value' => 'unpaid', 'label' => 'To collect', 'count' => $count('open', 'partial', 'overdue')],
+                ['value' => 'overdue', 'label' => 'Overdue', 'count' => $count('overdue')],
+                ['value' => 'paid', 'label' => 'Paid', 'count' => $count('paid')],
+                ['value' => 'draft', 'label' => 'Drafts', 'count' => $count('draft')],
+                ['value' => 'void', 'label' => 'Cancelled', 'count' => $count('void')],
             ],
             'result' => [
                 'total' => (int) $result['total'],
@@ -80,7 +87,8 @@ final class BillingController extends Controller
                 'size' => (int) $result['size'],
                 'rows' => array_map(static fn (array $r) => Invoices::row($r) + [
                     'customer' => Clients::displayName($r),
-                    'service' => (string) (($r['service_name'] ?: $r['service_group']) ?: '-'),
+                    'service' => (string) (($r['service_name'] ?: $r['service_group']) ?: ''),
+                    'owed' => in_array($r['status'], ['open', 'partial', 'overdue'], true),
                     'canEdit' => $manage && $r['status'] === 'draft',
                     // Invoices with payments cannot be voided (BillingRepository::voidInvoice), so the action is not offered.
                     'canVoid' => $manage && $r['status'] !== 'void' && (float) $r['amount_paid'] <= 0,
@@ -93,10 +101,12 @@ final class BillingController extends Controller
                 'invoiceId' => (int) $p['invoice_id'],
                 'invoice' => (string) $p['invoice_number'],
                 'username' => (string) $p['username'],
+                'customer' => Clients::displayName($p),
                 'amount' => Format::money($p['amount']) . ' ' . $p['currency'],
                 'method' => self::PAYMENT_METHODS[$p['method']] ?? (string) $p['method'],
-                'reference' => (string) ($p['reference'] ?: '-'),
-            ], Db::select('SELECT p.*, i.invoice_number FROM billing_payments p JOIN billing_invoices i ON i.id=p.invoice_id ORDER BY p.payment_date DESC, p.id DESC LIMIT 8')),
+            ], Db::select('SELECT p.*, i.invoice_number, c.first_name, c.last_name, c.company_name FROM billing_payments p
+                JOIN billing_invoices i ON i.id=p.invoice_id LEFT JOIN customer_profiles c ON c.username=p.username
+                ORDER BY p.payment_date DESC, p.id DESC LIMIT 6')),
         ]);
     }
 
@@ -265,28 +275,32 @@ final class BillingController extends Controller
                 'notes' => (string) ($invoice['notes'] ?? ''),
                 'status' => Invoices::status($invoice),
                 'banner' => Invoices::banner($invoice, $payments),
-                'summary' => [
-                    ['Invoice', (string) $invoice['invoice_number']],
-                    ['Customer', Clients::displayName($invoice)],
-                    ['Issued', (string) $invoice['issue_date']],
-                    ['Due', (string) $invoice['due_date']],
-                    ['Billing period', $period],
-                    ['Total', Format::money($invoice['total_amount']) . $currency],
-                    ['Amount paid', Format::money($invoice['amount_paid']) . $currency],
-                    ['Balance due', Format::money($invoice['balance_due']) . $currency],
-                ],
+                'customer' => Clients::displayName($invoice),
+                'service' => (string) (($invoice['service_name'] ?? '') ?: ($invoice['service_group'] ?? '')),
+                'issued' => (string) $invoice['issue_date'],
+                'due' => (string) $invoice['due_date'],
+                'period' => $period,
+                // Discount and tax only when used; paid and balance only on issued invoices.
+                'totals' => array_values(array_filter([
+                    (float) $invoice['discount_amount'] > 0 || (float) $invoice['tax_amount'] > 0 ? ['Subtotal', Format::money($invoice['subtotal']) . $currency, ''] : null,
+                    (float) $invoice['discount_amount'] > 0 ? ['Discount', '− ' . Format::money($invoice['discount_amount']) . $currency, ''] : null,
+                    (float) $invoice['tax_amount'] > 0 ? ['Tax', '+ ' . Format::money($invoice['tax_amount']) . $currency, ''] : null,
+                    ['Total', Format::money($invoice['total_amount']) . $currency, 'total'],
+                    (float) $invoice['amount_paid'] > 0 ? ['Paid', '− ' . Format::money($invoice['amount_paid']) . $currency, ''] : null,
+                    !in_array($invoice['status'], ['draft', 'void'], true) ? ['Balance due', Format::money($invoice['balance_due']) . $currency, 'balance'] : null,
+                ])),
                 'draftPdf' => $invoice['status'] !== 'void',
                 'receipt' => Invoices::receipt($invoice),
             ],
-            'items' => array_map(static fn ($i) => ['description' => (string) $i['description'], 'period' => $period, 'total' => Format::money($i['line_total'])], $items),
+            'items' => array_map(static fn ($i) => ['description' => (string) $i['description'], 'total' => Format::money($i['line_total']) . $currency], $items),
             'payments' => array_map(static fn ($p) => [
                 'id' => (int) $p['id'],
                 'date' => (string) $p['payment_date'],
                 'amount' => Format::money($p['amount']) . ' ' . $p['currency'],
                 'method' => self::PAYMENT_METHODS[$p['method']] ?? (string) $p['method'],
-                'reference' => (string) ($p['reference'] ?: '-'),
+                'reference' => (string) ($p['reference'] ?? ''),
                 'receiver' => (string) (($p['receiver'] ?? '') ?: 'system'),
-                'notes' => (string) ($p['notes'] ?: '-'),
+                'notes' => (string) ($p['notes'] ?? ''),
             ], $payments),
             'payment' => $payment,
             'methods' => self::PAYMENT_METHODS,
