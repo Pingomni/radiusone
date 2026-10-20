@@ -100,7 +100,8 @@ final class NotificationQueue
             } catch (\Throwable $e) {
                 if ($pdo->inTransaction()) {
                     $pdo->rollBack();
-                }throw $e;
+                }
+                throw $e;
             }
         }
         return $stats;

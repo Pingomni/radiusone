@@ -37,7 +37,8 @@ final class NetworkOperations
         } catch (\Throwable $e) {
             if ($pdo->inTransaction()) {
                 $pdo->rollBack();
-            }throw $e;
+            }
+            throw $e;
         }
     }
     private static function sessions(array $sub, ?int $accountingId = null): array
@@ -256,7 +257,7 @@ final class NetworkOperations
             if ($op['action'] !== 'disconnect') {
                 Db::exec('UPDATE subscriptions SET provisioning_state=?,last_error=?,applied_revision=IF(?="verified",?,applied_revision) WHERE id=? AND policy_revision=?', [$state, $code, $state, $op['policy_revision'], $op['subscription_id'], $op['policy_revision']]);
             }
-            if ($state === 'verified' && in_array($op['action'],['apply', 'restore'],true)) {
+            if ($state === 'verified' && in_array($op['action'], ['apply', 'restore'], true)) {
                 CustomerNotifications::activated((int) $op['subscription_id']);
             }
             if ($own) {

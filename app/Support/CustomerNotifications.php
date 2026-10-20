@@ -320,7 +320,7 @@ final class CustomerNotifications
                 $state = 'uncertain';
                 $reason = 'Provider outcome unknown; check provider';
             }
-            Db::exec('UPDATE notification_deliveries SET state=?,reason=?,completed_at=NOW() WHERE id=? AND state="sending" AND claim_token=?',[$state, $reason, $job['id'], $token]);
+            Db::exec('UPDATE notification_deliveries SET state=?,reason=?,completed_at=NOW() WHERE id=? AND state="sending" AND claim_token=?', [$state, $reason, $job['id'], $token]);
             $counts[$state]++;
         }
         return $counts;

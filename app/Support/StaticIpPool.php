@@ -123,7 +123,8 @@ final class StaticIpPool
         } catch (\Throwable $e) {
             if ($pdo->inTransaction()) {
                 $pdo->rollBack();
-            }throw $e;
+            }
+            throw $e;
         }
     }
     public static function delete(int $id): void
@@ -142,13 +143,14 @@ final class StaticIpPool
         } catch (\Throwable $e) {
             if ($pdo->inTransaction()) {
                 $pdo->rollBack();
-            }throw $e;
+            }
+            throw $e;
         }
     }
     private static function assertUnassigned(array $ips): void
     {
         foreach (array_chunk($ips, 256) as $chunk) {
-            if (Db::value('SELECT COUNT(*) FROM customer_profiles WHERE framed_ip_address IN (' . implode(',',array_fill(0,count($chunk),'?')) . ')', $chunk)) {
+            if (Db::value('SELECT COUNT(*) FROM customer_profiles WHERE framed_ip_address IN (' . implode(',', array_fill(0, count($chunk), '?')) . ')', $chunk)) {
                 throw new RuntimeException('Assigned addresses, including archived reservations, must remain in their pool.');
             }
         }

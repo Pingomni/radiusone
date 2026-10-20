@@ -430,7 +430,8 @@ final class RadiusRepository
             if ($pdo->inTransaction()) {
                 $pdo->rollBack();
                 SubscriberPolicy::releaseLocks();
-            }throw $e;
+            }
+            throw $e;
         }
     }
 
@@ -460,7 +461,8 @@ final class RadiusRepository
             if ($pdo->inTransaction()) {
                 $pdo->rollBack();
                 SubscriberPolicy::releaseLocks();
-            }throw $e;
+            }
+            throw $e;
         }
     }
 

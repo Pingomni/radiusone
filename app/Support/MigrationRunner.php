@@ -67,7 +67,7 @@ final class MigrationRunner
             }
             return ['applied' => $applied, 'skipped' => $skipped];
         } finally {
-            Db::value('SELECT RELEASE_LOCK(?)',[$lock]);
+            Db::value('SELECT RELEASE_LOCK(?)', [$lock]);
         }
     }
 }

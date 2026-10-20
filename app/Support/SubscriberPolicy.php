@@ -147,7 +147,8 @@ final class SubscriberPolicy
                 if ($pdo->inTransaction()) {
                     $pdo->rollBack();
                     self::releaseLocks();
-                }throw $e;
+                }
+                throw $e;
             }
         }
         return $processed;

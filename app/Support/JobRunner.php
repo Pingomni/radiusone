@@ -36,9 +36,10 @@ final class JobRunner
         } catch (\Throwable $e) {
             if ($id !== null) {
                 Db::exec('UPDATE job_runs SET state="failed",finished_at=NOW(),error_class=? WHERE id=?', [get_class($e), $id]);
-            }throw $e;
+            }
+            throw $e;
         } finally {
-            Db::value('SELECT RELEASE_LOCK(?)',[$lock]);
+            Db::value('SELECT RELEASE_LOCK(?)', [$lock]);
         }
     }
 }

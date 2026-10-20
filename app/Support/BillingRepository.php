@@ -27,7 +27,8 @@ final class BillingRepository
             if ($owns && $pdo->inTransaction()) {
                 $pdo->rollBack();
                 SubscriberPolicy::releaseLocks();
-            }throw $e;
+            }
+            throw $e;
         }
     }
 
@@ -509,7 +510,8 @@ final class BillingRepository
                 if ($pdo->inTransaction()) {
                     $pdo->rollBack();
                     SubscriberPolicy::releaseLocks();
-                }throw $e;
+                }
+                throw $e;
             }
         }
         return $changed;
