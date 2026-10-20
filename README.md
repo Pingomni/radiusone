@@ -14,6 +14,9 @@ cd /opt/radiusweb
 sudo bash install.sh
 ```
 
+Full details (requirements, what gets installed, first steps, connecting routers, ports, updating and
+troubleshooting): **[INSTALL.md](INSTALL.md)**.
+
 When it finishes, the script prints the portal address and the first administrator's username and
 password. The password is shown only once. At first sign-in you set up two-factor authentication with an
 authenticator app.
