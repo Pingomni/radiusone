@@ -6,6 +6,7 @@ namespace Tests\Feature;
 
 use App\Support\NotificationService;
 use App\Support\ProviderHttp;
+use App\Support\Settings;
 use App\Support\SmsProviders;
 use Tests\TestCase;
 
@@ -74,7 +75,7 @@ final class NotificationProvidersTest extends TestCase
         // Google and Microsoft 365 are no longer providers: such a choice is saved as custom SMTP.
         $this->email(['email_gateway_provider' => 'microsoft', 'email_gateway_host' => 'smtp.example.test']);
         $this->assertSame('smtp', NotificationService::emailGatewaySettings()['provider']);
-        \App\Support\Settings::save('email_gateway_provider', 'google');
+        Settings::save('email_gateway_provider', 'google');
         $this->assertSame('smtp', NotificationService::emailGatewaySettings()['provider']);
     }
 

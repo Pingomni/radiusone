@@ -160,24 +160,34 @@ final class Auth
     /** Serialize attempts and consume a counter once across all sessions. */
     public static function consumeTotp(array $expected, string $secret, string $code): bool
     {
-        $pdo = Db::pdo(); $pdo->beginTransaction();
+        $pdo = Db::pdo();
+        $pdo->beginTransaction();
         try {
             $user = Db::row('SELECT * FROM portal_users WHERE id=? AND enabled=1 FOR UPDATE', [$expected['id']]);
-            if (!$user || (int)$user['session_version'] !== (int)$expected['session_version'] || (int)$user['mfa_locked_until'] > time()) { $pdo->commit(); return false; }
-            $counter = Security::totpCounter($secret, $code);
-            if ($counter === null || ($user['mfa_last_counter'] !== null && $counter <= (int)$user['mfa_last_counter'])) {
-                self::failChallenge($user);
-                $pdo->commit(); return false;
+            if (!$user || (int) $user['session_version'] !== (int) $expected['session_version'] || (int) $user['mfa_locked_until'] > time()) {
+                $pdo->commit();
+                return false;
             }
-            Db::exec('UPDATE portal_users SET mfa_attempts=0,mfa_locked_until=0,mfa_last_counter=? WHERE id=?', [$counter,$user['id']]);
-            $pdo->commit(); return true;
-        } catch (\Throwable $e) { if ($pdo->inTransaction()) { $pdo->rollBack(); } throw $e; }
+            $counter = Security::totpCounter($secret, $code);
+            if ($counter === null || ($user['mfa_last_counter'] !== null && $counter <= (int) $user['mfa_last_counter'])) {
+                self::failChallenge($user);
+                $pdo->commit();
+                return false;
+            }
+            Db::exec('UPDATE portal_users SET mfa_attempts=0,mfa_locked_until=0,mfa_last_counter=? WHERE id=?', [$counter, $user['id']]);
+            $pdo->commit();
+            return true;
+        } catch (\Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            } throw $e;
+        }
     }
 
     private static function failChallenge(array $user): void
     {
-        $attempts = (int)$user['mfa_locked_until'] > 0 && (int)$user['mfa_locked_until'] <= time() ? 1 : (int)$user['mfa_attempts'] + 1;
-        Db::exec('UPDATE portal_users SET mfa_attempts=?,mfa_locked_until=? WHERE id=?', [$attempts, $attempts >= 5 ? time()+900 : 0,$user['id']]);
+        $attempts = (int) $user['mfa_locked_until'] > 0 && (int) $user['mfa_locked_until'] <= time() ? 1 : (int) $user['mfa_attempts'] + 1;
+        Db::exec('UPDATE portal_users SET mfa_attempts=?,mfa_locked_until=? WHERE id=?', [$attempts, $attempts >= 5 ? time() + 900 : 0, $user['id']]);
     }
 
     public static function reauthenticate(string $password, string $code): bool
@@ -224,18 +234,28 @@ final class Auth
 
     public static function internalReturnPath(string $path, string $fallback = '/profile'): string
     {
-        if (strlen($path) > 2048 || !str_starts_with($path, '/') || str_starts_with($path, '//') || preg_match('/[\x00-\x20\x7f\\\\]/', $path)) { return $fallback; }
+        if (strlen($path) > 2048 || !str_starts_with($path, '/') || str_starts_with($path, '//') || preg_match('/[\x00-\x20\x7f\\\\]/', $path)) {
+            return $fallback;
+        }
         $decoded = $path;
         for ($i = 0; $i < 3; $i++) {
-            if (preg_match('/[\x00-\x1f\x7f\\\\]/', $decoded) || str_starts_with($decoded, '//')) { return $fallback; }
+            if (preg_match('/[\x00-\x1f\x7f\\\\]/', $decoded) || str_starts_with($decoded, '//')) {
+                return $fallback;
+            }
             $decoded = rawurldecode($decoded);
         }
         $parts = parse_url($path);
-        if ($parts && preg_match('#(?:^|/)\.{1,2}(?:/|$)#', rawurldecode(rawurldecode((string)($parts['path'] ?? ''))))) { return $fallback; }
-        if (!$parts || isset($parts['host']) || isset($parts['scheme']) || !preg_match('#^/(?:profile(?:/2fa/setup)?|settings(?:/users(?:/create|/\d+/edit)?|/notifications/(?:general|sms|email))?|portal-users(?:/create|/\d+/edit)?|nas(?:/create|/\d+/edit)?|clients(?:/create|/[^/]+/edit)?|billing(?:/invoices/(?:create|\d+(?:/edit)?))?)?$#D', $parts['path'] ?? '')) { return $fallback; }
+        if ($parts && preg_match('#(?:^|/)\.{1,2}(?:/|$)#', rawurldecode(rawurldecode((string) ($parts['path'] ?? ''))))) {
+            return $fallback;
+        }
+        if (!$parts || isset($parts['host']) || isset($parts['scheme']) || !preg_match('#^/(?:profile(?:/2fa/setup)?|settings(?:/users(?:/create|/\d+/edit)?|/notifications/(?:general|sms|email))?|portal-users(?:/create|/\d+/edit)?|nas(?:/create|/\d+/edit)?|clients(?:/create|/[^/]+/edit)?|billing(?:/invoices/(?:create|\d+(?:/edit)?))?)?$#D', $parts['path'] ?? '')) {
+            return $fallback;
+        }
         parse_str($parts['query'] ?? '', $query);
         foreach (array_keys($query) as $key) {
-            if (preg_match('/password|secret|token|csrf|(?:^|_)code(?:$|_)/i', $key)) { unset($query[$key]); }
+            if (preg_match('/password|secret|token|csrf|(?:^|_)code(?:$|_)/i', $key)) {
+                unset($query[$key]);
+            }
         }
         return $parts['path'] . ($query ? '?' . http_build_query($query) : '') . (isset($parts['fragment']) ? '#' . $parts['fragment'] : '');
     }
@@ -294,10 +314,10 @@ final class Auth
         }
 
         $matrix = [
-            'support'=>['dashboard.view','clients.view','services.view','nas.view','reports.view','operations.view'],
-            'noc'=>['dashboard.view','clients.view','clients.manage','clients.disconnect','clients.suspend','services.view','services.manage','nas.view','nas.manage','reports.view','logs.view','operations.view','operations.manage'],
-            'billing'=>['dashboard.view','clients.view','services.view','billing.view','billing.manage','documents.view'],
-            'security'=>['dashboard.view','clients.view','clients.suspend','clients.disconnect','nas.view','logs.view','operations.view','operations.manage','security.manage'],
+            'support' => ['dashboard.view', 'clients.view', 'services.view', 'nas.view', 'reports.view', 'operations.view'],
+            'noc' => ['dashboard.view', 'clients.view', 'clients.manage', 'clients.disconnect', 'clients.suspend', 'services.view', 'services.manage', 'nas.view', 'nas.manage', 'reports.view', 'logs.view', 'operations.view', 'operations.manage'],
+            'billing' => ['dashboard.view', 'clients.view', 'services.view', 'billing.view', 'billing.manage', 'documents.view'],
+            'security' => ['dashboard.view', 'clients.view', 'clients.suspend', 'clients.disconnect', 'nas.view', 'logs.view', 'operations.view', 'operations.manage', 'security.manage'],
             'admin' => [
                 'dashboard.view', 'clients.view', 'clients.manage', 'clients.disconnect', 'clients.suspend', 'operations.view', 'operations.manage',
                 'services.view', 'services.manage', 'nas.view', 'nas.manage',

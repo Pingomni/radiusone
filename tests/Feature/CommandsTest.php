@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Support\Db;
+use App\Support\JobHealth;
 use Illuminate\Console\Scheduling\Event;
 use Illuminate\Console\Scheduling\Schedule;
 use Tests\TestCase;
@@ -72,7 +73,7 @@ final class CommandsTest extends TestCase
             ("customer-notifications", "succeeded", NOW() - INTERVAL 1 MINUTE, NOW() - INTERVAL 1 MINUTE)');
         $this->artisan('frweb:prune-job-runs')->expectsOutputToContain('"deleted":1')->assertExitCode(0);
         $this->assertSame(['running', 'succeeded'], array_column(Db::select('SELECT state FROM job_runs ORDER BY id'), 'state'));
-        $this->assertSame('running', \App\Support\JobHealth::all()['customer-notifications']['state']);
+        $this->assertSame('running', JobHealth::all()['customer-notifications']['state']);
     }
 
     public function test_paused_jobs_are_only_scheduled_when_enabled(): void

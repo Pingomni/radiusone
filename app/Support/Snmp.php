@@ -1,6 +1,9 @@
 <?php
+
 declare(strict_types=1);
+
 namespace App\Support;
+
 use RuntimeException;
 
 /**
@@ -10,7 +13,11 @@ use RuntimeException;
  */
 final class Snmp
 {
-    private const GET = 0xA0, GETNEXT = 0xA1, RESPONSE = 0xA2, GETBULK = 0xA5, REPORT = 0xA8;
+    private const GET = 0xA0;
+    private const GETNEXT = 0xA1;
+    private const RESPONSE = 0xA2;
+    private const GETBULK = 0xA5;
+    private const REPORT = 0xA8;
     /** Marker for noSuchObject / noSuchInstance / endOfMibView values. */
     public const MISSING = null;
 
@@ -39,7 +46,7 @@ final class Snmp
     private array $usm;
 
     /**
-     * @param array{user?:string,auth?:string,auth_pass?:string,priv?:string,priv_pass?:string,context?:string} $usm v3 only
+     * @param  array{user?:string,auth?:string,auth_pass?:string,priv?:string,priv_pass?:string,context?:string}  $usm  v3 only
      */
     public function __construct(
         private string $host,
@@ -51,12 +58,18 @@ final class Snmp
         float $budget = 6.0,
         array $usm = [],
     ) {
-        if (!in_array($version, ['1', '2c', '3'], true)) { throw new RuntimeException('Unsupported SNMP version.'); }
+        if (!in_array($version, ['1', '2c', '3'], true)) {
+            throw new RuntimeException('Unsupported SNMP version.');
+        }
         $this->usm = self::normalizeUsm($usm);
-        if ($version === '3') { self::validateUsm($this->usm); }
+        if ($version === '3') {
+            self::validateUsm($this->usm);
+        }
         $this->requestId = random_int(1, 0x3FFFFFFF);
         $this->deadline = microtime(true) + $budget;
-        if (self::$salt === 0) { self::$salt = random_int(1, PHP_INT_MAX >> 1); }
+        if (self::$salt === 0) {
+            self::$salt = random_int(1, PHP_INT_MAX >> 1);
+        }
     }
 
     public static function normalizeUsm(array $usm): array
@@ -75,13 +88,27 @@ final class Snmp
     public static function validateUsm(array $usm): void
     {
         $usm = self::normalizeUsm($usm);
-        if ($usm['user'] === '' || strlen($usm['user']) > 32) { throw new RuntimeException('SNMPv3 user name is required (up to 32 characters).'); }
-        if ($usm['auth'] !== 'none' && !isset(self::AUTH_PROTOCOLS[$usm['auth']])) { throw new RuntimeException('Unsupported SNMPv3 authentication protocol.'); }
-        if ($usm['priv'] !== 'none' && !in_array($usm['priv'], self::PRIV_PROTOCOLS, true)) { throw new RuntimeException('Unsupported SNMPv3 privacy protocol.'); }
-        if ($usm['priv'] !== 'none' && $usm['auth'] === 'none') { throw new RuntimeException('SNMPv3 privacy (encryption) requires authentication.'); }
-        if ($usm['auth'] !== 'none' && strlen($usm['auth_pass']) < 8) { throw new RuntimeException('SNMPv3 authentication password must be at least 8 characters.'); }
-        if ($usm['priv'] !== 'none' && strlen($usm['priv_pass']) < 8) { throw new RuntimeException('SNMPv3 privacy password must be at least 8 characters.'); }
-        if ($usm['priv'] === 'des' && !self::desAvailable()) { throw new RuntimeException('DES is disabled in this server\'s OpenSSL; configure the router user with AES.'); }
+        if ($usm['user'] === '' || strlen($usm['user']) > 32) {
+            throw new RuntimeException('SNMPv3 user name is required (up to 32 characters).');
+        }
+        if ($usm['auth'] !== 'none' && !isset(self::AUTH_PROTOCOLS[$usm['auth']])) {
+            throw new RuntimeException('Unsupported SNMPv3 authentication protocol.');
+        }
+        if ($usm['priv'] !== 'none' && !in_array($usm['priv'], self::PRIV_PROTOCOLS, true)) {
+            throw new RuntimeException('Unsupported SNMPv3 privacy protocol.');
+        }
+        if ($usm['priv'] !== 'none' && $usm['auth'] === 'none') {
+            throw new RuntimeException('SNMPv3 privacy (encryption) requires authentication.');
+        }
+        if ($usm['auth'] !== 'none' && strlen($usm['auth_pass']) < 8) {
+            throw new RuntimeException('SNMPv3 authentication password must be at least 8 characters.');
+        }
+        if ($usm['priv'] !== 'none' && strlen($usm['priv_pass']) < 8) {
+            throw new RuntimeException('SNMPv3 privacy password must be at least 8 characters.');
+        }
+        if ($usm['priv'] === 'des' && !self::desAvailable()) {
+            throw new RuntimeException('DES is disabled in this server\'s OpenSSL; configure the router user with AES.');
+        }
     }
 
     public static function desAvailable(): bool
@@ -109,7 +136,9 @@ final class Snmp
             $binds = $this->version === '1'
                 ? $this->request(self::GETNEXT, [$cursor])
                 : $this->request(self::GETBULK, [$cursor], 0, min(40, $limit - count($rows)));
-            if (!$binds) { break; }
+            if (!$binds) {
+                break;
+            }
             foreach ($binds as [$oid, $value, $end]) {
                 if ($end || !str_starts_with($oid . '.', $root . '.') || $oid === $root || self::compare($oid, $cursor) <= 0) {
                     return $rows;
@@ -127,14 +156,20 @@ final class Snmp
             $binds = $this->request(self::GET, $oids);
         } catch (SnmpError $e) {
             // v1 fails the whole PDU on one unknown OID; v2c/v3 can answer tooBig. Retry one by one.
-            if (count($oids) === 1) { return [$oids[0] => null]; }
+            if (count($oids) === 1) {
+                return [$oids[0] => null];
+            }
             $result = [];
-            foreach ($oids as $oid) { $result += $this->getChunk([$oid]); }
+            foreach ($oids as $oid) {
+                $result += $this->getChunk([$oid]);
+            }
             return $result;
         }
         $result = array_fill_keys($oids, null);
         foreach ($binds as [$oid, $value]) {
-            if (array_key_exists($oid, $result)) { $result[$oid] = $value; }
+            if (array_key_exists($oid, $result)) {
+                $result[$oid] = $value;
+            }
         }
         return $result;
     }
@@ -151,10 +186,14 @@ final class Snmp
             $reply = $this->exchange($this->encodeMessage($type, $oids, $id, $nonRepeaters, $maxRepetitions), fn ($data) => $this->decodeMessage($data, $id));
             if (isset($reply['report'])) {
                 // An authenticated notInTimeWindows report carries the agent's clock; retry once with it.
-                if ($attempt === 0 && $reply['report'] === '1.3.6.1.6.3.15.1.1.2.0' && $reply['authentic']) { continue; }
+                if ($attempt === 0 && $reply['report'] === '1.3.6.1.6.3.15.1.1.2.0' && $reply['authentic']) {
+                    continue;
+                }
                 throw new RuntimeException('SNMPv3: ' . self::reportMessage($reply['report']) . '.');
             }
-            if ($reply['error'] !== 0) { throw new SnmpError('SNMP error status ' . $reply['error']); }
+            if ($reply['error'] !== 0) {
+                throw new SnmpError('SNMP error status ' . $reply['error']);
+            }
             return $reply['binds'];
         }
     }
@@ -163,20 +202,33 @@ final class Snmp
     private function exchange(string $packet, callable $decode): array
     {
         $socket = @stream_socket_client('udp://' . self::address($this->host, $this->port), $errno, $error, $this->timeout);
-        if (!$socket) { throw new RuntimeException('Cannot open UDP socket to ' . $this->host . ': ' . $error); }
+        if (!$socket) {
+            throw new RuntimeException('Cannot open UDP socket to ' . $this->host . ': ' . $error);
+        }
         try {
             for ($attempt = 0; $attempt <= $this->retries; $attempt++) {
                 $remaining = $this->deadline - microtime(true);
-                if ($remaining <= 0) { throw new RuntimeException('SNMP poll took too long; partial data only.'); }
-                if (@fwrite($socket, $packet) === false) { throw new RuntimeException('Cannot send SNMP request.'); }
+                if ($remaining <= 0) {
+                    throw new RuntimeException('SNMP poll took too long; partial data only.');
+                }
+                if (@fwrite($socket, $packet) === false) {
+                    throw new RuntimeException('Cannot send SNMP request.');
+                }
                 $until = microtime(true) + min($this->timeout, $remaining);
                 while (($wait = $until - microtime(true)) > 0) {
-                    $read = [$socket]; $none = null;
-                    if (!@stream_select($read, $none, $none, (int) $wait, (int) (fmod($wait, 1) * 1e6))) { break; }
+                    $read = [$socket];
+                    $none = null;
+                    if (!@stream_select($read, $none, $none, (int) $wait, (int) (fmod($wait, 1) * 1e6))) {
+                        break;
+                    }
                     $data = @fread($socket, 65535);
-                    if ($data === false || $data === '') { break; }
+                    if ($data === false || $data === '') {
+                        break;
+                    }
                     $reply = $decode($data);
-                    if ($reply !== null) { return $reply; } // Otherwise a late answer to an earlier retry, or forged.
+                    if ($reply !== null) {
+                        return $reply;
+                    } // Otherwise a late answer to an earlier retry, or forged.
                 }
             }
         } finally {
@@ -222,7 +274,9 @@ final class Snmp
     private static function pdu(int $type, int $id, int $second, int $third, array $oids): string
     {
         $varbinds = '';
-        foreach ($oids as $oid) { $varbinds .= self::tlv(0x30, self::encodeOid($oid) . "\x05\x00"); }
+        foreach ($oids as $oid) {
+            $varbinds .= self::tlv(0x30, self::encodeOid($oid) . "\x05\x00");
+        }
         return self::tlv($type, self::encodeInt($id) . self::encodeInt($second) . self::encodeInt($third) . self::tlv(0x30, $varbinds));
     }
 
@@ -286,13 +340,17 @@ final class Snmp
             $padded = $plain . str_repeat("\x00", (8 - strlen($plain) % 8) % 8);
             $cipher = openssl_encrypt($padded, 'des-cbc', substr($key, 0, 8), OPENSSL_RAW_DATA | OPENSSL_ZERO_PADDING, substr($key, 8, 8) ^ $salt);
         }
-        if ($cipher === false) { throw new RuntimeException('SNMPv3 encryption failed.'); }
+        if ($cipher === false) {
+            throw new RuntimeException('SNMPv3 encryption failed.');
+        }
         return [$cipher, $salt];
     }
 
     private function decrypt(string $cipher, string $salt, int $boots, int $time, string $engineId): ?string
     {
-        if (strlen($salt) !== 8) { return null; }
+        if (strlen($salt) !== 8) {
+            return null;
+        }
         $key = $this->privKey($engineId);
         $plain = $this->usm['priv'] === 'aes128'
             ? openssl_decrypt($cipher, 'aes-128-cfb', substr($key, 0, 16), OPENSSL_RAW_DATA, pack('NN', $boots, $time) . $salt)
@@ -302,6 +360,7 @@ final class Snmp
 
     /**
      * @internal Decodes a reply to request $id. Returns null for unrelated, malformed or unauthentic packets.
+     *
      * @return array{id:int,error:int,binds:list<array>}|array{report:string,authentic:bool}|null
      */
     public function decodeMessage(string $data, int $id): ?array
@@ -314,13 +373,17 @@ final class Snmp
             $o = 0;
             [$tag, $message, $base] = self::readTlv($data, $o);
             $m = 0;
-            if ($tag !== 0x30 || self::decodeInt(self::readTlv($message, $m)[1]) !== 3) { return null; }
+            if ($tag !== 0x30 || self::decodeInt(self::readTlv($message, $m)[1]) !== 3) {
+                return null;
+            }
             [, $global] = self::readTlv($message, $m);
             $g = 0;
             $msgId = self::decodeInt(self::readTlv($global, $g)[1]);
             self::readTlv($global, $g);
             $flags = ord(self::readTlv($global, $g)[1] ?: "\x00");
-            if ($msgId !== $id) { return null; }
+            if ($msgId !== $id) {
+                return null;
+            }
             [, $usmRaw, $usmOffset] = self::readTlv($message, $m);
             $u = 0;
             [, $usm, $usmSeqOffset] = self::readTlv($usmRaw, $u);
@@ -335,16 +398,24 @@ final class Snmp
 
             $authentic = false;
             if ($flags & 1) {
-                if ($this->usm['auth'] === 'none' || strlen($authParams) !== self::AUTH_PROTOCOLS[$this->usm['auth']][1]) { return null; }
+                if ($this->usm['auth'] === 'none' || strlen($authParams) !== self::AUTH_PROTOCOLS[$this->usm['auth']][1]) {
+                    return null;
+                }
                 $position = $base + $usmOffset + $usmSeqOffset + $authOffset;
                 $zeroed = substr_replace($data, str_repeat("\x00", strlen($authParams)), $position, strlen($authParams));
-                if (!hash_equals($this->mac($zeroed, $engineId), $authParams)) { return null; } // Forged or wrong key: drop.
+                if (!hash_equals($this->mac($zeroed, $engineId), $authParams)) {
+                    return null;
+                } // Forged or wrong key: drop.
                 $authentic = true;
             }
             if ($flags & 2) {
-                if (!$authentic || $dataTag !== 0x04 || $this->usm['priv'] === 'none') { return null; }
+                if (!$authentic || $dataTag !== 0x04 || $this->usm['priv'] === 'none') {
+                    return null;
+                }
                 $scoped = $this->decrypt($msgData, $privParams, $boots, $time, $engineId);
-                if ($scoped === null) { return null; }
+                if ($scoped === null) {
+                    return null;
+                }
                 $c = 0;
                 [, $scopedBody] = self::readTlv($scoped, $c); // Trailing DES padding is ignored.
             } elseif ($dataTag === 0x30) {
@@ -365,8 +436,12 @@ final class Snmp
             if ($pduTag === self::REPORT) {
                 return ['report' => (string) ($reply['binds'][0][0] ?? ''), 'authentic' => $authentic];
             }
-            if ($pduTag !== self::RESPONSE || $reply['id'] !== $id) { return null; }
-            if ($this->usm['auth'] !== 'none' && !$authentic) { return null; } // Downgraded reply.
+            if ($pduTag !== self::RESPONSE || $reply['id'] !== $id) {
+                return null;
+            }
+            if ($this->usm['auth'] !== 'none' && !$authentic) {
+                return null;
+            } // Downgraded reply.
             return $reply;
         } catch (RuntimeException) {
             return null;
@@ -383,7 +458,9 @@ final class Snmp
     {
         $cache = $algorithm . "\x00" . hash('sha256', $password) . "\x00" . $engineId;
         if (!isset(self::$keys[$cache])) {
-            if ($password === '') { throw new RuntimeException('SNMPv3 password missing.'); }
+            if ($password === '') {
+                throw new RuntimeException('SNMPv3 password missing.');
+            }
             $expanded = substr(str_repeat($password, intdiv(1048576, strlen($password)) + 1), 0, 1048576);
             $ku = hash($algorithm, $expanded, true);
             self::$keys[$cache] = hash($algorithm, $ku . $engineId . $ku, true);
@@ -401,7 +478,7 @@ final class Snmp
      * once instead of the sum of all timeouts. SNMPv3 targets discover their engine first.
      * Unanswered requests are resent once at half time.
      *
-     * @param array<string, array{host:string,port:int,community:string,version:string,usm?:array}> $targets
+     * @param  array<string, array{host:string,port:int,community:string,version:string,usm?:array}>  $targets
      * @return array<string, array{ok:bool,latency_ms:?int,values:array<string,mixed>,error:?string}>
      */
     public static function probe(array $targets, array $oids, float $timeout = 1.5): array
@@ -421,7 +498,10 @@ final class Snmp
             try {
                 $client = new self((string) $target['host'], (string) ($target['community'] ?? ''), (string) $target['version'], (int) $target['port'], $timeout, 0, $timeout + 1, $target['usm'] ?? []);
                 $socket = @stream_socket_client('udp://' . self::address((string) $target['host'], (int) $target['port']), $errno, $error, $timeout);
-                if (!$socket) { $results[$key]['error'] = 'Cannot send to ' . $target['host']; continue; }
+                if (!$socket) {
+                    $results[$key]['error'] = 'Cannot send to ' . $target['host'];
+                    continue;
+                }
                 $pending[$key] = ['client' => $client, 'socket' => $socket, 'phase' => $client->engineKnown() ? 'get' : 'discover', 'time_retry' => false];
                 $send($pending[$key]);
             } catch (RuntimeException $e) {
@@ -430,20 +510,34 @@ final class Snmp
         }
         while ($pending && ($left = $started + $timeout - microtime(true)) > 0) {
             foreach ($pending as &$state) {
-                if (!$state['resent'] && microtime(true) - $state['sent'] >= $timeout / 2) { @fwrite($state['socket'], $state['packet']); $state['resent'] = true; }
+                if (!$state['resent'] && microtime(true) - $state['sent'] >= $timeout / 2) {
+                    @fwrite($state['socket'], $state['packet']);
+                    $state['resent'] = true;
+                }
             }
             unset($state);
             $read = array_column($pending, 'socket');
             $none = null;
             $wait = min($left, $timeout / 4);
-            if (!@stream_select($read, $none, $none, (int) $wait, (int) (fmod($wait, 1) * 1e6))) { continue; }
+            if (!@stream_select($read, $none, $none, (int) $wait, (int) (fmod($wait, 1) * 1e6))) {
+                continue;
+            }
             foreach (array_keys($pending) as $key) {
                 $state = &$pending[$key];
-                if (!in_array($state['socket'], $read, true)) { unset($state); continue; }
+                if (!in_array($state['socket'], $read, true)) {
+                    unset($state);
+                    continue;
+                }
                 $reply = $state['client']->decodeMessage((string) @fread($state['socket'], 65535), $state['id']);
-                if ($reply === null) { unset($state); continue; }
+                if ($reply === null) {
+                    unset($state);
+                    continue;
+                }
                 if ($state['phase'] === 'discover') {
-                    if ($state['client']->engineKnown()) { $state['phase'] = 'get'; $send($state); }
+                    if ($state['client']->engineKnown()) {
+                        $state['phase'] = 'get';
+                        $send($state);
+                    }
                     unset($state);
                     continue;
                 }
@@ -457,7 +551,11 @@ final class Snmp
                     $results[$key]['error'] = 'SNMPv3: ' . self::reportMessage($reply['report']);
                 } else {
                     $values = array_fill_keys($oids, null);
-                    foreach ($reply['binds'] as [$oid, $value]) { if (array_key_exists($oid, $values)) { $values[$oid] = $value; } }
+                    foreach ($reply['binds'] as [$oid, $value]) {
+                        if (array_key_exists($oid, $values)) {
+                            $values[$oid] = $value;
+                        }
+                    }
                     $results[$key] = ['ok' => $reply['error'] === 0, 'latency_ms' => (int) round((microtime(true) - $state['sent']) * 1000), 'values' => $values,
                         'error' => $reply['error'] === 0 ? null : 'SNMP error status ' . $reply['error']];
                 }
@@ -465,7 +563,9 @@ final class Snmp
                 unset($state, $pending[$key]);
             }
         }
-        foreach ($pending as $state) { fclose($state['socket']); }
+        foreach ($pending as $state) {
+            fclose($state['socket']);
+        }
         return $results;
     }
 
@@ -474,7 +574,9 @@ final class Snmp
         try {
             $offset = 0;
             [$tag, $message] = self::readTlv($data, $offset);
-            if ($tag !== 0x30) { return null; }
+            if ($tag !== 0x30) {
+                return null;
+            }
             $o = 0;
             self::readTlv($message, $o); // version
             self::readTlv($message, $o); // community
@@ -520,16 +622,24 @@ final class Snmp
     /** @return array{0:int,1:string,2:int} tag, value and the value's offset in $data */
     public static function readTlv(string $data, int &$offset): array
     {
-        if ($offset + 2 > strlen($data)) { throw new RuntimeException('Truncated BER.'); }
+        if ($offset + 2 > strlen($data)) {
+            throw new RuntimeException('Truncated BER.');
+        }
         $tag = ord($data[$offset++]);
         $length = ord($data[$offset++]);
         if ($length & 0x80) {
             $bytes = $length & 0x7F;
-            if ($bytes < 1 || $bytes > 4 || $offset + $bytes > strlen($data)) { throw new RuntimeException('Bad BER length.'); }
+            if ($bytes < 1 || $bytes > 4 || $offset + $bytes > strlen($data)) {
+                throw new RuntimeException('Bad BER length.');
+            }
             $length = 0;
-            for ($i = 0; $i < $bytes; $i++) { $length = ($length << 8) | ord($data[$offset++]); }
+            for ($i = 0; $i < $bytes; $i++) {
+                $length = ($length << 8) | ord($data[$offset++]);
+            }
         }
-        if ($offset + $length > strlen($data)) { throw new RuntimeException('Truncated BER value.'); }
+        if ($offset + $length > strlen($data)) {
+            throw new RuntimeException('Truncated BER value.');
+        }
         $start = $offset;
         $value = substr($data, $offset, $length);
         $offset += $length;
@@ -539,7 +649,9 @@ final class Snmp
     public static function tlv(int $tag, string $value): string
     {
         $length = strlen($value);
-        if ($length < 0x80) { return chr($tag) . chr($length) . $value; }
+        if ($length < 0x80) {
+            return chr($tag) . chr($length) . $value;
+        }
         $bytes = ltrim(pack('N', $length), "\x00");
         return chr($tag) . chr(0x80 | strlen($bytes)) . $bytes . $value;
     }
@@ -552,15 +664,21 @@ final class Snmp
     public static function encodeInt(int $value): string
     {
         $bytes = ltrim(pack('J', $value), "\x00");
-        if ($bytes === '' || (ord($bytes[0]) & 0x80)) { $bytes = "\x00" . $bytes; }
+        if ($bytes === '' || (ord($bytes[0]) & 0x80)) {
+            $bytes = "\x00" . $bytes;
+        }
         return self::tlv(0x02, $bytes);
     }
 
     public static function decodeInt(string $raw): int
     {
-        if ($raw === '') { return 0; }
+        if ($raw === '') {
+            return 0;
+        }
         $value = (ord($raw[0]) & 0x80) ? -1 : 0;
-        foreach (str_split($raw) as $byte) { $value = ($value << 8) | ord($byte); }
+        foreach (str_split($raw) as $byte) {
+            $value = ($value << 8) | ord($byte);
+        }
         return $value;
     }
 
@@ -577,11 +695,15 @@ final class Snmp
     public static function encodeOid(string $oid): string
     {
         $arcs = array_map('intval', explode('.', trim($oid, '.')));
-        if (count($arcs) < 2 || !preg_match('/^\d+(\.\d+)+$/', trim($oid, '.'))) { throw new RuntimeException('Invalid OID ' . $oid); }
+        if (count($arcs) < 2 || !preg_match('/^\d+(\.\d+)+$/', trim($oid, '.'))) {
+            throw new RuntimeException('Invalid OID ' . $oid);
+        }
         $body = chr(40 * $arcs[0] + $arcs[1]);
         foreach (array_slice($arcs, 2) as $arc) {
             $chunk = chr($arc & 0x7F);
-            while ($arc >>= 7) { $chunk = chr(0x80 | ($arc & 0x7F)) . $chunk; }
+            while ($arc >>= 7) {
+                $chunk = chr(0x80 | ($arc & 0x7F)) . $chunk;
+            }
             $body .= $chunk;
         }
         return self::tlv(0x06, $body);
@@ -589,14 +711,19 @@ final class Snmp
 
     public static function decodeOid(string $raw): string
     {
-        if ($raw === '') { return ''; }
+        if ($raw === '') {
+            return '';
+        }
         $first = ord($raw[0]);
         $arcs = [intdiv(min($first, 80), 40), $first - 40 * intdiv(min($first, 80), 40)];
         $value = 0;
         for ($i = 1, $n = strlen($raw); $i < $n; $i++) {
             $byte = ord($raw[$i]);
             $value = ($value << 7) | ($byte & 0x7F);
-            if (!($byte & 0x80)) { $arcs[] = $value; $value = 0; }
+            if (!($byte & 0x80)) {
+                $arcs[] = $value;
+                $value = 0;
+            }
         }
         return implode('.', $arcs);
     }
@@ -606,7 +733,9 @@ final class Snmp
         $x = explode('.', $a);
         $y = explode('.', $b);
         for ($i = 0, $n = min(count($x), count($y)); $i < $n; $i++) {
-            if ((int) $x[$i] !== (int) $y[$i]) { return (int) $x[$i] <=> (int) $y[$i]; }
+            if ((int) $x[$i] !== (int) $y[$i]) {
+                return (int) $x[$i] <=> (int) $y[$i];
+            }
         }
         return count($x) <=> count($y);
     }

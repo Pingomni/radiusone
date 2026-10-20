@@ -23,7 +23,7 @@ final class ProcessNetworkOperations extends FrwebCommand
             if (!filter_var(App::env('NETWORK_WORKER_ENABLED', 'false'), FILTER_VALIDATE_BOOL)) {
                 throw new RuntimeException('Network worker disabled; deployment and device acceptance are required.');
             }
-            $this->json(NetworkOperations::run(new CertifiedNetworkDriver()));
+            $this->json(NetworkOperations::run(new CertifiedNetworkDriver));
             return self::SUCCESS;
         } catch (Throwable $e) {
             return $this->failure('Network worker stopped', $e);

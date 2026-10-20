@@ -267,7 +267,7 @@ final class AdminAlerts
     {
         $settings = self::settings();
         $state = self::state();
-        $sent = self::deliver($settings, '[' . self::appName() . '] Test alert', "This is a test of the admin alerts from " . gethostname() . ".\nAlerts and reports will arrive like this.\n", self::appName() . ': test admin alert from ' . gethostname(), self::alertChannels($settings), true);
+        $sent = self::deliver($settings, '[' . self::appName() . '] Test alert', 'This is a test of the admin alerts from ' . gethostname() . ".\nAlerts and reports will arrive like this.\n", self::appName() . ': test admin alert from ' . gethostname(), self::alertChannels($settings), true);
         self::log($state, time(), 'test', 'Test alert', $sent);
         self::saveState($state);
         return $sent;
@@ -440,6 +440,7 @@ final class AdminAlerts
 
     /**
      * Chats that recently wrote to the bot (or added it), so the operator can copy their IDs.
+     *
      * @return list<string> "id · name"
      */
     public static function telegramChats(): array

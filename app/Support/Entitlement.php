@@ -1,9 +1,13 @@
 <?php
+
 declare(strict_types=1);
+
 namespace App\Support;
+
 use DateTimeImmutable;
 use DateTimeZone;
 use RuntimeException;
+
 final class Entitlement
 {
     /** The business day follows the server time zone unless BUSINESS_TIMEZONE is set. */
@@ -19,7 +23,9 @@ final class Entitlement
     public static function expiryInstant(string $date): int
     {
         $day = DateTimeImmutable::createFromFormat('!Y-m-d', $date, new DateTimeZone(self::zone()));
-        if (!$day || $day->format('Y-m-d') !== $date) { throw new RuntimeException('Invalid expiry date.'); }
+        if (!$day || $day->format('Y-m-d') !== $date) {
+            throw new RuntimeException('Invalid expiry date.');
+        }
         // Epoch values avoid depending on the RADIUS daemon's local timezone.
         return $day->modify('+1 day')->getTimestamp();
     }

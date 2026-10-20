@@ -13,14 +13,18 @@ final class NotificationService
     /** One bounded job/request snapshot; never persists between jobs or hides DB failures. */
     public static function withSettings(\Closure $work): mixed
     {
-        if (self::$settingsCache !== null) { return $work(); }
+        if (self::$settingsCache !== null) {
+            return $work();
+        }
         self::$settingsCache = [];
         try {
             foreach (Db::select('SELECT setting_key,setting_value FROM settings WHERE setting_key LIKE "notification\_%" OR setting_key LIKE "sms\_%" OR setting_key LIKE "email\_%"') as $row) {
                 self::$settingsCache[$row['setting_key']] = Secrets::reveal($row['setting_value']);
             }
             return $work();
-        } finally { self::$settingsCache = null; }
+        } finally {
+            self::$settingsCache = null;
+        }
     }
 
     public static function generalSettings(): array
@@ -78,7 +82,8 @@ final class NotificationService
 
     /**
      * Settings for the browser: credentials are replaced by whether one is saved.
-     * @param list<string> $secrets
+     *
+     * @param  list<string>  $secrets
      */
     public static function withoutSecrets(array $settings, array $secrets): array
     {
@@ -157,12 +162,18 @@ final class NotificationService
     {
         $url = $values['url'];
         $body = $values['method'] === 'POST' ? $values['body'] : '';
-        if (!preg_match('#^https?://#i', $url) || !str_contains($url.$body, '{phone}') || !str_contains($url.$body, '{message}')) throw new \InvalidArgumentException('Enter a gateway URL and include {phone} and {message} in the URL or POST body.');
-        $host = strtolower((string)parse_url($url, PHP_URL_HOST));
-        $allowed = array_map('trim', explode(',', strtolower((string)App::env('NOTIFICATION_HTTP_ALLOWED_HOSTS', ''))));
-        if (!in_array($host, $allowed, true)) throw new \InvalidArgumentException('This SMS provider host needs administrator approval in NOTIFICATION_HTTP_ALLOWED_HOSTS before it can be enabled.');
-        $parts=parse_url($url);
-        if (!$parts || isset($parts['user']) || isset($parts['pass']) || isset($parts['fragment']) || !in_array($parts['port']??(str_starts_with($url,'https:')?443:80),[80,443],true)) throw new \InvalidArgumentException('Use an HTTP or HTTPS gateway on port 80 or 443 without URL credentials or a fragment.');
+        if (!preg_match('#^https?://#i', $url) || !str_contains($url . $body, '{phone}') || !str_contains($url . $body, '{message}')) {
+            throw new \InvalidArgumentException('Enter a gateway URL and include {phone} and {message} in the URL or POST body.');
+        }
+        $host = strtolower((string) parse_url($url, PHP_URL_HOST));
+        $allowed = array_map('trim', explode(',', strtolower((string) App::env('NOTIFICATION_HTTP_ALLOWED_HOSTS', ''))));
+        if (!in_array($host, $allowed, true)) {
+            throw new \InvalidArgumentException('This SMS provider host needs administrator approval in NOTIFICATION_HTTP_ALLOWED_HOSTS before it can be enabled.');
+        }
+        $parts = parse_url($url);
+        if (!$parts || isset($parts['user']) || isset($parts['pass']) || isset($parts['fragment']) || !in_array($parts['port'] ?? (str_starts_with($url, 'https:') ? 443 : 80), [80, 443], true)) {
+            throw new \InvalidArgumentException('Use an HTTP or HTTPS gateway on port 80 or 443 without URL credentials or a fragment.');
+        }
         Security::assertHttpUrl($url);
     }
 
@@ -240,7 +251,7 @@ final class NotificationService
 
     public static function processExpiryNotifications(bool $force = false): array
     {
-        return self::withSettings(static fn()=>NotificationQueue::process(self::generalSettings()));
+        return self::withSettings(static fn () => NotificationQueue::process(self::generalSettings()));
     }
 
     public static function sendSms(array $client, string $phone, string $message, bool $literal = false): void
@@ -262,7 +273,7 @@ final class NotificationService
         $url = self::replacePlaceholders($settings['url'], $vars);
         $body = self::replacePlaceholders($settings['body'], $vars);
         $method = strtoupper($settings['method']) === 'POST' ? 'POST' : 'GET';
-        [$httpCode,$response] = HttpGateway::request($url,$method,$body);
+        [$httpCode,$response] = HttpGateway::request($url, $method, $body);
         $success = trim($settings['success']);
         if ($success !== '' && !str_contains($response, $success)) {
             throw new RuntimeException('gateway response did not contain success text');
@@ -300,7 +311,9 @@ final class NotificationService
     public static function replacePlaceholders(string $template, array $values, bool $encode = true): string
     {
         $map = [];
-        foreach ($values as $key => $value) $map['{' . $key . '}'] = $encode ? rawurlencode((string) $value) : (string) $value;
+        foreach ($values as $key => $value) {
+            $map['{' . $key . '}'] = $encode ? rawurlencode((string) $value) : (string) $value;
+        }
         return strtr($template, $map);
     }
 
@@ -433,7 +446,9 @@ final class NotificationService
 
     private static function setting(string $key, string $default = ''): string
     {
-        if (self::$settingsCache !== null) { return (string)(self::$settingsCache[$key] ?? $default); }
+        if (self::$settingsCache !== null) {
+            return (string) (self::$settingsCache[$key] ?? $default);
+        }
         try {
             $value = Db::value('SELECT setting_value FROM settings WHERE setting_key = ?', [$key]);
         } catch (\Throwable) {
@@ -451,6 +466,8 @@ final class NotificationService
              ON DUPLICATE KEY UPDATE setting_value=VALUES(setting_value), is_secret=VALUES(is_secret), updated_by=VALUES(updated_by), updated_at=NOW()',
             [$key, $secret ? Secrets::encrypt($value) : $value, $secret ? 1 : 0, $user['id'] ?? null]
         );
-        if (self::$settingsCache !== null) { self::$settingsCache[$key] = $value; }
+        if (self::$settingsCache !== null) {
+            self::$settingsCache[$key] = $value;
+        }
     }
 }

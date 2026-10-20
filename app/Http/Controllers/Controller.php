@@ -59,7 +59,7 @@ abstract class Controller
      * Expected validation failures (domain RuntimeException / InvalidArgumentException, duplicate keys)
      * go back to the form with a message, optionally attached to a field. Anything else is rethrown.
      *
-     * @param array<string, string> $fieldPatterns field => regex on the message
+     * @param  array<string, string>  $fieldPatterns  field => regex on the message
      */
     protected function failKeepingInput(Throwable $error, ?string $path = null, array $fieldPatterns = []): RedirectResponse
     {

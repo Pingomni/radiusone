@@ -14,9 +14,7 @@ use RuntimeException;
  */
 final class SftpTarget implements BackupTarget
 {
-    public function __construct(private readonly array $c)
-    {
-    }
+    public function __construct(private readonly array $c) {}
 
     public static function validate(array $c): void
     {
@@ -43,6 +41,7 @@ final class SftpTarget implements BackupTarget
 
     /**
      * The server's current host keys and their fingerprint, recorded once and then required on every connection.
+     *
      * @return array{known_hosts: string, fingerprint: string}
      */
     public static function scanHostKey(string $host, int $port): array

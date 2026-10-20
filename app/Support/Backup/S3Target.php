@@ -14,9 +14,7 @@ use RuntimeException;
  */
 final class S3Target implements BackupTarget
 {
-    public function __construct(private readonly array $c)
-    {
-    }
+    public function __construct(private readonly array $c) {}
 
     /** Providers with a known endpoint pattern; "region" is what their Signature V4 scope expects. */
     public const PROVIDERS = [
@@ -39,6 +37,7 @@ final class S3Target implements BackupTarget
     /**
      * Reads the bucket address the provider shows, in either style:
      * https://s3.eu-central-003.backblazeb2.com/my-bucket/folder or https://my-bucket.s3.eu-central-003.backblazeb2.com.
+     *
      * @return array{provider:string,endpoint:string,bucket:string,prefix:string}
      */
     public static function fromUrl(string $url): array
@@ -62,6 +61,7 @@ final class S3Target implements BackupTarget
     /**
      * Backblaze B2 from the key alone: the account authorization names the S3 endpoint, and the bucket
      * when the key is limited to one (as recommended); otherwise the account's only bucket.
+     *
      * @return array{endpoint:string,bucket:string}
      */
     public static function discoverB2(string $keyId, string $secret): array
@@ -203,7 +203,7 @@ final class S3Target implements BackupTarget
     }
 
     /**
-     * @param array{file: string}|null $body
+     * @param  array{file: string}|null  $body
      * @return array{0: int, 1: string}
      */
     private function call(string $method, string $key, array $query = [], ?array $body = null, string $payloadHash = '', int $timeout = 30): array

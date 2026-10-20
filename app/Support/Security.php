@@ -113,10 +113,14 @@ final class Security
 
     public static function totpCounter(string $secret, string $code, int $window = 1): ?int
     {
-        if (!preg_match('/^[A-Z2-7]{16,128}$/Di', $secret) || !preg_match('/^\d{6}$/D', $code)) { return null; }
+        if (!preg_match('/^[A-Z2-7]{16,128}$/Di', $secret) || !preg_match('/^\d{6}$/D', $code)) {
+            return null;
+        }
         $counter = intdiv(time(), 30);
-        for ($offset = -min(1,max(0,$window)); $offset <= min(1,max(0,$window)); $offset++) {
-            if (hash_equals(self::totpAt($secret,$counter+$offset), $code)) { return $counter+$offset; }
+        for ($offset = -min(1, max(0, $window)); $offset <= min(1, max(0, $window)); $offset++) {
+            if (hash_equals(self::totpAt($secret, $counter + $offset), $code)) {
+                return $counter + $offset;
+            }
         }
         return null;
     }
@@ -130,11 +134,11 @@ final class Security
 
         $binaryCounter = pack('N*', 0, $counter);
         $hash = hash_hmac('sha1', $binaryCounter, $key, true);
-        $offset = ord($hash[19]) & 0x0f;
-        $value = ((ord($hash[$offset]) & 0x7f) << 24)
-            | ((ord($hash[$offset + 1]) & 0xff) << 16)
-            | ((ord($hash[$offset + 2]) & 0xff) << 8)
-            | (ord($hash[$offset + 3]) & 0xff);
+        $offset = ord($hash[19]) & 0x0F;
+        $value = ((ord($hash[$offset]) & 0x7F) << 24)
+            | ((ord($hash[$offset + 1]) & 0xFF) << 16)
+            | ((ord($hash[$offset + 2]) & 0xFF) << 8)
+            | (ord($hash[$offset + 3]) & 0xFF);
 
         return str_pad((string) ($value % 1000000), 6, '0', STR_PAD_LEFT);
     }

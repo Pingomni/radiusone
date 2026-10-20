@@ -11,9 +11,7 @@ use Tests\TestCase;
 /** Answers walk() from a fixed OID => value list, like a device would (values as the SNMP client decodes them). */
 final class RecordedSnmp
 {
-    public function __construct(private readonly array $values)
-    {
-    }
+    public function __construct(private readonly array $values) {}
 
     public function walk(string $root, int $limit = 2000): array
     {

@@ -88,7 +88,7 @@ final class NetworkWorkerTest extends TestCase
     private function work(): array
     {
         $this->env('NETWORK_WORKER_ENABLED', 'true');
-        return NetworkOperations::run(new CertifiedNetworkDriver());
+        return NetworkOperations::run(new CertifiedNetworkDriver);
     }
 
     public function test_an_offline_customer_gets_the_change_at_the_next_login(): void

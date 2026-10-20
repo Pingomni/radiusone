@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Http\Support\MonitoringData;
 use App\Support\Db;
 use Tests\TestCase;
 
@@ -96,6 +97,6 @@ final class MonitoringTest extends TestCase
 
     public function test_ages_read_in_days_after_two_days(): void
     {
-        $this->assertSame(['45 s', '30 min', '26 h', '98 days'], array_map([\App\Http\Support\MonitoringData::class, 'age'], [45, 1800, 93600, 98 * 86400]));
+        $this->assertSame(['45 s', '30 min', '26 h', '98 days'], array_map([MonitoringData::class, 'age'], [45, 1800, 93600, 98 * 86400]));
     }
 }

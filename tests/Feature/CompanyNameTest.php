@@ -21,7 +21,7 @@ final class CompanyNameTest extends TestCase
             ->where('branding.name', '')
             ->where('branding.product', 'RadiusWeb'));
 
-        $this->post('/settings/branding/name', ['company_name' => '  Optix   Net  ' ])->assertRedirect('/settings?tab=branding')->assertSessionHas('flash.type', 'success');
+        $this->post('/settings/branding/name', ['company_name' => '  Optix   Net  '])->assertRedirect('/settings?tab=branding')->assertSessionHas('flash.type', 'success');
         $this->assertSame('Optix Net', Branding::name());
 
         $this->get('/settings?tab=branding')->assertInertia(fn ($page) => $page->where('appName', 'Optix Net')->where('branding.name', 'Optix Net'));

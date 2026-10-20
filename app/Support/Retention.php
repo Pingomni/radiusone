@@ -41,6 +41,7 @@ final class Retention
      * Deletes records older than the chosen periods: closed sessions by stop time, sessions that stopped
      * reporting before the cut-off (never closed, so not live), and login records by time. Stops after
      * $maxSeconds and continues the next night.
+     *
      * @return array{sessions:int, logins:int, finished:bool, at:string}
      */
     public static function prune(int $maxSeconds = 600): array

@@ -4,10 +4,11 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
-use App\Support\Backup\BackupCrypto;
 use App\Support\Backup\BackupDestinations;
+use App\Support\Backup\BackupNow;
 use App\Support\Backup\BackupRunner;
 use App\Support\ProviderHttp;
+use App\Support\Settings;
 use Tests\TestCase;
 
 final class BackupsTest extends TestCase
@@ -214,11 +215,11 @@ final class BackupsTest extends TestCase
         $dir = (string) getenv('FRWEB_TEST_DIR');
         file_put_contents($dir . '/backup-helper', "#!/bin/sh\ntouch " . escapeshellarg($dir . '/backup-started') . "\necho 'Backup started.'\n");
         chmod($dir . '/backup-helper', 0755);
-        \App\Support\Backup\BackupNow::$command = [$dir . '/backup-helper'];
+        BackupNow::$command = [$dir . '/backup-helper'];
         $this->post('/settings/backups/run')->assertSessionHas('flash.type', 'success');
         $this->assertFileExists($dir . '/backup-started');
 
-        \App\Support\Backup\BackupNow::$isActive = ['true'];
+        BackupNow::$isActive = ['true'];
         $this->get($page)->assertInertia(fn ($p) => $p->where('backups.manualReady', true)->where('backups.running', true));
 
         file_put_contents($dir . '/backup-helper', "#!/bin/sh\necho 'A backup is already running.' >&2\nexit 3\n");
@@ -244,7 +245,7 @@ final class BackupsTest extends TestCase
     public function test_retired_google_drive_and_amazon_only_destinations_are_dropped(): void
     {
         $this->actingAsOperator();
-        \App\Support\Settings::save('backup_destinations', json_encode([
+        Settings::save('backup_destinations', json_encode([
             ['id' => 'aaaaaaaaaaaa', 'type' => 'gdrive', 'name' => 'Drive', 'enabled' => true, 'keep' => 7],
             ['id' => 'bbbbbbbbbbbb', 'type' => 's3', 'name' => 'AWS', 'enabled' => true, 'keep' => 7, 'region' => 'eu-central-1', 'bucket' => 'b'],
         ]), true);

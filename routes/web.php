@@ -14,6 +14,7 @@ use App\Http\Controllers\ReportsController;
 use App\Http\Controllers\ServiceController;
 use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\UserController;
+use App\Support\NasTables;
 use Illuminate\Support\Facades\Route;
 
 // Same paths as the legacy front controller (public/index.php), so bookmarks and scripts keep working.
@@ -157,7 +158,7 @@ Route::middleware('frweb.auth')->group(function () {
         Route::post('/monitoring/poll', [MonitoringController::class, 'poll']);
         Route::get('/nas/{id}/monitor', [MonitoringController::class, 'nas'])->whereNumber('id');
         Route::get('/nas/{id}/monitor/live', [MonitoringController::class, 'nasLive'])->whereNumber('id');
-        Route::get('/nas/{id}/monitor/tables/{table}', [MonitoringController::class, 'nasTable'])->whereNumber('id')->whereIn('table', array_keys(\App\Support\NasTables::TABLES));
+        Route::get('/nas/{id}/monitor/tables/{table}', [MonitoringController::class, 'nasTable'])->whereNumber('id')->whereIn('table', array_keys(NasTables::TABLES));
         Route::get('/nas/{id}/monitor/graph', [MonitoringController::class, 'trafficGraph'])->whereNumber('id');
         Route::get('/nas/{id}/monitor/health', [MonitoringController::class, 'healthGraph'])->whereNumber('id');
         Route::get('/nas/{id}/monitor/temperature', [MonitoringController::class, 'temperatureGraph'])->whereNumber('id');

@@ -7,7 +7,7 @@ namespace App\Support;
 final class SimplePdf
 {
     /**
-     * @param array<int, string> $lines
+     * @param  array<int, string>  $lines
      */
     public static function document(array $lines, string $title = 'Document'): string
     {
@@ -53,7 +53,7 @@ final class SimplePdf
         }
 
         $contentId = count($objects) + 1;
-        $objects[] = "<< /Length " . strlen($content) . " >>\nstream\n{$content}endstream";
+        $objects[] = '<< /Length ' . strlen($content) . " >>\nstream\n{$content}endstream";
         $pageId = count($objects) + 1;
         $objects[] = 'PAGE_PLACEHOLDER';
         $fontRegularId = count($objects) + 1;
@@ -75,7 +75,7 @@ final class SimplePdf
     }
 
     /**
-     * @param array<int, string> $objects
+     * @param  array<int, string>  $objects
      */
     private static function assemble(array $objects, int $catalogId, int $infoId): string
     {
@@ -387,7 +387,7 @@ final class SimplePdf
                 4 => $x + self::paeth($a, $b, $c),
                 default => $x,
             };
-            $out .= chr($value & 0xff);
+            $out .= chr($value & 0xFF);
         }
         return $out;
     }

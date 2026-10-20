@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Http\Support\Invoices;
 use App\Http\Support\Operators;
 use App\Http\Support\Present;
 use App\Support\AdminAlerts;
@@ -19,10 +20,10 @@ use App\Support\EmailProviders;
 use App\Support\NotificationService;
 use App\Support\Retention;
 use App\Support\SchemaCompatibility;
+use App\Support\Security;
 use App\Support\Settings;
 use App\Support\SmsProviders;
 use App\Support\TimeZone;
-use App\Support\Security;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -148,7 +149,9 @@ final class SettingsController extends Controller
                     'placeholders' => AdminAlerts::PLACEHOLDERS,
                     'recent' => array_map(static fn (array $e) => [
                         'at' => date('Y-m-d H:i', (int) $e['at']),
-                        'kind' => Present::tag(ucfirst((string) $e['kind']), match ($e['kind']) { 'problem' => 'danger', 'resolved' => 'success', default => '' }),
+                        'kind' => Present::tag(ucfirst((string) $e['kind']), match ($e['kind']) {
+                            'problem' => 'danger', 'resolved' => 'success', default => ''
+                        }),
                         'text' => (string) $e['text'],
                         'sent' => (string) $e['sent'],
                     ], AdminAlerts::recent()),
@@ -449,7 +452,7 @@ final class SettingsController extends Controller
         $invoice = BillingDocuments::sample($receipt);
         $items = [['description' => 'Home 50 service', 'line_total' => '20.00']];
         $payments = $receipt ? [['payment_date' => date('Y-m-d'), 'amount' => '20.00', 'currency' => $invoice['currency'], 'method' => 'cash', 'reference' => 'R-0001']] : [];
-        return response(\App\Http\Support\Invoices::pdf($invoice, $items, $payments, $receipt ? 'paid' : ''), 200, [
+        return response(Invoices::pdf($invoice, $items, $payments, $receipt ? 'paid' : ''), 200, [
             'Content-Type' => 'application/pdf',
             'Content-Disposition' => 'inline; filename="preview-' . ($receipt ? 'receipt' : 'payment-request') . '.pdf"',
             'Cache-Control' => 'no-store, max-age=0',
@@ -477,7 +480,7 @@ final class SettingsController extends Controller
         $before = TimeZone::current();
         try {
             TimeZone::change($zone);
-        } catch (InvalidArgumentException | RuntimeException $e) {
+        } catch (InvalidArgumentException|RuntimeException $e) {
             return $this->fail($e->getMessage(), '/settings?tab=regional');
         }
         Audit::log('update', 'setting', 'timezone', ['timezone' => $before], ['timezone' => $zone]);

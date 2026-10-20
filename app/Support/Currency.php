@@ -33,6 +33,7 @@ final class Currency
 
     /**
      * Makes $code the system currency.
+     *
      * @return array{services:int,pools:int,drafts:int} rows relabelled
      */
     public static function change(string $code): array

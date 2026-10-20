@@ -6,7 +6,6 @@ namespace App\Http\Controllers;
 
 use App\Http\Support\Operators;
 use App\Http\Support\Present;
-use App\Support\App;
 use App\Support\Audit;
 use App\Support\Auth;
 use App\Support\Branding;

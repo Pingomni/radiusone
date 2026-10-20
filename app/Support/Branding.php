@@ -1,6 +1,9 @@
 <?php
+
 declare(strict_types=1);
+
 namespace App\Support;
+
 final class Branding
 {
     /** The product name, shown when no company name is set. */
@@ -45,8 +48,11 @@ final class Branding
         if (str_starts_with($value, '/uploads/branding/') && self::file(substr($value, strlen('/uploads/branding/')))) {
             return $value;
         }
-        try { return self::httpsUrl($value); }
-        catch (\InvalidArgumentException) { return null; }
+        try {
+            return self::httpsUrl($value);
+        } catch (\InvalidArgumentException) {
+            return null;
+        }
     }
 
     public static function directory(): string
@@ -55,10 +61,14 @@ final class Branding
     }
     public static function file(string $name): ?string
     {
-        if (!preg_match('/^logo-[a-f0-9]+\.(png|jpg|webp)$/D', $name)) { return null; }
+        if (!preg_match('/^logo-[a-f0-9]+\.(png|jpg|webp)$/D', $name)) {
+            return null;
+        }
         foreach ([self::directory(), App::root('public/uploads/branding')] as $dir) {
             $file = $dir . '/' . $name;
-            if (is_file($file) && !is_link($file)) { return $file; }
+            if (is_file($file) && !is_link($file)) {
+                return $file;
+            }
         }
         return null;
     }

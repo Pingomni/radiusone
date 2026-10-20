@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Support\Auth;
 use App\Support\Db;
 use App\Support\Security;
 use Tests\TestCase;
@@ -117,8 +118,8 @@ final class AuthTest extends TestCase
 
     public function test_reauth_return_path_never_leaves_the_site(): void
     {
-        $this->assertSame('/profile', \App\Support\Auth::internalReturnPath('//evil.example/x'));
-        $this->assertSame('/profile', \App\Support\Auth::internalReturnPath('https://evil.example/'));
-        $this->assertSame('/nas/5/edit', \App\Support\Auth::internalReturnPath('/nas/5/edit?password=x'));
+        $this->assertSame('/profile', Auth::internalReturnPath('//evil.example/x'));
+        $this->assertSame('/profile', Auth::internalReturnPath('https://evil.example/'));
+        $this->assertSame('/nas/5/edit', Auth::internalReturnPath('/nas/5/edit?password=x'));
     }
 }

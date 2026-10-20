@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Support;
 
-use PDO;
+use App\Support\Policy\Adapter;
 use RuntimeException;
 
 final class RadiusRepository
@@ -42,7 +42,7 @@ final class RadiusRepository
         }
 
         $input['username'] = trim((string) ($input['username'] ?? ''));
-        if ($input['username'] === '' || strlen($input['username'])>64 || preg_match('/[\x00-\x20\x7f]/', $input['username'])) {
+        if ($input['username'] === '' || strlen($input['username']) > 64 || preg_match('/[\x00-\x20\x7f]/', $input['username'])) {
             throw new RuntimeException($authMethod === 'dhcp' ? 'MAC address is required.' : 'Username is required.');
         }
         return $input;
@@ -82,25 +82,33 @@ final class RadiusRepository
             self::normalizeAccountStatus($input);
 
             $serviceGroup = trim((string) ($input['service_group'] ?? ''));
-            if ($serviceGroup === '' || !Db::row('SELECT group_name FROM service_metadata WHERE group_name=? AND enabled=1 FOR UPDATE',[$serviceGroup])) {
+            if ($serviceGroup === '' || !Db::row('SELECT group_name FROM service_metadata WHERE group_name=? AND enabled=1 FOR UPDATE', [$serviceGroup])) {
                 throw new RuntimeException('Select an enabled service plan for this client.');
             }
             $input['custom_radius_attributes'] = '';
             self::normalizeClientIp($input, $oldUsername);
 
             self::upsertProfile($input, $oldUsername);
-            SubscriberPolicy::bind(Db::row('SELECT * FROM customer_profiles WHERE username=?',[$username]),$input);
+            SubscriberPolicy::bind(Db::row('SELECT * FROM customer_profiles WHERE username=?', [$username]), $input);
             BillingRepository::refreshCustomerBalance($username);
-            self::provisionClient($username, (string) ($input["password"] ?? ""));
+            self::provisionClient($username, (string) ($input['password'] ?? ''));
 
             $saved = Db::row('SELECT id,expiry_date FROM customer_profiles WHERE username=?', [$username]);
-            if (!$profile) CustomerNotifications::enrolled((int)$saved['id']);
-            else CustomerNotifications::extended((int)$saved['id'], $profile['expiry_date'], $saved['expiry_date']);
-            $pdo->commit();SubscriberPolicy::releaseLocks();
+            if (!$profile) {
+                CustomerNotifications::enrolled((int) $saved['id']);
+            } else {
+                CustomerNotifications::extended((int) $saved['id'], $profile['expiry_date'], $saved['expiry_date']);
+            }
+            $pdo->commit();
+            SubscriberPolicy::releaseLocks();
             return $username;
         } catch (\Throwable $e) {
             if ($pdo->inTransaction()) {
-                try { $pdo->rollBack();SubscriberPolicy::releaseLocks(); } catch (\Throwable) { /* Preserve the original failure. */ }
+                try {
+                    $pdo->rollBack();
+                    SubscriberPolicy::releaseLocks();
+                } catch (\Throwable) { /* Preserve the original failure. */
+                }
             }
             throw $e;
         }
@@ -117,7 +125,9 @@ final class RadiusRepository
         $pdo->beginTransaction();
         try {
             $client = Db::row('SELECT username, account_status FROM customer_profiles WHERE username=? FOR UPDATE', [$username]);
-            if (!$client) { throw new RuntimeException('Client not found.'); }
+            if (!$client) {
+                throw new RuntimeException('Client not found.');
+            }
             if ($client['account_status'] !== 'archived') {
                 foreach (['radcheck', 'radreply', 'radusergroup'] as $table) {
                     Db::exec("DELETE FROM {$table} WHERE username=?", [$username]);
@@ -125,13 +135,18 @@ final class RadiusRepository
                 // Keep an explicit rejection so fallback/unmanaged authentication cannot revive this identity.
                 Db::exec('INSERT INTO radcheck (username, attribute, op, value) VALUES (?, "Auth-Type", ":=", "Reject")', [$username]);
                 Db::exec('UPDATE customer_profiles SET ' . $archiveDate . 'enabled=0, account_status="archived", updated_at=NOW() WHERE username=?', [$username]);
-                $archived=Db::row('SELECT * FROM customer_profiles WHERE username=?',[$username]);
-                SubscriberPolicy::publish($archived,(string)$archived['service_group']);
+                $archived = Db::row('SELECT * FROM customer_profiles WHERE username=?', [$username]);
+                SubscriberPolicy::publish($archived, (string) $archived['service_group']);
             }
-            $pdo->commit();SubscriberPolicy::releaseLocks();
+            $pdo->commit();
+            SubscriberPolicy::releaseLocks();
         } catch (\Throwable $e) {
             if ($pdo->inTransaction()) {
-                try { $pdo->rollBack();SubscriberPolicy::releaseLocks(); } catch (\Throwable) { /* Preserve the original failure. */ }
+                try {
+                    $pdo->rollBack();
+                    SubscriberPolicy::releaseLocks();
+                } catch (\Throwable) { /* Preserve the original failure. */
+                }
             }
             throw $e;
         }
@@ -148,20 +163,24 @@ final class RadiusRepository
             if ($group === '') {
                 throw new RuntimeException('RADIUS group name is required.');
             }
-            $current = $id ? Db::value('SELECT group_name FROM service_metadata WHERE id=?',[$id]) : null;
-            if($current!==$group){
-                foreach(['service_metadata'=>'group_name','radgroupcheck'=>'groupname','radgroupreply'=>'groupname'] as $table=>$column){
-                    if(Db::row("SELECT $column FROM $table WHERE $column=? LIMIT 1 FOR UPDATE",[$group])){throw new RuntimeException('Service name collides with managed or unmanaged RADIUS group.');}
+            $current = $id ? Db::value('SELECT group_name FROM service_metadata WHERE id=?', [$id]) : null;
+            if ($current !== $group) {
+                foreach (['service_metadata' => 'group_name', 'radgroupcheck' => 'groupname', 'radgroupreply' => 'groupname'] as $table => $column) {
+                    if (Db::row("SELECT $column FROM $table WHERE $column=? LIMIT 1 FOR UPDATE", [$group])) {
+                        throw new RuntimeException('Service name collides with managed or unmanaged RADIUS group.');
+                    }
                 }
             }
             $expiredGroup = trim((string) ($input['expired_service_group'] ?? ''));
             if ($expiredGroup !== '' && !self::serviceIsEnabled($expiredGroup, $id)) {
                 throw new RuntimeException('Select an enabled expired service, or leave it blank.');
             }
-            $download=\App\Support\Policy\Adapter::bps($input['download_speed']??null);
-            $upload=\App\Support\Policy\Adapter::bps($input['upload_speed']??null);
-            if(($download===null)!==($upload===null)){throw new RuntimeException('Supply both download and upload speeds.');}
-            $input['mikrotik_rate_limit']=$download===null?'':$upload.'/'.$download;
+            $download = Adapter::bps($input['download_speed'] ?? null);
+            $upload = Adapter::bps($input['upload_speed'] ?? null);
+            if (($download === null) !== ($upload === null)) {
+                throw new RuntimeException('Supply both download and upload speeds.');
+            }
+            $input['mikrotik_rate_limit'] = $download === null ? '' : $upload . '/' . $download;
             self::assertNoManagedConflicts((string) ($input['custom_group_attrs'] ?? ''), array_merge(self::MANAGED_CHECK, self::MANAGED_REPLY));
 
             if ($id) {
@@ -170,7 +189,9 @@ final class RadiusRepository
                     throw new RuntimeException('Service not found.');
                 }
                 $oldGroup = $before['group_name'];
-                if (empty($input['enabled'])) { self::assertServiceUnreferenced($oldGroup); }
+                if (empty($input['enabled'])) {
+                    self::assertServiceUnreferenced($oldGroup);
+                }
                 Db::exec(
                     'UPDATE service_metadata SET group_name=?, name=?, description=?, enabled=?, download_speed=?, upload_speed=?, mikrotik_rate_limit=?, burst_limit=?, burst_threshold=?, burst_time=?, priority=?, ip_mode=?, ip_pool=?, static_ip_pool=?, session_timeout=?, idle_timeout=?, simultaneous_use=?, download_quota=?, upload_quota=?, total_quota=?, expiration_behavior=?, billing_mode=?, expired_service_group=?, price=?, currency=?, billing_period=?, custom_group_attrs=?, updated_at=NOW() WHERE id=?',
                     self::serviceParams($input, [$id])
@@ -194,13 +215,18 @@ final class RadiusRepository
             }
 
             self::replaceGroupAttributes($group, $input);
-            Db::exec('UPDATE service_metadata SET policy_revision=policy_revision+1 WHERE id=?',[$id]);
-            Db::exec('UPDATE subscriptions u JOIN customer_profiles c ON c.id=u.customer_id SET u.dirty=1 WHERE c.service_group=? OR c.service_group IN (SELECT group_name FROM service_metadata WHERE expired_service_group=?) OR ?="expired"',[$group,$group,$group]);
-            $pdo->commit();SubscriberPolicy::releaseLocks();
+            Db::exec('UPDATE service_metadata SET policy_revision=policy_revision+1 WHERE id=?', [$id]);
+            Db::exec('UPDATE subscriptions u JOIN customer_profiles c ON c.id=u.customer_id SET u.dirty=1 WHERE c.service_group=? OR c.service_group IN (SELECT group_name FROM service_metadata WHERE expired_service_group=?) OR ?="expired"', [$group, $group, $group]);
+            $pdo->commit();
+            SubscriberPolicy::releaseLocks();
             return (int) $id;
         } catch (\Throwable $e) {
             if ($pdo->inTransaction()) {
-                try { $pdo->rollBack();SubscriberPolicy::releaseLocks(); } catch (\Throwable) { /* Preserve the original failure. */ }
+                try {
+                    $pdo->rollBack();
+                    SubscriberPolicy::releaseLocks();
+                } catch (\Throwable) { /* Preserve the original failure. */
+                }
             }
             throw $e;
         }
@@ -208,14 +234,20 @@ final class RadiusRepository
 
     public static function saveNas(array $input, ?int $id = null): int
     {
-        return self::withNasLock($id??0,static fn()=>self::saveNasLocked($input,$id));
+        return self::withNasLock($id ?? 0, static fn () => self::saveNasLocked($input, $id));
     }
     /** Serialize NAS configuration changes with worker observation and application. */
-    private static function withNasLock(int $id,callable $work): mixed
+    private static function withNasLock(int $id, callable $work): mixed
     {
-        $lock='frweb:network:'.substr(hash('sha256',(string)Db::value('SELECT DATABASE()')),0,24).':'.$id;
-        if((int)Db::value('SELECT GET_LOCK(?,0)',[$lock])!==1){throw new RuntimeException('A network operation is active on this NAS; retry the change shortly.');}
-        try{return $work();}finally{Db::value('SELECT RELEASE_LOCK(?)',[$lock]);}
+        $lock = 'frweb:network:' . substr(hash('sha256', (string) Db::value('SELECT DATABASE()')), 0, 24) . ':' . $id;
+        if ((int) Db::value('SELECT GET_LOCK(?,0)', [$lock]) !== 1) {
+            throw new RuntimeException('A network operation is active on this NAS; retry the change shortly.');
+        }
+        try {
+            return $work();
+        } finally {
+            Db::value('SELECT RELEASE_LOCK(?)', [$lock]);
+        }
     }
     private static function saveNasLocked(array $input, ?int $id = null): int
     {
@@ -278,11 +310,16 @@ final class RadiusRepository
                 Db::exec('UPDATE nas_metadata SET api_enabled=? WHERE nas_id=?', [$apiEnabled, $id]);
             }
 
-            $pdo->commit();SubscriberPolicy::releaseLocks();
+            $pdo->commit();
+            SubscriberPolicy::releaseLocks();
             return (int) $id;
         } catch (\Throwable $e) {
             if ($pdo->inTransaction()) {
-                try { $pdo->rollBack();SubscriberPolicy::releaseLocks(); } catch (\Throwable) { /* Preserve the original failure. */ }
+                try {
+                    $pdo->rollBack();
+                    SubscriberPolicy::releaseLocks();
+                } catch (\Throwable) { /* Preserve the original failure. */
+                }
             }
             throw $e;
         }
@@ -291,9 +328,13 @@ final class RadiusRepository
     /** Caller owns the transaction; all transitions lock the profile before changing provisioning. */
     public static function provisionClient(string $username, string $password = ''): void
     {
-        if (!Db::pdo()->inTransaction()) { throw new RuntimeException('Provisioning requires a transaction.'); }
+        if (!Db::pdo()->inTransaction()) {
+            throw new RuntimeException('Provisioning requires a transaction.');
+        }
         $client = Db::row('SELECT * FROM customer_profiles WHERE username=? FOR UPDATE', [$username]);
-        if (!$client || $client['account_status'] === 'archived') { return; }
+        if (!$client || $client['account_status'] === 'archived') {
+            return;
+        }
         $client['password'] = $password;
         $expired = self::isExpiredAccount($client);
         if (!in_array($client['account_status'], ['suspended', 'disabled'], true)) {
@@ -302,25 +343,35 @@ final class RadiusRepository
         }
         self::replaceUserChecks($username, $client);
         self::replaceUserReplies($username, $client);
-        $effectiveGroup=self::radiusServiceGroup($client, (string)$client['service_group']);
-        self::replaceUserGroup($username,$effectiveGroup);
-        SubscriberPolicy::publish($client,$effectiveGroup);
+        $effectiveGroup = self::radiusServiceGroup($client, (string) $client['service_group']);
+        self::replaceUserGroup($username, $effectiveGroup);
+        SubscriberPolicy::publish($client, $effectiveGroup);
     }
 
     public static function setClientStatus(string $username, string $status): void
     {
         SchemaCompatibility::require('policy');
-        if (!in_array($status, ['disabled', 'suspended'], true)) { throw new RuntimeException('Invalid status.'); }
+        if (!in_array($status, ['disabled', 'suspended'], true)) {
+            throw new RuntimeException('Invalid status.');
+        }
         SchemaCompatibility::require('policy');
         $pdo = Db::pdo();
         $pdo->beginTransaction();
         try {
             $row = Db::row('SELECT account_status FROM customer_profiles WHERE username=? FOR UPDATE', [$username]);
-            if (!$row || $row['account_status'] === 'archived') { throw new RuntimeException('Client not found or archived.'); }
+            if (!$row || $row['account_status'] === 'archived') {
+                throw new RuntimeException('Client not found or archived.');
+            }
             Db::exec('UPDATE customer_profiles SET enabled=0, account_status=?, updated_at=NOW() WHERE username=?', [$status, $username]);
             self::provisionClient($username);
-            $pdo->commit();SubscriberPolicy::releaseLocks();
-        } catch (\Throwable $e) { if ($pdo->inTransaction()) { $pdo->rollBack();SubscriberPolicy::releaseLocks(); } throw $e; }
+            $pdo->commit();
+            SubscriberPolicy::releaseLocks();
+        } catch (\Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+                SubscriberPolicy::releaseLocks();
+            } throw $e;
+        }
     }
 
     public static function syncExpiredServiceGroups(): int
@@ -330,21 +381,30 @@ final class RadiusRepository
 
     public static function deleteService(int $id): void
     {
-        $pdo = Db::pdo(); $pdo->beginTransaction();
+        $pdo = Db::pdo();
+        $pdo->beginTransaction();
         try {
             $service = Db::row('SELECT group_name FROM service_metadata WHERE id=? FOR UPDATE', [$id]);
             if ($service) {
                 self::assertServiceUnreferenced((string) $service['group_name']);
-                foreach (['radgroupcheck', 'radgroupreply'] as $table) { Db::exec("DELETE FROM $table WHERE groupname=?", [$service['group_name']]); }
+                foreach (['radgroupcheck', 'radgroupreply'] as $table) {
+                    Db::exec("DELETE FROM $table WHERE groupname=?", [$service['group_name']]);
+                }
                 Db::exec('DELETE FROM service_metadata WHERE id=?', [$id]);
             }
-            $pdo->commit();SubscriberPolicy::releaseLocks();
-        } catch (\Throwable $e) { if ($pdo->inTransaction()) { $pdo->rollBack();SubscriberPolicy::releaseLocks(); } throw $e; }
+            $pdo->commit();
+            SubscriberPolicy::releaseLocks();
+        } catch (\Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+                SubscriberPolicy::releaseLocks();
+            } throw $e;
+        }
     }
 
     private static function assertServiceUnreferenced(string $group): void
     {
-        foreach (['customer_profiles'=>'service_group', 'billing_invoices'=>'service_group', 'billing_invoice_items'=>'service_group', 'service_metadata'=>'expired_service_group', 'radusergroup'=>'groupname'] as $table=>$column) {
+        foreach (['customer_profiles' => 'service_group', 'billing_invoices' => 'service_group', 'billing_invoice_items' => 'service_group', 'service_metadata' => 'expired_service_group', 'radusergroup' => 'groupname'] as $table => $column) {
             if (Db::value("SELECT COUNT(*) FROM $table WHERE $column=?", [$group])) {
                 throw new RuntimeException('Referenced services cannot be deleted or disabled.');
             }
@@ -353,42 +413,63 @@ final class RadiusRepository
 
     public static function deleteNas(int $id): void
     {
-        self::withNasLock($id??0,static fn()=>self::deleteNasLocked($id));
+        self::withNasLock($id ?? 0, static fn () => self::deleteNasLocked($id));
     }
     private static function deleteNasLocked(int $id): void
     {
-        $pdo=Db::pdo();$pdo->beginTransaction();
+        $pdo = Db::pdo();
+        $pdo->beginTransaction();
         try {
-            if (!Db::row('SELECT id FROM nas WHERE id=? FOR UPDATE',[$id])) { throw new RuntimeException('NAS not found.'); }
-            Db::exec('INSERT INTO nas_metadata (nas_id,vendor,enabled,coa_enabled,created_at,updated_at,pending_delete) VALUES (?,"generic",0,0,NOW(),NOW(),1) ON DUPLICATE KEY UPDATE enabled=0,pending_delete=1,config_revision=config_revision+1,updated_at=NOW()',[$id]);
-            $pdo->commit();SubscriberPolicy::releaseLocks();
-        } catch (\Throwable $e) { if($pdo->inTransaction()){$pdo->rollBack();SubscriberPolicy::releaseLocks();}throw $e; }
+            if (!Db::row('SELECT id FROM nas WHERE id=? FOR UPDATE', [$id])) {
+                throw new RuntimeException('NAS not found.');
+            }
+            Db::exec('INSERT INTO nas_metadata (nas_id,vendor,enabled,coa_enabled,created_at,updated_at,pending_delete) VALUES (?,"generic",0,0,NOW(),NOW(),1) ON DUPLICATE KEY UPDATE enabled=0,pending_delete=1,config_revision=config_revision+1,updated_at=NOW()', [$id]);
+            $pdo->commit();
+            SubscriberPolicy::releaseLocks();
+        } catch (\Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+                SubscriberPolicy::releaseLocks();
+            }throw $e;
+        }
     }
 
     /** Records operator-supplied deployment evidence, never activates/restarts RADIUS. */
     public static function markNasApplied(int $id, int $revision, string $evidence): void
     {
-        self::withNasLock($id??0,static fn()=>self::markNasAppliedLocked($id,$revision,$evidence));
+        self::withNasLock($id ?? 0, static fn () => self::markNasAppliedLocked($id, $revision, $evidence));
     }
     private static function markNasAppliedLocked(int $id, int $revision, string $evidence): void
     {
-        if (trim($evidence)==='' || strlen($evidence)>500) { throw new RuntimeException('Deployment evidence is required.'); }
-        $pdo=Db::pdo();$pdo->beginTransaction();
-        try{
-            $row=Db::row('SELECT * FROM nas_metadata WHERE nas_id=? FOR UPDATE',[$id]);
-            if(!$row || (int)$row['config_revision']!==$revision){throw new RuntimeException('NAS revision changed; verify deployment again.');}
-            if((int)$row['applied_revision']!==$revision || $row['applied_evidence']!==$evidence){
-                Db::exec('UPDATE nas_metadata SET applied_revision=?,applied_at=NOW(),applied_evidence=? WHERE nas_id=?',[$revision,$evidence,$id]);
+        if (trim($evidence) === '' || strlen($evidence) > 500) {
+            throw new RuntimeException('Deployment evidence is required.');
+        }
+        $pdo = Db::pdo();
+        $pdo->beginTransaction();
+        try {
+            $row = Db::row('SELECT * FROM nas_metadata WHERE nas_id=? FOR UPDATE', [$id]);
+            if (!$row || (int) $row['config_revision'] !== $revision) {
+                throw new RuntimeException('NAS revision changed; verify deployment again.');
             }
-            $pdo->commit();SubscriberPolicy::releaseLocks();
-        }catch(\Throwable $e){if($pdo->inTransaction()){$pdo->rollBack();SubscriberPolicy::releaseLocks();}throw $e;}
+            if ((int) $row['applied_revision'] !== $revision || $row['applied_evidence'] !== $evidence) {
+                Db::exec('UPDATE nas_metadata SET applied_revision=?,applied_at=NOW(),applied_evidence=? WHERE nas_id=?', [$revision, $evidence, $id]);
+            }
+            $pdo->commit();
+            SubscriberPolicy::releaseLocks();
+        } catch (\Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+                SubscriberPolicy::releaseLocks();
+            }throw $e;
+        }
     }
 
     /**
      * FreeRADIUS reads the NAS list (client_query) only when it starts and refuses to start with a broken
      * one. So while it is running, every NAS saved before it started is in effect: record those revisions,
      * including removals. Runs every minute (frweb:mark-nas-applied --auto).
-     * @param int|null $radiusStartedAt epoch FreeRADIUS became active; read from systemd when null
+     *
+     * @param  int|null  $radiusStartedAt  epoch FreeRADIUS became active; read from systemd when null
      * @return array<int, int> nas id => revision recorded
      */
     public static function recordLoadedNasRevisions(?int $radiusStartedAt = null): array
@@ -417,43 +498,67 @@ final class RadiusRepository
     /** Exactly one accounting identity, optionally explicitly selected. No discovery fallback. */
     public static function disconnectUser(string $username, ?int $nasId = null, ?int $accountingId = null): array
     {
-        $method=Db::value('SELECT auth_method FROM customer_profiles WHERE username=?',[$username]);
-        if($method==='dhcp'){throw new RuntimeException('DHCP requires a validated forwarding/lease adapter; PPP removal is forbidden.');}
+        $method = Db::value('SELECT auth_method FROM customer_profiles WHERE username=?', [$username]);
+        if ($method === 'dhcp') {
+            throw new RuntimeException('DHCP requires a validated forwarding/lease adapter; PPP removal is forbidden.');
+        }
         $session = Db::row(
             'SELECT r.*, n.id AS nas_id, n.secret, n.nasname, n.type AS nas_type,
                     m.coa_enabled,m.coa_port,COALESCE(m.vendor,n.type) AS vendor,m.api_host,m.api_user,m.api_password,' . self::apiEnabledSql('m') . ' AS api_enabled,m.enabled,m.config_revision,m.applied_revision,m.pending_delete
              FROM radacct r JOIN nas n ON n.nasname=r.nasipaddress JOIN nas_metadata m ON m.nas_id=n.id
              WHERE ' . ClientQuery::inUsernames('r.username', $ids = ClientQuery::usernames($username)) . ' AND r.acctstoptime IS NULL AND (? IS NULL OR n.id=?) AND (? IS NULL OR r.radacctid=?)
-             ORDER BY r.acctstarttime DESC,r.radacctid DESC LIMIT 1',array_merge($ids,[$nasId,$nasId,$accountingId,$accountingId]));
-        if (!$session || empty($session['acctsessionid'])) { throw new RuntimeException('No identified active session found in this NAS scope.'); }
-        if (empty($session['enabled']) || !empty($session['pending_delete']) || $session['applied_revision']===null || (int)$session['applied_revision']!==(int)$session['config_revision']) { throw new RuntimeException('NAS configuration is disabled or pending deployment.'); }
-        $updated=strtotime((string)($session['acctupdatetime'] ?: $session['acctstarttime']));
-        if (!$updated || $updated < time()-Accounting::window($session) || $updated > time()+60) { throw new RuntimeException('Accounting is stale; verify the session in a lab/operational workflow before disconnect.'); }
+             ORDER BY r.acctstarttime DESC,r.radacctid DESC LIMIT 1', array_merge($ids, [$nasId, $nasId, $accountingId, $accountingId]));
+        if (!$session || empty($session['acctsessionid'])) {
+            throw new RuntimeException('No identified active session found in this NAS scope.');
+        }
+        if (empty($session['enabled']) || !empty($session['pending_delete']) || $session['applied_revision'] === null || (int) $session['applied_revision'] !== (int) $session['config_revision']) {
+            throw new RuntimeException('NAS configuration is disabled or pending deployment.');
+        }
+        $updated = strtotime((string) ($session['acctupdatetime'] ?: $session['acctstarttime']));
+        if (!$updated || $updated < time() - Accounting::window($session) || $updated > time() + 60) {
+            throw new RuntimeException('Accounting is stale; verify the session in a lab/operational workflow before disconnect.');
+        }
         $method = self::disconnectMethod($session)['method'];
         if ($method === 'api') {
-            $output=self::disconnectUserViaMikrotikApi($session,(string)$session['username']);
-            if($output===null){throw new RuntimeException('MikroTik API credentials are required.');}
-            return ['command'=>'mikrotik-api-tls','output'=>$output];
+            $output = self::disconnectUserViaMikrotikApi($session, (string) $session['username']);
+            if ($output === null) {
+                throw new RuntimeException('MikroTik API credentials are required.');
+            }
+            return ['command' => 'mikrotik-api-tls', 'output' => $output];
         }
-        if ($method !== 'coa') { throw new RuntimeException('No disconnect method is set up for this NAS: turn on RADIUS disconnect (CoA) on its Device tab, or the RouterOS API on its API tab.'); }
-        $attrs=['User-Name'=>$session['username'],'Acct-Session-Id'=>$session['acctsessionid'],'NAS-IP-Address'=>$session['nasipaddress']];
-        $payload='';
-        foreach($attrs as $attribute=>$value){
-            if(preg_match('/[\x00-\x1f\x7f]/',(string)$value)){throw new RuntimeException('Invalid disconnect identity.');}
-            $payload.=$attribute.' = "'.addcslashes((string)$value,"\\\"").'"'."\n";
+        if ($method !== 'coa') {
+            throw new RuntimeException('No disconnect method is set up for this NAS: turn on RADIUS disconnect (CoA) on its Device tab, or the RouterOS API on its API tab.');
         }
-        $payload.="Message-Authenticator = 0x00\n";
-        $dir=(string)App::env('SECURITY_STORAGE',App::root('storage/security'));
-        if(!is_dir($dir) && !mkdir($dir,0700,true) && !is_dir($dir)){throw new RuntimeException('Private secret storage unavailable.');}
-        $file=tempnam($dir,'disconnect-');
-        if($file===false){throw new RuntimeException('Private secret file unavailable.');}
+        $attrs = ['User-Name' => $session['username'], 'Acct-Session-Id' => $session['acctsessionid'], 'NAS-IP-Address' => $session['nasipaddress']];
+        $payload = '';
+        foreach ($attrs as $attribute => $value) {
+            if (preg_match('/[\x00-\x1f\x7f]/', (string) $value)) {
+                throw new RuntimeException('Invalid disconnect identity.');
+            }
+            $payload .= $attribute . ' = "' . addcslashes((string) $value, '\\"') . '"' . "\n";
+        }
+        $payload .= "Message-Authenticator = 0x00\n";
+        $dir = (string) App::env('SECURITY_STORAGE', App::root('storage/security'));
+        if (!is_dir($dir) && !mkdir($dir, 0700, true) && !is_dir($dir)) {
+            throw new RuntimeException('Private secret storage unavailable.');
+        }
+        $file = tempnam($dir, 'disconnect-');
+        if ($file === false) {
+            throw new RuntimeException('Private secret file unavailable.');
+        }
         try {
-            chmod($file,0600);
-            if(file_put_contents($file,(string)$session['secret']."\n")===false){throw new RuntimeException('Secret file write failed.');}
-            $result=BoundedProcess::run([(string)App::env('RADCLIENT_BIN','/usr/bin/radclient'),'-r','1','-t','2','-S',$file,$session['nasipaddress'].':'.(int)$session['coa_port'],'disconnect'],$payload,8);
-            if($result['exit']!==0 || !preg_match('/\bDisconnect-ACK\b/',$result['output'])){throw new RuntimeException('Disconnect not acknowledged; verify the same session before retrying.');}
-            return ['command'=>'radclient-disconnect','output'=>'The NAS acknowledged the disconnect (Disconnect-ACK).'];
-        } finally { unlink($file); }
+            chmod($file, 0600);
+            if (file_put_contents($file, (string) $session['secret'] . "\n") === false) {
+                throw new RuntimeException('Secret file write failed.');
+            }
+            $result = BoundedProcess::run([(string) App::env('RADCLIENT_BIN', '/usr/bin/radclient'), '-r', '1', '-t', '2', '-S', $file, $session['nasipaddress'] . ':' . (int) $session['coa_port'], 'disconnect'], $payload, 8);
+            if ($result['exit'] !== 0 || !preg_match('/\bDisconnect-ACK\b/', $result['output'])) {
+                throw new RuntimeException('Disconnect not acknowledged; verify the same session before retrying.');
+            }
+            return ['command' => 'radclient-disconnect', 'output' => 'The NAS acknowledged the disconnect (Disconnect-ACK).'];
+        } finally {
+            unlink($file);
+        }
     }
 
     /**
@@ -470,6 +575,7 @@ final class RadiusRepository
      * How the portal ends a session on this NAS: the RouterOS API when it is switched on (MikroTik
      * only) and has a login, otherwise a RADIUS Disconnect-Request (CoA) signed with the shared
      * secret, like most RADIUS managers. Takes a NAS row; secret may be named secret or nas_secret.
+     *
      * @return array{method:?string,label:string,ok:bool,class:string,note:string}
      */
     public static function disconnectMethod(array $nas): array
@@ -548,16 +654,20 @@ final class RadiusRepository
             self::routerApiAssertOk(self::routerApiReadReply($socket), 'MikroTik API login failed');
 
             $rows = self::routerApiFindActivePpp($socket, 'name', $username);
-            $matches = array_values(array_filter($rows, function(array $row) use ($session,$username): bool {
-                return ($row['name'] ?? '') === $username && self::sameSessionId((string)($row['session-id'] ?? ''), (string)$session['acctsessionid'])
-                    && !empty($row['.id']) && (empty($session['callingstationid']) || ($row['caller-id'] ?? '')===$session['callingstationid']);
+            $matches = array_values(array_filter($rows, function (array $row) use ($session, $username): bool {
+                return ($row['name'] ?? '') === $username && self::sameSessionId((string) ($row['session-id'] ?? ''), (string) $session['acctsessionid'])
+                    && !empty($row['.id']) && (empty($session['callingstationid']) || ($row['caller-id'] ?? '') === $session['callingstationid']);
             }));
-            if(count($matches)!==1){throw new RuntimeException('NAS did not verify exactly one matching username/session identity.');}
+            if (count($matches) !== 1) {
+                throw new RuntimeException('NAS did not verify exactly one matching username/session identity.');
+            }
             // Re-read that handle immediately before removal. A reused address never supplies identity.
-            $verified=self::routerApiFindActivePpp($socket,'.id',(string)$matches[0]['.id']);
-            if(count($verified)!==1 || ($verified[0]['name'] ?? '')!==$username || !self::sameSessionId((string)($verified[0]['session-id'] ?? ''), (string)$session['acctsessionid'])) { throw new RuntimeException('NAS session changed before removal.'); }
-            self::routerApiWriteSentence($socket,['/ppp/active/remove','=.id='.$matches[0]['.id']]);
-            self::routerApiAssertOk(self::routerApiReadReply($socket),'MikroTik API remove failed');
+            $verified = self::routerApiFindActivePpp($socket, '.id', (string) $matches[0]['.id']);
+            if (count($verified) !== 1 || ($verified[0]['name'] ?? '') !== $username || !self::sameSessionId((string) ($verified[0]['session-id'] ?? ''), (string) $session['acctsessionid'])) {
+                throw new RuntimeException('NAS session changed before removal.');
+            }
+            self::routerApiWriteSentence($socket, ['/ppp/active/remove', '=.id=' . $matches[0]['.id']]);
+            self::routerApiAssertOk(self::routerApiReadReply($socket), 'MikroTik API remove failed');
             return 'MikroTik API removed one verified PPP session; awaiting accounting reconciliation.';
         } finally {
             fclose($socket);
@@ -581,34 +691,46 @@ final class RadiusRepository
 
     private static function routerApiConnect(string $host)
     {
-        $url=parse_url(str_contains($host,'://')?$host:'tls://'.$host);
-        if(!$url || ($url['scheme'] ?? '')!=='tls' || empty($url['host']) || isset($url['user']) || isset($url['pass']) || isset($url['path']) || isset($url['query']) || isset($url['fragment'])){throw new RuntimeException('Use a TLS API host with a trusted certificate.');}
-        $port=(int)($url['port'] ?? 8729);
-        if($port<1 || $port>65535){throw new RuntimeException('Invalid API port.');}
-        $options=['ssl'=>['verify_peer'=>true,'verify_peer_name'=>true,'allow_self_signed'=>false,'peer_name'=>$url['host']]];
-        self::$routerDeadline=microtime(true)+8;
-        $endpoint='tls://'.$url['host'].':'.$port;
-        $socket=self::$routerSocketFactory ? (self::$routerSocketFactory)($endpoint,$options) : @stream_socket_client($endpoint,$errno,$error,4,STREAM_CLIENT_CONNECT,stream_context_create($options));
-        if(!is_resource($socket)){throw new RuntimeException('Verified TLS API connection failed.');}
+        $url = parse_url(str_contains($host, '://') ? $host : 'tls://' . $host);
+        if (!$url || ($url['scheme'] ?? '') !== 'tls' || empty($url['host']) || isset($url['user']) || isset($url['pass']) || isset($url['path']) || isset($url['query']) || isset($url['fragment'])) {
+            throw new RuntimeException('Use a TLS API host with a trusted certificate.');
+        }
+        $port = (int) ($url['port'] ?? 8729);
+        if ($port < 1 || $port > 65535) {
+            throw new RuntimeException('Invalid API port.');
+        }
+        $options = ['ssl' => ['verify_peer' => true, 'verify_peer_name' => true, 'allow_self_signed' => false, 'peer_name' => $url['host']]];
+        self::$routerDeadline = microtime(true) + 8;
+        $endpoint = 'tls://' . $url['host'] . ':' . $port;
+        $socket = self::$routerSocketFactory ? (self::$routerSocketFactory)($endpoint, $options) : @stream_socket_client($endpoint, $errno, $error, 4, STREAM_CLIENT_CONNECT, stream_context_create($options));
+        if (!is_resource($socket)) {
+            throw new RuntimeException('Verified TLS API connection failed.');
+        }
         return $socket;
     }
 
     private static function routerApiDeadline($socket): void
     {
-        $remaining=self::$routerDeadline-microtime(true);
-        if($remaining<=0){throw new RuntimeException('NAS operation timed out; verify the same session before retrying.');}
-        stream_set_timeout($socket,(int)$remaining,(int)(($remaining-(int)$remaining)*1000000));
+        $remaining = self::$routerDeadline - microtime(true);
+        if ($remaining <= 0) {
+            throw new RuntimeException('NAS operation timed out; verify the same session before retrying.');
+        }
+        stream_set_timeout($socket, (int) $remaining, (int) (($remaining - (int) $remaining) * 1000000));
     }
 
-    private static function routerApiReadBytes($socket,int $length): string
+    private static function routerApiReadBytes($socket, int $length): string
     {
-        if($length<0 || $length>65536){throw new RuntimeException('NAS reply exceeds allowed size.');}
-        $bytes='';
-        while(strlen($bytes)<$length){
+        if ($length < 0 || $length > 65536) {
+            throw new RuntimeException('NAS reply exceeds allowed size.');
+        }
+        $bytes = '';
+        while (strlen($bytes) < $length) {
             self::routerApiDeadline($socket);
-            $chunk=fread($socket,$length-strlen($bytes));
-            if($chunk===false || $chunk===''){throw new RuntimeException('NAS reply incomplete or timed out; verify before retrying.');}
-            $bytes.=$chunk;
+            $chunk = fread($socket, $length - strlen($bytes));
+            if ($chunk === false || $chunk === '') {
+                throw new RuntimeException('NAS reply incomplete or timed out; verify before retrying.');
+            }
+            $bytes .= $chunk;
         }
         return $bytes;
     }
@@ -623,8 +745,14 @@ final class RadiusRepository
 
     private static function routerApiWriteWord($socket, string $word): void
     {
-        $bytes=self::routerApiEncodeLength(strlen($word)).$word;
-        while($bytes!==''){ self::routerApiDeadline($socket); $n=fwrite($socket,$bytes); if(!$n){throw new RuntimeException('NAS write failed.');} $bytes=substr($bytes,$n); }
+        $bytes = self::routerApiEncodeLength(strlen($word)) . $word;
+        while ($bytes !== '') {
+            self::routerApiDeadline($socket);
+            $n = fwrite($socket, $bytes);
+            if (!$n) {
+                throw new RuntimeException('NAS write failed.');
+            } $bytes = substr($bytes, $n);
+        }
     }
 
     private static function routerApiReadReply($socket): array
@@ -639,7 +767,9 @@ final class RadiusRepository
                 continue;
             }
             $reply[] = $sentence;
-            if(count($reply)>256){throw new RuntimeException('Too many NAS reply sentences.');}
+            if (count($reply) > 256) {
+                throw new RuntimeException('Too many NAS reply sentences.');
+            }
             if (in_array('!done', $sentence, true) || in_array('!fatal', $sentence, true)) {
                 return $reply;
             }
@@ -658,20 +788,31 @@ final class RadiusRepository
                 return $sentence;
             }
             $sentence[] = $word;
-            if(count($sentence)>64){throw new RuntimeException('Too many NAS reply words.');}
+            if (count($sentence) > 64) {
+                throw new RuntimeException('Too many NAS reply words.');
+            }
         }
     }
 
     private static function routerApiReadWord($socket): ?string
     {
-        $c=ord(self::routerApiReadBytes($socket,1));
-        if(($c & 0x80)===0){$length=$c;}
-        elseif(($c & 0xc0)===0x80){$length=(($c & 0x3f)<<8)+ord(self::routerApiReadBytes($socket,1));}
-        elseif(($c & 0xe0)===0xc0){$b=self::routerApiReadBytes($socket,2);$length=(($c & 0x1f)<<16)+(ord($b[0])<<8)+ord($b[1]);}
-        elseif(($c & 0xf0)===0xe0){$b=self::routerApiReadBytes($socket,3);$length=(($c & 0xf)<<24)+(ord($b[0])<<16)+(ord($b[1])<<8)+ord($b[2]);}
-        elseif($c===0xf0){$length=unpack('N',self::routerApiReadBytes($socket,4))[1];}
-        else{throw new RuntimeException('Invalid NAS word length.');}
-        return self::routerApiReadBytes($socket,$length);
+        $c = ord(self::routerApiReadBytes($socket, 1));
+        if (($c & 0x80) === 0) {
+            $length = $c;
+        } elseif (($c & 0xC0) === 0x80) {
+            $length = (($c & 0x3F) << 8) + ord(self::routerApiReadBytes($socket, 1));
+        } elseif (($c & 0xE0) === 0xC0) {
+            $b = self::routerApiReadBytes($socket, 2);
+            $length = (($c & 0x1F) << 16) + (ord($b[0]) << 8) + ord($b[1]);
+        } elseif (($c & 0xF0) === 0xE0) {
+            $b = self::routerApiReadBytes($socket, 3);
+            $length = (($c & 0xF) << 24) + (ord($b[0]) << 16) + (ord($b[1]) << 8) + ord($b[2]);
+        } elseif ($c === 0xF0) {
+            $length = unpack('N', self::routerApiReadBytes($socket, 4))[1];
+        } else {
+            throw new RuntimeException('Invalid NAS word length.');
+        }
+        return self::routerApiReadBytes($socket, $length);
     }
 
     private static function routerApiEncodeLength(int $length): string
@@ -726,16 +867,24 @@ final class RadiusRepository
 
     private static function assertIdentityAvailable(string $username, ?string $old): void
     {
-        if($username===$old){return;}
-        if(Db::row('SELECT username FROM customer_identity_history WHERE username=? FOR UPDATE',[$username])) { throw new RuntimeException('Username is reserved by historical accounting identity.'); }
-        foreach(['customer_profiles','radcheck','radreply','radusergroup','radacct','radpostauth'] as $table){
-            if(Db::row("SELECT username FROM $table WHERE username=? LIMIT 1 FOR UPDATE",[$username])){throw new RuntimeException('Username already exists in managed or unmanaged RADIUS/history records.');}
+        if ($username === $old) {
+            return;
         }
-        if($old){
-            $profile=Db::row('SELECT id FROM customer_profiles WHERE username=? FOR UPDATE',[$old]);
-            if(!$profile){throw new RuntimeException('Client not found.');}
-            foreach(['billing_invoices','billing_payments','uploaded_documents','notification_logs'] as $table){
-                if(Db::value("SELECT COUNT(*) FROM $table WHERE username=?",[$old]) && !Db::value('SELECT COUNT(*) FROM information_schema.REFERENTIAL_CONSTRAINTS WHERE CONSTRAINT_SCHEMA=DATABASE() AND TABLE_NAME=? AND REFERENCED_TABLE_NAME="customer_profiles" AND UPDATE_RULE="CASCADE"',[$table])) {
+        if (Db::row('SELECT username FROM customer_identity_history WHERE username=? FOR UPDATE', [$username])) {
+            throw new RuntimeException('Username is reserved by historical accounting identity.');
+        }
+        foreach (['customer_profiles', 'radcheck', 'radreply', 'radusergroup', 'radacct', 'radpostauth'] as $table) {
+            if (Db::row("SELECT username FROM $table WHERE username=? LIMIT 1 FOR UPDATE", [$username])) {
+                throw new RuntimeException('Username already exists in managed or unmanaged RADIUS/history records.');
+            }
+        }
+        if ($old) {
+            $profile = Db::row('SELECT id FROM customer_profiles WHERE username=? FOR UPDATE', [$old]);
+            if (!$profile) {
+                throw new RuntimeException('Client not found.');
+            }
+            foreach (['billing_invoices', 'billing_payments', 'uploaded_documents', 'notification_logs'] as $table) {
+                if (Db::value("SELECT COUNT(*) FROM $table WHERE username=?", [$old]) && !Db::value('SELECT COUNT(*) FROM information_schema.REFERENTIAL_CONSTRAINTS WHERE CONSTRAINT_SCHEMA=DATABASE() AND TABLE_NAME=? AND REFERENCED_TABLE_NAME="customer_profiles" AND UPDATE_RULE="CASCADE"', [$table])) {
                     throw new RuntimeException('Identity reference migration is required before renaming this customer.');
                 }
             }
@@ -744,26 +893,28 @@ final class RadiusRepository
 
     private static function renameRadiusUser(string $old, string $new): void
     {
-        $id=Db::value('SELECT id FROM customer_profiles WHERE username=?',[$old]);
-        Db::exec('INSERT INTO customer_identity_history (username,customer_id,renamed_at) VALUES (?,?,NOW())',[$old,$id]);
-        foreach(['radcheck','radreply','radusergroup'] as $table){Db::exec("UPDATE $table SET username=? WHERE username=?",[$new,$old]);}
+        $id = Db::value('SELECT id FROM customer_profiles WHERE username=?', [$old]);
+        Db::exec('INSERT INTO customer_identity_history (username,customer_id,renamed_at) VALUES (?,?,NOW())', [$old, $id]);
+        foreach (['radcheck', 'radreply', 'radusergroup'] as $table) {
+            Db::exec("UPDATE $table SET username=? WHERE username=?", [$new, $old]);
+        }
         // Historical events are immutable. Reserve and reject the former network identity.
-        Db::exec('INSERT INTO radcheck (username,attribute,op,value) VALUES (?,"Auth-Type",":=","Reject")',[$old]);
+        Db::exec('INSERT INTO radcheck (username,attribute,op,value) VALUES (?,"Auth-Type",":=","Reject")', [$old]);
     }
 
     private static function upsertProfile(array $input, ?string $oldUsername): void
     {
         $fields = [
-            'username','auth_method','enabled','verified','email_alert','sms_alert','account_status','expiry_date','available_online_time','simultaneous_use',
-            'service_group','owner_operator_id','ip_mode','framed_ip_address','framed_pool','mac_address','mac_lock','nas_restriction_type','nas_restriction_value',
-            'first_name','last_name','company_name','address','city','state','zip','country','phone','cell_phone','email','vat_tax_id','contract_id','contract_valid_until','gps','language','notes',
-            'download_limit','upload_limit','total_traffic_limit','balance','invoice_alert','payment_status','billing_mode','custom_radius_attributes',
+            'username', 'auth_method', 'enabled', 'verified', 'email_alert', 'sms_alert', 'account_status', 'expiry_date', 'available_online_time', 'simultaneous_use',
+            'service_group', 'owner_operator_id', 'ip_mode', 'framed_ip_address', 'framed_pool', 'mac_address', 'mac_lock', 'nas_restriction_type', 'nas_restriction_value',
+            'first_name', 'last_name', 'company_name', 'address', 'city', 'state', 'zip', 'country', 'phone', 'cell_phone', 'email', 'vat_tax_id', 'contract_id', 'contract_valid_until', 'gps', 'language', 'notes',
+            'download_limit', 'upload_limit', 'total_traffic_limit', 'balance', 'invoice_alert', 'payment_status', 'billing_mode', 'custom_radius_attributes',
         ];
         $data = [];
         foreach ($fields as $field) {
             $data[$field] = $input[$field] ?? null;
         }
-        foreach (['enabled','verified','email_alert','sms_alert','mac_lock','invoice_alert'] as $bool) {
+        foreach (['enabled', 'verified', 'email_alert', 'sms_alert', 'mac_lock', 'invoice_alert'] as $bool) {
             $data[$bool] = self::boolValue($input[$bool] ?? null);
         }
         foreach (['available_online_time', 'simultaneous_use', 'owner_operator_id'] as $integer) {
@@ -838,11 +989,11 @@ final class RadiusRepository
             // Only the trusted DHCP virtual server may override this fail-closed default.
             self::insertAttr('radcheck', 'username', $username, 'Auth-Type', ':=', 'Reject');
         }
-        if ($authMethod==='pppoe') {
-            self::insertAttr('radcheck','username',$username,'Framed-Protocol','==','PPP');
-            self::insertAttr('radcheck','username',$username,'Service-Type','==','Framed-User');
+        if ($authMethod === 'pppoe') {
+            self::insertAttr('radcheck', 'username', $username, 'Framed-Protocol', '==', 'PPP');
+            self::insertAttr('radcheck', 'username', $username, 'Service-Type', '==', 'Framed-User');
         }
-        if ($authMethod==='pppoe' && !empty($input['mac_lock']) && !empty($input['mac_address'])) {
+        if ($authMethod === 'pppoe' && !empty($input['mac_lock']) && !empty($input['mac_address'])) {
             self::insertAttr('radcheck', 'username', $username, 'Calling-Station-Id', '==', (string) $input['mac_address']);
         }
         if (($input['nas_restriction_type'] ?? 'all') === 'nas_ip' && !empty($input['nas_restriction_value'])) {
@@ -997,24 +1148,35 @@ final class RadiusRepository
             $input['download_speed'], $input['upload_speed'], $input['mikrotik_rate_limit'],
             $input['burst_limit'], $input['burst_threshold'], $input['burst_time'], self::intOrNull($input['priority']),
             $input['ip_mode'], $input['ip_pool'], self::nullIfBlank($input['static_ip_pool'] ?? ''), self::intOrNull($input['session_timeout']), self::intOrNull($input['idle_timeout']), self::intOrNull($input['simultaneous_use']),
-            $input['download_quota']??null, $input['upload_quota']??null, $input['total_quota']??null, $input['expiration_behavior'],
+            $input['download_quota'] ?? null, $input['upload_quota'] ?? null, $input['total_quota'] ?? null, $input['expiration_behavior'],
             $input['billing_mode'], self::nullIfBlank($input['expired_service_group'] ?? ''), self::decimalOrZero($input['price']), $input['currency'], $input['billing_period'] ?? 'monthly', $input['custom_group_attrs'],
         ], $tail);
     }
 
     private static function normalizeClientIp(array &$input, ?string $oldUsername): void
     {
-        $ip=trim((string)($input['framed_ip_address'] ?? ''));
-        if($ip===''){$input['framed_ip_address']=null;$input['ip_mode']=$input['ip_mode'] ?? 'pool';return;}
-        if(!filter_var($ip,FILTER_VALIDATE_IP,FILTER_FLAG_IPV4)){throw new RuntimeException('Select a valid IPv4 static IP address.');}
-        $pools=Db::select('SELECT * FROM static_ip_pools ORDER BY id FOR UPDATE');
-        $active=array_values(array_filter($pools,fn($pool)=>!empty($pool['enabled'])));
-        $pool=StaticIpPool::poolFor($ip,$active);
-        $current=$oldUsername ? Db::value('SELECT framed_ip_address FROM customer_profiles WHERE username=?',[$oldUsername]) : null;
-        if(!$pool && $current!==$ip){throw new RuntimeException('Selected static IP is not in an enabled static IP pool.');}
-        $exists=Db::value('SELECT username FROM customer_profiles WHERE allocated_static_ip=? AND (? IS NULL OR username<>?) LIMIT 1',[$ip,$oldUsername,$oldUsername]);
-        if($exists){throw new RuntimeException("Static IP $ip is already assigned to $exists.");}
-        $input['framed_ip_address']=$ip;$input['ip_mode']='static';
+        $ip = trim((string) ($input['framed_ip_address'] ?? ''));
+        if ($ip === '') {
+            $input['framed_ip_address'] = null;
+            $input['ip_mode'] = $input['ip_mode'] ?? 'pool';
+            return;
+        }
+        if (!filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
+            throw new RuntimeException('Select a valid IPv4 static IP address.');
+        }
+        $pools = Db::select('SELECT * FROM static_ip_pools ORDER BY id FOR UPDATE');
+        $active = array_values(array_filter($pools, fn ($pool) => !empty($pool['enabled'])));
+        $pool = StaticIpPool::poolFor($ip, $active);
+        $current = $oldUsername ? Db::value('SELECT framed_ip_address FROM customer_profiles WHERE username=?', [$oldUsername]) : null;
+        if (!$pool && $current !== $ip) {
+            throw new RuntimeException('Selected static IP is not in an enabled static IP pool.');
+        }
+        $exists = Db::value('SELECT username FROM customer_profiles WHERE allocated_static_ip=? AND (? IS NULL OR username<>?) LIMIT 1', [$ip, $oldUsername, $oldUsername]);
+        if ($exists) {
+            throw new RuntimeException("Static IP $ip is already assigned to $exists.");
+        }
+        $input['framed_ip_address'] = $ip;
+        $input['ip_mode'] = 'static';
     }
 
     private static function normalizeAuthMethod(mixed $value): string

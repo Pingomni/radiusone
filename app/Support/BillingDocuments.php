@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace App\Support;
 
+use App\Http\Support\Clients;
 use App\Http\Support\Format;
+use App\Http\Support\Invoices;
 use InvalidArgumentException;
 
 /**
@@ -85,14 +87,14 @@ final class BillingDocuments
         $currency = ' ' . $invoice['currency'];
         $values = [
             'invoice' => (string) $invoice['invoice_number'],
-            'customer' => \App\Http\Support\Clients::displayName($invoice),
+            'customer' => Clients::displayName($invoice),
             'username' => (string) $invoice['username'],
             'total' => Format::money($invoice['total_amount']) . $currency,
             'paid' => Format::money($invoice['amount_paid']) . $currency,
             'balance' => Format::money($invoice['balance_due']) . $currency,
             'due' => (string) $invoice['due_date'],
             'issued' => (string) $invoice['issue_date'],
-            'period' => \App\Http\Support\Invoices::periodLabel((string) ($invoice['billing_period'] ?? 'monthly')),
+            'period' => Invoices::periodLabel((string) ($invoice['billing_period'] ?? 'monthly')),
         ];
         return strtr($text, array_combine(array_map(static fn ($k) => '{' . $k . '}', array_keys($values)), $values));
     }

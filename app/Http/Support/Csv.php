@@ -11,8 +11,8 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 final class Csv
 {
     /**
-     * @param callable(): iterable<array> $rows called inside the snapshot (e.g. ClientQuery::each)
-     * @param callable(array): array $cells
+     * @param  callable(): iterable<array>  $rows  called inside the snapshot (e.g. ClientQuery::each)
+     * @param  callable(array): array  $cells
      */
     public static function download(string $filename, array $headers, callable $rows, callable $cells): StreamedResponse
     {

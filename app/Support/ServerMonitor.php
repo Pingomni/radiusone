@@ -1,6 +1,9 @@
 <?php
+
 declare(strict_types=1);
+
 namespace App\Support;
+
 use RuntimeException;
 
 /**
@@ -38,10 +41,14 @@ final class ServerMonitor
     public static function cpuPercent(float $window = 1.0): ?float
     {
         $first = self::cpuTimes();
-        if ($first === null) { return null; }
+        if ($first === null) {
+            return null;
+        }
         usleep((int) (max(0.1, $window) * 1e6));
         $second = self::cpuTimes();
-        if ($second === null || $second[1] <= $first[1]) { return null; }
+        if ($second === null || $second[1] <= $first[1]) {
+            return null;
+        }
         return round(100 * (1 - ($second[0] - $first[0]) / ($second[1] - $first[1])), 1);
     }
 
@@ -49,7 +56,9 @@ final class ServerMonitor
     private static function cpuTimes(): ?array
     {
         $line = strtok((string) @file_get_contents('/proc/stat'), "\n");
-        if (!$line || !str_starts_with($line, 'cpu ')) { return null; }
+        if (!$line || !str_starts_with($line, 'cpu ')) {
+            return null;
+        }
         $values = array_map('floatval', preg_split('/\s+/', trim(substr($line, 4))));
         // idle + iowait count as idle; guest time is already included in user time.
         return [($values[3] ?? 0) + ($values[4] ?? 0), array_sum(array_slice($values, 0, 8))];
@@ -60,9 +69,13 @@ final class ServerMonitor
     {
         $info = [];
         foreach (explode("\n", (string) @file_get_contents('/proc/meminfo')) as $line) {
-            if (preg_match('/^(\w+):\s+(\d+) kB/', $line, $m)) { $info[$m[1]] = (float) $m[2] * 1024; }
+            if (preg_match('/^(\w+):\s+(\d+) kB/', $line, $m)) {
+                $info[$m[1]] = (float) $m[2] * 1024;
+            }
         }
-        if (empty($info['MemTotal']) || !isset($info['MemAvailable'])) { return null; }
+        if (empty($info['MemTotal']) || !isset($info['MemAvailable'])) {
+            return null;
+        }
         return ['used' => $info['MemTotal'] - $info['MemAvailable'], 'total' => $info['MemTotal']];
     }
 
@@ -84,7 +97,9 @@ final class ServerMonitor
     public static function load(): ?array
     {
         $raw = @file_get_contents('/proc/loadavg');
-        if ($raw === false) { return null; }
+        if ($raw === false) {
+            return null;
+        }
         $parts = explode(' ', $raw);
         return [(float) $parts[0], (float) $parts[1], (float) $parts[2]];
     }
@@ -100,13 +115,17 @@ final class ServerMonitor
         $sensors = [];
         foreach (glob('/sys/class/hwmon/hwmon*/temp*_input') ?: [] as $input) {
             $raw = @file_get_contents($input);
-            if ($raw === false || !is_numeric(trim($raw))) { continue; }
+            if ($raw === false || !is_numeric(trim($raw))) {
+                continue;
+            }
             $dir = dirname($input);
             $label = trim((string) @file_get_contents(str_replace('_input', '_label', $input)));
             $chip = trim((string) @file_get_contents($dir . '/name'));
             $name = trim(($chip !== '' ? $chip : basename($dir)) . ' ' . ($label !== '' ? $label : basename($input, '_input')));
             $value = round((float) trim($raw) / 1000, 1);
-            if ($value <= -50 || $value >= 150) { continue; } // Disconnected probes report nonsense.
+            if ($value <= -50 || $value >= 150) {
+                continue;
+            } // Disconnected probes report nonsense.
             $sensors[] = ['label' => $name, 'value' => $value, 'unit' => '°C', 'state' => $value >= 85 ? 'critical' : ($value >= 70 ? 'warning' : 'ok')];
         }
         return $sensors;
@@ -114,6 +133,7 @@ final class ServerMonitor
 
     /**
      * Interface counters from /proc/net/dev (loopback excluded); In = received, Out = sent.
+     *
      * @return array{0:list<array>,1:array<int,array{in:float,out:float}>,2:float}
      */
     public static function interfaces(?array $previous): array
@@ -123,12 +143,18 @@ final class ServerMonitor
         $rows = [];
         $counters = [];
         foreach (array_slice(explode("\n", (string) @file_get_contents('/proc/net/dev')), 2) as $line) {
-            if (!str_contains($line, ':')) { continue; }
+            if (!str_contains($line, ':')) {
+                continue;
+            }
             [$name, $data] = array_map('trim', explode(':', $line, 2));
-            if ($name === 'lo') { continue; }
+            if ($name === 'lo') {
+                continue;
+            }
             $fields = preg_split('/\s+/', $data);
             $index = (int) trim((string) @file_get_contents('/sys/class/net/' . basename($name) . '/ifindex'));
-            if ($index <= 0 || count($fields) < 9) { continue; }
+            if ($index <= 0 || count($fields) < 9) {
+                continue;
+            }
             $in = (float) $fields[0];
             $out = (float) $fields[8];
             $row = ['index' => $index, 'name' => $name, 'alias' => '', 'admin' => 1, 'oper' => trim((string) @file_get_contents('/sys/class/net/' . basename($name) . '/operstate')) === 'down' ? 2 : 1,
@@ -158,7 +184,9 @@ final class ServerMonitor
         $units = self::SERVICES;
         $fpm = glob('/lib/systemd/system/php*-fpm.service') ?: [];
         rsort($fpm, SORT_NATURAL);
-        if ($fpm) { $units = array_slice($units, 0, 3, true) + [basename($fpm[0], '.service') => 'PHP-FPM'] + array_slice($units, 3, null, true); }
+        if ($fpm) {
+            $units = array_slice($units, 0, 3, true) + [basename($fpm[0], '.service') => 'PHP-FPM'] + array_slice($units, 3, null, true);
+        }
         // One systemctl call for all units; blocks come back in argument order.
         $blocks = [];
         try {

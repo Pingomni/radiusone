@@ -1,6 +1,9 @@
 <?php
+
 declare(strict_types=1);
+
 namespace App\Support;
+
 use RuntimeException;
 
 /** SNMP interface traffic history: recorded by bin/poll-snmp.php, read by the NAS monitor graph. */
@@ -40,6 +43,7 @@ final class NasTraffic
     /**
      * Records the RADIUS server (device 0, from /proc) and polls every NAS with SNMP set up.
      * $only limits the run to one device (0 = the server), for the "Poll now" button.
+     *
      * @return array{polled:int,failed:int,rows:int,purged:int,errors:array<string,string>,server:?string}
      */
     public static function recordAll(?callable $clientFactory = null, ?int $only = null): array
@@ -57,13 +61,19 @@ final class NasTraffic
             if ($only === null || $only === ServerMonitor::ID) {
                 $server = ServerMonitor::snapshot(self::previous(ServerMonitor::ID));
                 $summary['rows'] += self::record(ServerMonitor::ID, $server);
-                if ($health) { $summary['health_rows'] += self::recordHealth(ServerMonitor::ID, $server); }
-                if ($temperature) { $summary['temperature_rows'] += self::recordTemperatures(ServerMonitor::ID, $server); }
+                if ($health) {
+                    $summary['health_rows'] += self::recordHealth(ServerMonitor::ID, $server);
+                }
+                if ($temperature) {
+                    $summary['temperature_rows'] += self::recordTemperatures(ServerMonitor::ID, $server);
+                }
                 $summary['server'] = 'recorded';
             }
             $rows = $only === ServerMonitor::ID ? [] : Db::select('SELECT n.*, m.vendor, s.* FROM nas n JOIN nas_snmp s ON s.nas_id=n.id LEFT JOIN nas_metadata m ON m.nas_id=n.id WHERE s.enabled=1 AND COALESCE(m.pending_delete,0)=0' . ($only !== null ? ' AND n.id=' . (int) $only : '') . ' ORDER BY n.id');
             foreach ($rows as $row) {
-                if (!NasMonitor::configured($row)) { continue; }
+                if (!NasMonitor::configured($row)) {
+                    continue;
+                }
                 $nasId = (int) $row['nas_id'];
                 $snapshot = NasMonitor::poll($row, $row, self::previous($nasId), $clientFactory ? $clientFactory($row) : null);
                 if (!$snapshot['ok']) {
@@ -73,12 +83,20 @@ final class NasTraffic
                 }
                 $summary['polled']++;
                 $summary['rows'] += self::record($nasId, $snapshot);
-                if ($health) { $summary['health_rows'] += self::recordHealth($nasId, $snapshot); }
-                if ($temperature) { $summary['temperature_rows'] += self::recordTemperatures($nasId, $snapshot); }
+                if ($health) {
+                    $summary['health_rows'] += self::recordHealth($nasId, $snapshot);
+                }
+                if ($temperature) {
+                    $summary['temperature_rows'] += self::recordTemperatures($nasId, $snapshot);
+                }
             }
             $summary['purged'] = Db::exec('DELETE FROM nas_snmp_samples WHERE sampled_at < ? LIMIT 50000', [time() - self::RETENTION_SECONDS]);
-            if ($health) { $summary['purged'] += Db::exec('DELETE FROM nas_snmp_health_samples WHERE sampled_at < ? LIMIT 50000', [time() - self::RETENTION_SECONDS]); }
-            if ($temperature) { $summary['purged'] += Db::exec('DELETE FROM nas_snmp_temperature_samples WHERE sampled_at < ? LIMIT 50000', [time() - self::RETENTION_SECONDS]); }
+            if ($health) {
+                $summary['purged'] += Db::exec('DELETE FROM nas_snmp_health_samples WHERE sampled_at < ? LIMIT 50000', [time() - self::RETENTION_SECONDS]);
+            }
+            if ($temperature) {
+                $summary['purged'] += Db::exec('DELETE FROM nas_snmp_temperature_samples WHERE sampled_at < ? LIMIT 50000', [time() - self::RETENTION_SECONDS]);
+            }
             return $summary;
         } finally {
             Db::value('SELECT RELEASE_LOCK(?)', [$lock]);
@@ -93,7 +111,9 @@ final class NasTraffic
              WHERE nas_id=? AND sampled_at=(SELECT MAX(sampled_at) FROM nas_snmp_samples WHERE nas_id=?)',
             [$nasId, $nasId]
         );
-        if (!$rows || time() - (int) $rows[0]['sampled_at'] > self::MAX_RATE_GAP) { return null; }
+        if (!$rows || time() - (int) $rows[0]['sampled_at'] > self::MAX_RATE_GAP) {
+            return null;
+        }
         $counters = [];
         foreach ($rows as $row) {
             $counters[(int) $row['if_index']] = ['in' => $row['in_octets'] !== null ? (float) $row['in_octets'] : null, 'out' => $row['out_octets'] !== null ? (float) $row['out_octets'] : null];
@@ -122,7 +142,9 @@ final class NasTraffic
     public static function recordHealth(int $nasId, array $snapshot): int
     {
         $memory = $snapshot['memory'] ?? null;
-        if ($snapshot['cpu'] === null && !$memory) { return 0; }
+        if ($snapshot['cpu'] === null && !$memory) {
+            return 0;
+        }
         return Db::exec(
             'INSERT INTO nas_snmp_health_samples (nas_id, sampled_at, cpu_pct, mem_used, mem_total) VALUES (?, ?, ?, ?, ?)
              ON DUPLICATE KEY UPDATE cpu_pct=VALUES(cpu_pct), mem_used=VALUES(mem_used), mem_total=VALUES(mem_total)',
@@ -137,9 +159,13 @@ final class NasTraffic
         $count = 0;
         $seen = [];
         foreach ($snapshot['sensors'] ?? [] as $sensor) {
-            if (($sensor['unit'] ?? '') !== '°C' || !is_numeric($sensor['value'])) { continue; }
+            if (($sensor['unit'] ?? '') !== '°C' || !is_numeric($sensor['value'])) {
+                continue;
+            }
             $name = mb_substr(trim((string) $sensor['label']) ?: 'Temperature', 0, 80);
-            if (isset($seen[$name])) { continue; } // Duplicate labels: keep the first reading.
+            if (isset($seen[$name])) {
+                continue;
+            } // Duplicate labels: keep the first reading.
             $seen[$name] = true;
             $count += Db::exec(
                 'INSERT INTO nas_snmp_temperature_samples (nas_id, sensor, sampled_at, celsius) VALUES (?, ?, ?, ?)
@@ -153,6 +179,7 @@ final class NasTraffic
     /**
      * Temperature per sensor (°C), averaged per bucket, with gaps as null. Sensors are sorted by
      * name so each keeps its color slot; past MAX_TEMPERATURE_SENSORS they are reported, not drawn.
+     *
      * @return array{start:int,end:int,bucket:int,sensors:list<string>,hidden:list<string>,points:list<array>,peaks:array<string,float>,latest:array<string,?float>,samples:int}
      */
     public static function temperatureSeries(int $nasId, string $range, ?int $now = null): array
@@ -184,7 +211,9 @@ final class NasTraffic
             $point = ['t' => $t];
             foreach ($sensors as $i => $sensor) {
                 $point['s' . $i] = $values[$t][$sensor] ?? null;
-                if ($point['s' . $i] !== null) { $latest[$sensor] = $point['s' . $i]; }
+                if ($point['s' . $i] !== null) {
+                    $latest[$sensor] = $point['s' . $i];
+                }
             }
             $points[] = $point;
         }
@@ -194,19 +223,26 @@ final class NasTraffic
     /** Axis that need not start at zero: 4 equal nice steps covering min..max. */
     public static function niceRange(float $min, float $max): array
     {
-        if ($max - $min < 4) { $mid = ($min + $max) / 2; $min = $mid - 2; $max = $mid + 2; }
+        if ($max - $min < 4) {
+            $mid = ($min + $max) / 2;
+            $min = $mid - 2;
+            $max = $mid + 2;
+        }
         $raw = ($max - $min) / 4;
         $magnitude = 10 ** floor(log10($raw));
         foreach ([1, 2, 2.5, 5, 10, 20] as $factor) {
             $step = $factor * $magnitude;
             $low = floor($min / $step) * $step;
-            if ($low + 4 * $step >= $max) { return [$low, $low + 4 * $step, $step]; }
+            if ($low + 4 * $step >= $max) {
+                return [$low, $low + 4 * $step, $step];
+            }
         }
         return [$low, $low + 4 * $step, $step];
     }
 
     /**
      * CPU and memory use in percent, averaged per bucket, with gaps as null.
+     *
      * @return array{start:int,end:int,bucket:int,points:list<array{t:int,cpu:?float,mem:?float}>,peak_cpu:?float,peak_mem:?float,mem_used:?float,mem_total:?float,samples:int}
      */
     public static function healthSeries(int $nasId, string $range, ?int $now = null): array
@@ -231,8 +267,12 @@ final class NasTraffic
             $points[] = ['t' => $t, 'cpu' => $row && $row['cpu'] !== null ? (float) $row['cpu'] : null, 'mem' => $row && $row['mem'] !== null ? (float) $row['mem'] : null];
             if ($row) {
                 $samples += (int) $row['samples'];
-                if ($row['peak_cpu'] !== null) { $peakCpu = max($peakCpu ?? 0, (float) $row['peak_cpu']); }
-                if ($row['peak_mem'] !== null) { $peakMem = max($peakMem ?? 0, (float) $row['peak_mem']); }
+                if ($row['peak_cpu'] !== null) {
+                    $peakCpu = max($peakCpu ?? 0, (float) $row['peak_cpu']);
+                }
+                if ($row['peak_mem'] !== null) {
+                    $peakMem = max($peakMem ?? 0, (float) $row['peak_mem']);
+                }
             }
         }
         $latest = Db::row('SELECT mem_used, mem_total FROM nas_snmp_health_samples WHERE nas_id=? AND sampled_at >= ? AND mem_total > 0 ORDER BY sampled_at DESC LIMIT 1', [$nasId, $start]);
@@ -242,6 +282,7 @@ final class NasTraffic
 
     /**
      * Interfaces with samples in the window, busiest first.
+     *
      * @return list<array{if_index:int,if_name:string,avg_bps:float}>
      */
     public static function interfaces(int $nasId, int $since): array
@@ -256,6 +297,7 @@ final class NasTraffic
     /**
      * Averages per bucket over the range ending now. Buckets without data are null so the
      * graph shows gaps instead of drawing across outages.
+     *
      * @return array{start:int,end:int,bucket:int,points:list<array{t:int,in:?float,out:?float}>,peak_in:?float,peak_out:?float,samples:int}
      */
     public static function series(int $nasId, int $ifIndex, string $range, ?int $now = null): array
@@ -279,8 +321,12 @@ final class NasTraffic
             $points[] = ['t' => $t, 'in' => $row && $row['in_bps'] !== null ? (float) $row['in_bps'] : null, 'out' => $row && $row['out_bps'] !== null ? (float) $row['out_bps'] : null];
             if ($row) {
                 $samples += (int) $row['samples'];
-                if ($row['peak_in'] !== null) { $peakIn = max($peakIn ?? 0, (float) $row['peak_in']); }
-                if ($row['peak_out'] !== null) { $peakOut = max($peakOut ?? 0, (float) $row['peak_out']); }
+                if ($row['peak_in'] !== null) {
+                    $peakIn = max($peakIn ?? 0, (float) $row['peak_in']);
+                }
+                if ($row['peak_out'] !== null) {
+                    $peakOut = max($peakOut ?? 0, (float) $row['peak_out']);
+                }
             }
         }
         return ['start' => $start, 'end' => $end, 'bucket' => $bucket, 'points' => $points, 'peak_in' => $peakIn, 'peak_out' => $peakOut, 'samples' => $samples];
@@ -289,11 +335,16 @@ final class NasTraffic
     /** Axis maximum and step: 4 equal steps of 1, 2, 2.5 or 5 x 10^n. */
     public static function niceScale(float $max): array
     {
-        if ($max <= 0) { return [4000.0, 1000.0]; }
+        if ($max <= 0) {
+            return [4000.0, 1000.0];
+        }
         $raw = $max / 4;
         $magnitude = 10 ** floor(log10($raw));
         foreach ([1, 2, 2.5, 5, 10] as $factor) {
-            if ($factor * $magnitude >= $raw) { $step = $factor * $magnitude; break; }
+            if ($factor * $magnitude >= $raw) {
+                $step = $factor * $magnitude;
+                break;
+            }
         }
         return [$step * 4, $step];
     }

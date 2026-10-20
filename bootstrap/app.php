@@ -8,9 +8,11 @@ use App\Http\Middleware\RequireRecentAuth;
 use App\Http\Middleware\SecurityHeaders;
 use App\Support\Diagnostics;
 use App\Support\SchemaMismatch;
+use App\Support\SharedEnv;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Foundation\Http\Middleware\ConvertEmptyStringsToNull;
 use Illuminate\Http\Request;
 use Illuminate\Session\TokenMismatchException;
 use Inertia\Inertia;
@@ -19,8 +21,8 @@ use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 
 $app = Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
-        web: __DIR__.'/../routes/web.php',
-        commands: __DIR__.'/../routes/console.php',
+        web: __DIR__ . '/../routes/web.php',
+        commands: __DIR__ . '/../routes/console.php',
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
@@ -29,7 +31,7 @@ $app = Application::configure(basePath: dirname(__DIR__))
         $middleware->encryptCookies(except: ['frweb_theme']);
         // Domain code (app/Support) was written for HTML form posts: empty fields stay '' and
         // checkboxes are tested with isset(). React posts are normalised by Controller::formInput().
-        $middleware->remove(\Illuminate\Foundation\Http\Middleware\ConvertEmptyStringsToNull::class);
+        $middleware->remove(ConvertEmptyStringsToNull::class);
         // After TrustProxies (a default global middleware), so X-Forwarded-Proto is honoured.
         $middleware->append([SecurityHeaders::class, ForceHttps::class]);
         $middleware->web(append: [
@@ -84,6 +86,6 @@ $app = Application::configure(basePath: dirname(__DIR__))
     })->create();
 
 // Secrets live in the protected shared env file; see App\Support\SharedEnv.
-$app->afterLoadingEnvironment(static fn () => App\Support\SharedEnv::load());
+$app->afterLoadingEnvironment(static fn () => SharedEnv::load());
 
 return $app;

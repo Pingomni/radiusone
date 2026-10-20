@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace Tests;
 
+use App\Support\Backup\BackupNow;
 use App\Support\Db;
 use App\Support\MigrationRunner;
 use App\Support\Security;
+use App\Support\TimeZone;
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
 use RuntimeException;
 
@@ -33,9 +35,9 @@ abstract class TestCase extends BaseTestCase
         }
         $this->withHeader('X-Forwarded-Proto', 'https');
         // Never the real root helper: a test must not switch this server's time zone.
-        \App\Support\TimeZone::$command = [$dir . '/no-timezone-helper'];
-        \App\Support\Backup\BackupNow::$command = [$dir . '/no-backup-helper'];
-        \App\Support\Backup\BackupNow::$isActive = ['false'];
+        TimeZone::$command = [$dir . '/no-timezone-helper'];
+        BackupNow::$command = [$dir . '/no-backup-helper'];
+        BackupNow::$isActive = ['false'];
     }
 
     protected function tearDown(): void

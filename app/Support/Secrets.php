@@ -1,6 +1,9 @@
 <?php
+
 declare(strict_types=1);
+
 namespace App\Support;
+
 use RuntimeException;
 
 /**
@@ -80,6 +83,7 @@ final class Secrets
      * Encrypts stored portal-only credentials that are still plaintext, and re-seals values that open
      * only with APP_KEY_PREVIOUS under the current APP_KEY, in one transaction.
      * Rerunning skips values already sealed with the current key. Returns counts per column, never values.
+     *
      * @return array<string, array{encrypted:int,rekeyed:int,already:int,unreadable:int}>
      */
     public static function encryptStored(): array
@@ -95,19 +99,29 @@ final class Secrets
         try {
             foreach ($targets as [$table, $key, $columns, $where]) {
                 foreach ($columns as $column) {
-                    if (!Db::value('SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND COLUMN_NAME=?', [$table, $column])) { continue; }
+                    if (!Db::value('SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND COLUMN_NAME=?', [$table, $column])) {
+                        continue;
+                    }
                     $counts = ['encrypted' => 0, 'rekeyed' => 0, 'already' => 0, 'unreadable' => 0];
                     foreach (Db::select("SELECT `$key` AS k, `$column` AS v FROM `$table` WHERE $where AND `$column` IS NOT NULL AND `$column` <> '' FOR UPDATE") as $row) {
                         $outcome = 'encrypted';
                         $plain = (string) $row['v'];
                         if (self::isEncrypted($row['v'])) {
-                            if (self::unreadable($row['v'])) { $counts['unreadable']++; continue; }
-                            if (!self::needsRekey($row['v'])) { $counts['already']++; continue; }
+                            if (self::unreadable($row['v'])) {
+                                $counts['unreadable']++;
+                                continue;
+                            }
+                            if (!self::needsRekey($row['v'])) {
+                                $counts['already']++;
+                                continue;
+                            }
                             $outcome = 'rekeyed';
                             $plain = self::reveal($row['v']);
                         }
                         $sealed = self::seal($plain);
-                        if (self::open($sealed, self::key()) !== $plain) { throw new RuntimeException("Round-trip check failed for $table.$column."); }
+                        if (self::open($sealed, self::key()) !== $plain) {
+                            throw new RuntimeException("Round-trip check failed for $table.$column.");
+                        }
                         Db::exec("UPDATE `$table` SET `$column`=? WHERE `$key`=? AND `$column`=?", [$sealed, $row['k'], $row['v']]);
                         $counts[$outcome]++;
                     }
@@ -116,7 +130,9 @@ final class Secrets
             }
             $pdo->commit();
         } catch (\Throwable $e) {
-            if ($pdo->inTransaction()) { $pdo->rollBack(); }
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
             throw $e;
         }
         return $summary;

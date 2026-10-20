@@ -24,9 +24,9 @@ final class ProviderHttp
     }
 
     /**
-     * @param list<string> $hosts approved hosts for this provider ("*.example.com" for account subdomains)
-     * @param array<string, string> $headers
-     * @param string|array{file: string}|null $body raw body, or a file to upload (streamed, never read into memory)
+     * @param  list<string>  $hosts  approved hosts for this provider ("*.example.com" for account subdomains)
+     * @param  array<string, string>  $headers
+     * @param  string|array{file: string}|null  $body  raw body, or a file to upload (streamed, never read into memory)
      * @return array{0: int, 1: string, 2: array<string, string>} status, body, lower-cased response headers
      */
     public static function request(string $method, string $url, array $hosts, array $headers = [], string|array|null $body = null, int $timeout = 20, int $maxResponse = 1048576): array

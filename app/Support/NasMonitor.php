@@ -1,6 +1,9 @@
 <?php
+
 declare(strict_types=1);
+
 namespace App\Support;
+
 use RuntimeException;
 
 /**
@@ -105,7 +108,9 @@ final class NasMonitor
             ['Subscribers', 'PPPoE sessions', self::CISCO_PPPOE_SESSIONS, 'cPppoeSystemCurrSessions'],
             ['Subscribers', 'PPP (Virtual-Access) interfaces', self::IF_TYPE, 'Count of ifType = 23'],
         ];
-        return array_merge($common, match ($vendor) { 'mikrotik' => $mikrotik, 'cisco' => $cisco, default => [] });
+        return array_merge($common, match ($vendor) {
+            'mikrotik' => $mikrotik, 'cisco' => $cisco, default => []
+        });
     }
 
     public static function available(): bool
@@ -126,7 +131,9 @@ final class NasMonitor
     /** Enabled and holding the credentials its version needs. */
     public static function configured(?array $settings): bool
     {
-        if (!$settings || empty($settings['enabled'])) { return false; }
+        if (!$settings || empty($settings['enabled'])) {
+            return false;
+        }
         return ($settings['version'] ?? '') === '3' ? !empty($settings['v3_user']) : !empty($settings['community']);
     }
 
@@ -164,14 +171,22 @@ final class NasMonitor
             throw new RuntimeException('Management host must be an IP address or hostname.');
         }
         $port = (int) ($input['snmp_port'] ?? 161);
-        if ($port < 1 || $port > 65535) { throw new RuntimeException('SNMP port must be between 1 and 65535.'); }
+        if ($port < 1 || $port > 65535) {
+            throw new RuntimeException('SNMP port must be between 1 and 65535.');
+        }
         $version = (string) ($input['snmp_version'] ?? '2c');
-        if (!in_array($version, ['1', '2c', '3'], true)) { throw new RuntimeException('Choose SNMP v3, v2c or v1.'); }
-        if ($version === '3') { SchemaCompatibility::require('snmp_v3'); }
+        if (!in_array($version, ['1', '2c', '3'], true)) {
+            throw new RuntimeException('Choose SNMP v3, v2c or v1.');
+        }
+        if ($version === '3') {
+            SchemaCompatibility::require('snmp_v3');
+        }
         $timeout = max(300, min(5000, (int) ($input['snmp_timeout_ms'] ?? 1500)));
         $secret = static function (string $name, string $label) use ($input): string {
             $value = (string) ($input[$name] ?? '');
-            if (strlen($value) > Secrets::MAX_LENGTH || preg_match('/[\x00-\x1F]/', $value)) { throw new RuntimeException('Invalid ' . $label . ' (at most ' . Secrets::MAX_LENGTH . ' characters).'); }
+            if (strlen($value) > Secrets::MAX_LENGTH || preg_match('/[\x00-\x1F]/', $value)) {
+                throw new RuntimeException('Invalid ' . $label . ' (at most ' . Secrets::MAX_LENGTH . ' characters).');
+            }
             return $value;
         };
         $community = $secret('snmp_community', 'SNMP community');
@@ -188,17 +203,25 @@ final class NasMonitor
                 'v3_priv_password' => $secret('snmp_v3_priv_password', 'privacy password'),
                 'v3_context' => trim((string) ($input['snmp_v3_context'] ?? '')),
             ];
-            if (strlen($v3['v3_context']) > 64) { throw new RuntimeException('SNMPv3 context is too long.'); }
+            if (strlen($v3['v3_context']) > 64) {
+                throw new RuntimeException('SNMPv3 context is too long.');
+            }
             if ($version === '3') {
                 // Blank passwords keep the saved ones; validate the combination that will be used.
                 $effective = $v3;
                 foreach (['v3_auth_password', 'v3_priv_password'] as $field) {
-                    if ($effective[$field] === '') { $effective[$field] = Secrets::reveal($existing[$field] ?? ''); }
+                    if ($effective[$field] === '') {
+                        $effective[$field] = Secrets::reveal($existing[$field] ?? '');
+                    }
                 }
-                if ($enabled || $effective['v3_user'] !== '') { Snmp::validateUsm(self::usm($effective)); }
+                if ($enabled || $effective['v3_user'] !== '') {
+                    Snmp::validateUsm(self::usm($effective));
+                }
             }
         }
-        if ($enabled && $version !== '3' && $community === '' && empty($existing['community'])) { throw new RuntimeException('Enter the SNMP read-only community to enable monitoring.'); }
+        if ($enabled && $version !== '3' && $community === '' && empty($existing['community'])) {
+            throw new RuntimeException('Enter the SNMP read-only community to enable monitoring.');
+        }
 
         $columns = ['enabled' => $enabled, 'host' => $host !== '' ? $host : null, 'port' => $port, 'version' => $version, 'timeout_ms' => $timeout];
         $secrets = ['community' => $community];
@@ -226,7 +249,8 @@ final class NasMonitor
 
     /**
      * Quick reachability check for many NAS devices in parallel (sysUpTime and sysName only).
-     * @param list<array> $rows NAS rows with id and nasname
+     *
+     * @param  list<array>  $rows  NAS rows with id and nasname
      * @return array<int, array{state:string,label:string,class:string,uptime:?int,name:string,latency_ms:?int,error:?string}>
      */
     public static function probeMany(array $rows): array
@@ -238,13 +262,17 @@ final class NasMonitor
             $id = (int) $row['id'];
             $s = $settings[$id] ?? null;
             $result[$id] = ['state' => 'off', 'label' => 'not configured', 'class' => '', 'uptime' => null, 'name' => '', 'latency_ms' => null, 'error' => null];
-            if (!self::configured($s)) { continue; }
+            if (!self::configured($s)) {
+                continue;
+            }
             $targets[$id] = ['host' => ($s['host'] ?: $row['nasname']), 'port' => (int) $s['port'], 'community' => Secrets::reveal($s['community']), 'version' => (string) $s['version'],
                 'usm' => $s['version'] === '3' ? self::usm($s) : []];
         }
         // Longest configured timeout, capped so the health page stays quick.
         $timeout = 0.3;
-        foreach (array_keys($targets) as $id) { $timeout = max($timeout, (int) ($settings[$id]['timeout_ms'] ?? 1500) / 1000); }
+        foreach (array_keys($targets) as $id) {
+            $timeout = max($timeout, (int) ($settings[$id]['timeout_ms'] ?? 1500) / 1000);
+        }
         foreach ($targets ? Snmp::probe($targets, [self::SYS_UPTIME, self::SYS_NAME], min($timeout, 1.5)) : [] as $id => $probe) {
             $uptime = $probe['values'][self::SYS_UPTIME] ?? null;
             $result[$id] = $probe['ok'] && is_numeric($uptime)
@@ -257,6 +285,7 @@ final class NasMonitor
 
     /**
      * One poll. $previous is the last snapshot's counters so interface rates can be derived.
+     *
      * @return array<string, mixed>
      */
     public static function poll(array $nas, array $settings, ?array $previous = null, ?Snmp $client = null): array
@@ -316,7 +345,9 @@ final class NasMonitor
         $snapshot['memory'] = self::storage($values, '65536');
         $snapshot['storage'] = self::storage($values, '131072');
         foreach ([['RouterOS', self::MT_VERSION], ['Board', self::MT_BOARD], ['Serial', self::MT_SERIAL], ['Firmware', self::MT_FIRMWARE]] as [$label, $oid]) {
-            if (($text = self::text($values[$oid])) !== '') { $snapshot['system']['platform'][$label] = $text; }
+            if (($text = self::text($values[$oid])) !== '') {
+                $snapshot['system']['platform'][$label] = $text;
+            }
         }
         if (is_numeric($values[self::MT_DHCP_LEASES])) {
             $snapshot['subscribers'][] = ['DHCP leases', (int) $values[self::MT_DHCP_LEASES], self::MT_DHCP_LEASES];
@@ -334,7 +365,9 @@ final class NasMonitor
             $rows[$index][(int) $column] = $value;
         }
         foreach ($rows as $row) {
-            if (!isset($row[2], $row[3]) || !is_numeric($row[3])) { continue; }
+            if (!isset($row[2], $row[3]) || !is_numeric($row[3])) {
+                continue;
+            }
             $name = self::text($row[2]);
             [$value, $unit] = match ((int) ($row[4] ?? 0)) {
                 1 => [(float) $row[3], '°C'],
@@ -352,16 +385,24 @@ final class NasMonitor
             }
             $snapshot['sensors'][] = self::sensor($label, $value, $unit, self::thresholdState($value, $unit));
         }
-        if ($snapshot['sensors']) { return; }
+        if ($snapshot['sensors']) {
+            return;
+        }
         $values = $client->get([self::MT_TEMPERATURE, self::MT_CPU_TEMPERATURE, self::MT_VOLTAGE, self::MT_PSU1_STATE, self::MT_PSU2_STATE, self::MT_FAN1_SPEED, self::MT_FAN2_SPEED]);
         foreach ([['Board temperature', self::MT_TEMPERATURE, '°C'], ['CPU temperature', self::MT_CPU_TEMPERATURE, '°C'], ['Voltage', self::MT_VOLTAGE, 'V']] as [$label, $oid, $unit]) {
-            if (is_numeric($values[$oid])) { $snapshot['sensors'][] = self::sensor($label, $values[$oid] / 10, $unit, self::thresholdState($values[$oid] / 10, $unit)); }
+            if (is_numeric($values[$oid])) {
+                $snapshot['sensors'][] = self::sensor($label, $values[$oid] / 10, $unit, self::thresholdState($values[$oid] / 10, $unit));
+            }
         }
         foreach ([['Fan 1', self::MT_FAN1_SPEED], ['Fan 2', self::MT_FAN2_SPEED]] as [$label, $oid]) {
-            if (is_numeric($values[$oid])) { $snapshot['sensors'][] = self::sensor($label, (int) $values[$oid], 'RPM', (int) $values[$oid] > 0 ? 'ok' : 'warning'); }
+            if (is_numeric($values[$oid])) {
+                $snapshot['sensors'][] = self::sensor($label, (int) $values[$oid], 'RPM', (int) $values[$oid] > 0 ? 'ok' : 'warning');
+            }
         }
         foreach ([['PSU 1', self::MT_PSU1_STATE], ['PSU 2', self::MT_PSU2_STATE]] as [$label, $oid]) {
-            if (is_numeric($values[$oid])) { $snapshot['sensors'][] = self::sensor($label, (int) $values[$oid] === 1 ? 'ok' : 'failed', '', (int) $values[$oid] === 1 ? 'ok' : 'critical'); }
+            if (is_numeric($values[$oid])) {
+                $snapshot['sensors'][] = self::sensor($label, (int) $values[$oid] === 1 ? 'ok' : 'failed', '', (int) $values[$oid] === 1 ? 'ok' : 'critical');
+            }
         }
     }
 
@@ -370,18 +411,25 @@ final class NasMonitor
         $cpu = [];
         foreach ([['5 seconds', self::CISCO_CPU_5SEC], ['1 minute', self::CISCO_CPU_1MIN], ['5 minutes', self::CISCO_CPU_5MIN]] as [$label, $oid]) {
             $first = array_values(array_filter($client->walk($oid, 16), 'is_numeric'))[0] ?? null;
-            if ($first !== null) { $cpu[$label] = (float) $first; $snapshot['cpu_detail'][] = [$label, $first . ' %']; }
+            if ($first !== null) {
+                $cpu[$label] = (float) $first;
+                $snapshot['cpu_detail'][] = [$label, $first . ' %'];
+            }
         }
         $snapshot['cpu'] = $cpu['1 minute'] ?? $cpu['5 seconds'] ?? $cpu['5 minutes'] ?? null;
 
         $names = $client->walk(self::CISCO_MEMPOOL_NAME, 64);
         foreach ($names as $oid => $name) {
-            if (stripos(self::text($name), 'processor') === false) { continue; }
+            if (stripos(self::text($name), 'processor') === false) {
+                continue;
+            }
             $index = substr($oid, strlen(self::CISCO_MEMPOOL_NAME) + 1);
             $values = $client->get([self::CISCO_MEMPOOL_HC_USED . '.' . $index, self::CISCO_MEMPOOL_HC_FREE . '.' . $index]);
             $used = $values[self::CISCO_MEMPOOL_HC_USED . '.' . $index];
             $free = $values[self::CISCO_MEMPOOL_HC_FREE . '.' . $index];
-            if (is_numeric($used) && is_numeric($free)) { $snapshot['memory'] = ['used' => (float) $used, 'total' => (float) $used + (float) $free]; }
+            if (is_numeric($used) && is_numeric($free)) {
+                $snapshot['memory'] = ['used' => (float) $used, 'total' => (float) $used + (float) $free];
+            }
             break;
         }
         if ($snapshot['memory'] === null) {
@@ -391,20 +439,28 @@ final class NasMonitor
             }
         }
         $sessions = $client->get([self::CISCO_PPPOE_SESSIONS])[self::CISCO_PPPOE_SESSIONS];
-        if (is_numeric($sessions)) { $snapshot['subscribers'][] = ['PPPoE sessions', (int) $sessions, self::CISCO_PPPOE_SESSIONS]; }
+        if (is_numeric($sessions)) {
+            $snapshot['subscribers'][] = ['PPPoE sessions', (int) $sessions, self::CISCO_PPPOE_SESSIONS];
+        }
     }
 
     private static function ciscoHealth(Snmp $client, array &$snapshot): void
     {
-        $state = fn ($value) => match ((int) $value) { 1 => 'ok', 2 => 'warning', 3, 4, 6 => 'critical', default => 'unknown' };
+        $state = fn ($value) => match ((int) $value) {
+            1 => 'ok', 2 => 'warning', 3, 4, 6 => 'critical', default => 'unknown'
+        };
         $temps = self::table($client, [self::CISCO_TEMP_DESCR, self::CISCO_TEMP_VALUE, self::CISCO_TEMP_STATE]);
         foreach ($temps as $row) {
-            if ((int) ($row[2] ?? 0) === 5 || !is_numeric($row[1] ?? null)) { continue; } // notPresent
+            if ((int) ($row[2] ?? 0) === 5 || !is_numeric($row[1] ?? null)) {
+                continue;
+            } // notPresent
             $snapshot['sensors'][] = self::sensor(self::text($row[0] ?? 'Temperature'), (float) $row[1], '°C', $state($row[2] ?? 0));
         }
         foreach ([['Fan', self::CISCO_FAN_DESCR, self::CISCO_FAN_STATE], ['Power supply', self::CISCO_PSU_DESCR, self::CISCO_PSU_STATE]] as [$fallback, $descr, $status]) {
             foreach (self::table($client, [$descr, $status]) as $row) {
-                if ((int) ($row[1] ?? 0) === 5) { continue; }
+                if ((int) ($row[1] ?? 0) === 5) {
+                    continue;
+                }
                 $label = $state($row[1] ?? 0);
                 $snapshot['sensors'][] = self::sensor(self::text($row[0] ?? $fallback) ?: $fallback, $label === 'ok' ? 'normal' : $label, '', $label);
             }
@@ -418,25 +474,37 @@ final class NasMonitor
         $ppp = 0;
         foreach ($types as $oid => $type) {
             $index = substr($oid, strlen(self::IF_TYPE) + 1);
-            if ((int) $type === 23) { $ppp++; }
-            if (in_array((int) $type, self::HIDDEN_IF_TYPES, true)) { continue; }
+            if ((int) $type === 23) {
+                $ppp++;
+            }
+            if (in_array((int) $type, self::HIDDEN_IF_TYPES, true)) {
+                continue;
+            }
             $visible[] = $index;
         }
         $snapshot['subscribers'][] = ['PPP interfaces', $ppp, self::IF_TYPE . ' = 23'];
         $snapshot['hidden_interfaces'] = max(0, count($visible) - self::MAX_INTERFACES);
         $visible = array_slice($visible, 0, self::MAX_INTERFACES);
-        if (!$visible) { return; }
+        if (!$visible) {
+            return;
+        }
         $columns = ['name' => self::IF_NAME, 'alias' => self::IF_ALIAS, 'admin' => self::IF_ADMIN, 'oper' => self::IF_OPER, 'speed' => self::IF_HIGH_SPEED,
             'in' => self::IF_HC_IN, 'out' => self::IF_HC_OUT, 'in_errors' => self::IF_IN_ERRORS, 'out_errors' => self::IF_OUT_ERRORS];
         $oids = [];
-        foreach ($visible as $index) { foreach ($columns as $base) { $oids[] = $base . '.' . $index; } }
+        foreach ($visible as $index) {
+            foreach ($columns as $base) {
+                $oids[] = $base . '.' . $index;
+            }
+        }
         $values = $client->get($oids);
         $now = microtime(true);
         $prevAt = (float) ($previous['polled_at'] ?? 0);
         $elapsed = $prevAt > 0 ? $now - $prevAt : 0;
         foreach ($visible as $index) {
             $row = ['index' => (int) $index];
-            foreach ($columns as $key => $base) { $row[$key] = $values[$base . '.' . $index] ?? null; }
+            foreach ($columns as $key => $base) {
+                $row[$key] = $values[$base . '.' . $index] ?? null;
+            }
             $row['name'] = self::text($row['name']) ?: 'if' . $index;
             $row['alias'] = self::text($row['alias']);
             $row['in_bps'] = $row['out_bps'] = null;
@@ -470,7 +538,9 @@ final class NasMonitor
         $units = $values[self::HR_STORAGE_UNITS . '.' . $index] ?? null;
         $size = $values[self::HR_STORAGE_SIZE . '.' . $index] ?? null;
         $used = $values[self::HR_STORAGE_USED . '.' . $index] ?? null;
-        if (!is_numeric($units) || !is_numeric($size) || !is_numeric($used) || (float) $size <= 0) { return null; }
+        if (!is_numeric($units) || !is_numeric($size) || !is_numeric($used) || (float) $size <= 0) {
+            return null;
+        }
         return ['used' => (float) $used * (float) $units, 'total' => (float) $size * (float) $units];
     }
 
@@ -491,7 +561,9 @@ final class NasMonitor
     /** Device strings may be binary (MACs, serials); show those as hex. */
     private static function text(mixed $value): string
     {
-        if ($value === null) { return ''; }
+        if ($value === null) {
+            return '';
+        }
         $value = (string) $value;
         if ($value !== '' && (!mb_check_encoding($value, 'UTF-8') || preg_match('/[\x00-\x08\x0E-\x1F]/', $value))) {
             return implode(':', str_split(bin2hex($value), 2));

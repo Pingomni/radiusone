@@ -25,7 +25,7 @@ final class NasTables
     private const FDB_STATUS = [1 => 'other', 2 => 'invalid', 3 => 'learned', 4 => 'self', 5 => 'management'];
 
     /**
-     * @param object|null $client anything with Snmp's walk(); tests pass recorded answers
+     * @param  object|null  $client  anything with Snmp's walk(); tests pass recorded answers
      * @return array{columns: list<string>, rows: list<list<string|array{text:string,tone:string}>>, truncated: bool, empty: string, note: string}
      */
     public static function read(array $nas, string $table, ?object $client = null): array
@@ -134,7 +134,8 @@ final class NasTables
 
     /**
      * Walks the given columns of a table; rows keyed by the index part of the OID.
-     * @param list<int> $columns
+     *
+     * @param  list<int>  $columns
      * @return array<string, array<int, mixed>>
      */
     private static function columns(object $snmp, string $entry, array $columns, bool &$truncated = false): array
@@ -195,7 +196,10 @@ final class NasTables
         foreach (array_reverse(array_keys($columns)) as $i) {
             if ($rows && !array_filter($rows, static fn ($r) => $r[$i] !== '-')) {
                 array_splice($columns, $i, 1);
-                $rows = array_map(static function ($r) use ($i) { array_splice($r, $i, 1); return $r; }, $rows);
+                $rows = array_map(static function ($r) use ($i) {
+                    array_splice($r, $i, 1);
+                    return $r;
+                }, $rows);
             }
         }
         return ['columns' => $columns, 'rows' => $rows, 'truncated' => $truncated, 'empty' => $empty, 'note' => $note];
