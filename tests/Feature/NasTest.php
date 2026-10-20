@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Http\Controllers\NasController;
+use App\Http\Support\Nas;
 use App\Support\Db;
 use Tests\TestCase;
 
@@ -104,6 +106,32 @@ final class NasTest extends TestCase
         $this->actingAsOperator();
         $this->post('/nas/save', ['id' => '', 'section' => 'device', 'vendor' => 'pfsense', 'shortname' => 'x', 'nasname' => '10.0.0.9', 'secret' => 's', 'description' => ''])
             ->assertRedirect('/nas/create')->assertSessionHasErrors('vendor');
+    }
+
+    public function test_nas_address_must_be_an_ip_and_a_new_nas_needs_a_secret(): void
+    {
+        $this->actingAsOperator();
+        foreach (['', 'router.example', '-c 100000', '10.0.0.300'] as $address) {
+            $this->post('/nas/save', ['id' => '', 'section' => 'device', 'vendor' => 'mikrotik', 'shortname' => 'x', 'nasname' => $address, 'secret' => 's', 'description' => ''])
+                ->assertRedirect('/nas/create')->assertSessionHasErrors('nasname');
+        }
+        $this->post('/nas/save', ['id' => '', 'section' => 'device', 'vendor' => 'mikrotik', 'shortname' => 'x', 'nasname' => '10.0.0.9', 'secret' => '', 'description' => ''])
+            ->assertRedirect('/nas/create')->assertSessionHasErrors('secret');
+        $this->assertSame(0, (int) Db::value('SELECT COUNT(*) FROM nas'));
+
+        $this->post('/nas/save', ['id' => '', 'section' => 'device', 'vendor' => 'mikrotik', 'shortname' => 'v6', 'nasname' => ' 2001:db8::1 ', 'secret' => 's', 'description' => ''])
+            ->assertSessionHas('flash.type', 'success');
+        $this->assertSame('2001:db8::1', Db::value('SELECT nasname FROM nas'));
+        $this->assertSame('invalid address', Nas::pingStatuses(['-c 100000'])['-c 100000']['label']);
+    }
+
+    public function test_snmp_save_is_guarded_like_the_other_nas_changes(): void
+    {
+        foreach (['save', 'delete', 'snmpSave'] as $action) {
+            $route = app('router')->getRoutes()->getByAction(NasController::class . '@' . $action);
+            $this->assertNotNull($route, $action);
+            $this->assertContains('recent-auth', $route->gatherMiddleware(), $action);
+        }
     }
 
     public function test_snmp_settings_and_no_access_tab(): void

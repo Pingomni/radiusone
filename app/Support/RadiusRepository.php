@@ -224,6 +224,14 @@ final class RadiusRepository
             $vendor = trim((string) ($input['type'] ?? ''));
         }
         $isMikrotik = strtolower($vendor) === 'mikrotik';
+        // FreeRADIUS matches requests on this address, and ping, CoA and the API connect to it.
+        $input['nasname'] = trim((string) ($input['nasname'] ?? ''));
+        if (filter_var($input['nasname'], FILTER_VALIDATE_IP) === false) {
+            throw new RuntimeException('Enter the NAS IP address as an IPv4 or IPv6 address.');
+        }
+        if (!$id && trim((string) ($input['secret'] ?? '')) === '') {
+            throw new RuntimeException('Enter the RADIUS shared secret.');
+        }
         $coaEnabled = self::boolValue($input['coa_enabled'] ?? null);
         $apiEnabled = $isMikrotik ? self::boolValue($input['api_enabled'] ?? null) : 0;
         SchemaCompatibility::require('policy');

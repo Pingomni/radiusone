@@ -35,6 +35,7 @@ final class RequireRecentAuth
             $returnPath = match (true) {
                 $path === '/nas/save' => $id ? '/nas/' . $id . '/edit' : '/nas/create',
                 preg_match('#^/nas/\d+/delete$#', $path) === 1 => '/nas',
+                preg_match('#^/nas/(\d+)/snmp$#', $path, $match) === 1 => '/nas/' . $match[1] . '/edit?tab=snmp',
                 $path === '/settings/users/save' => $id ? '/settings/users/' . $id . '/edit' : '/settings/users/create',
                 str_starts_with($path, '/settings/users/') || str_starts_with($path, '/portal-users/') => '/settings?tab=users',
                 $path === '/settings/notifications/sms-gateway' => '/settings?tab=notifications&view=gateways&gateway=sms',

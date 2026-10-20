@@ -75,6 +75,10 @@ final class Nas
                 $results[$host] = ['ok' => false, 'label' => 'missing host', 'class' => 'warning'];
                 continue;
             }
+            if (filter_var($host, FILTER_VALIDATE_IP) === false) {
+                $results[$host] = ['ok' => false, 'label' => 'invalid address', 'class' => 'warning'];
+                continue;
+            }
             $process = function_exists('proc_open')
                 ? @proc_open(['ping', '-c', '1', '-W', '1', $host], [1 => ['file', '/dev/null', 'w'], 2 => ['file', '/dev/null', 'w']], $pipes)
                 : false;
