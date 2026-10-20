@@ -104,7 +104,7 @@ final class MonitoringController extends Controller
             'nas' => ['id' => (int) $nas['id'], 'name' => (string) ($nas['shortname'] ?: $nas['nasname']), 'ip' => (string) $nas['nasname']],
             'snapshot' => MonitoringData::nasSnapshot($nas),
             'history' => MonitoringData::history($nas, $request->query('range'), $request->query('if')),
-            'vendorLabel' => Nas::VENDORS[$vendor]['label'] ?? 'this device',
+            'vendorLabel' => isset(Nas::VENDORS[$vendor]) ? Nas::vendorLabel($vendor) : 'this device',
             'oids' => array_map(static fn (array $r) => ['group' => (string) $r[0], 'metric' => (string) $r[1], 'oid' => (string) $r[2], 'notes' => (string) $r[3]], NasMonitor::oidReference($vendor)),
             'canManage' => Auth::can('nas.manage'),
             'tables' => $snmp ? NasTables::TABLES : null,

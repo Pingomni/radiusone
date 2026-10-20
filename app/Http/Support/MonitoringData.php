@@ -119,6 +119,7 @@ final class MonitoringData
      * Latest accounting packet per NAS id (accounting may name a NAS by address or short name):
      * the newest open-session update, or the newest stop. Index lookups only (open sessions are few;
      * stops use idx_radacct_nas_stop), so the cost does not grow with the session history.
+     *
      * @return array<int, string>
      */
     private static function lastAccounting(array $nasRows): array
@@ -245,7 +246,7 @@ final class MonitoringData
                 'id' => $id,
                 'name' => $name,
                 'ip' => (string) $nas['nasname'],
-                'vendor' => Nas::VENDORS[strtolower((string) $nas['vendor'])]['label'] ?? (string) $nas['vendor'],
+                'vendor' => Nas::vendorLabel((string) $nas['vendor']),
                 'state' => Present::tag($state, $stateTone),
                 'danger' => $stateTone === 'danger',
                 'radiusDisabled' => empty($nas['enabled']),

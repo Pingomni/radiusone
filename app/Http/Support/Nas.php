@@ -13,8 +13,19 @@ final class Nas
     /** Supported NAS platforms. The key is stored as nas_metadata.vendor and nas.type. */
     public const VENDORS = [
         'mikrotik' => ['label' => 'MikroTik RouterOS', 'summary' => 'PPPoE or local DHCP. Disconnects use RADIUS CoA, or the RouterOS API when switched on.', 'disconnect' => 'coa'],
-        'cisco' => ['label' => 'Cisco IOS XE', 'summary' => 'PPPoE or IPoE/ISG. Disconnects are sent as RADIUS disconnect requests (CoA).', 'disconnect' => 'coa'],
+        // Demo: written from Cisco documentation, not yet tested on a real router.
+        'cisco' => ['label' => 'Cisco IOS XE', 'summary' => 'PPPoE or IPoE/ISG. Disconnects are sent as RADIUS disconnect requests (CoA). Not yet tested on a real Cisco router.', 'disconnect' => 'coa', 'demo' => true],
     ];
+
+    /** Vendor name for lists and monitor pages; untested platforms are marked "(Demo)". */
+    public static function vendorLabel(string $vendor): string
+    {
+        $known = self::VENDORS[strtolower($vendor)] ?? null;
+        if ($known === null) {
+            return $vendor;
+        }
+        return $known['label'] . (!empty($known['demo']) ? ' (Demo)' : '');
+    }
 
     public const ADAPTERS = ['routeros_pppoe' => 'RouterOS PPPoE', 'routeros_dhcp' => 'RouterOS local DHCP', 'iosxe_pppoe' => 'ASR1000 IOS XE PPPoE', 'iosxe_ipoe' => 'ASR1000 IOS XE local DHCP/IPoE'];
 

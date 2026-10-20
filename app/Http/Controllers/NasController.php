@@ -41,7 +41,7 @@ final class NasController extends Controller
                     'id' => (int) $r['id'],
                     'name' => (string) ($r['shortname'] ?: $r['nasname']),
                     'ip' => (string) $r['nasname'],
-                    'vendor' => (string) ($r['vendor'] ?: $r['type']),
+                    'vendor' => Nas::vendorLabel((string) ($r['vendor'] ?: $r['type'])),
                     'enabled' => (bool) $r['enabled'],
                     'update' => $deployed ? Present::tag($r['pending_delete'] ? 'Removed' : 'Up to date', null) : Present::tag('Waiting for update', 'warning'),
                     'disconnect' => $deployed && $r['enabled'] ? Present::nasDisconnect($r) : null,
