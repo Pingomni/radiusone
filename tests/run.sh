@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 # Runs the test suite against a private, throw-away MariaDB (no networking, data in /tmp).
-# FRWEB_TEST_DB_ARGS adds server options, e.g. "--innodb-buffer-pool-size=3G" for tests/Load.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 dir=$(mktemp -d /tmp/frweb-laravel-test.XXXXXXXX)
@@ -11,7 +10,7 @@ cleanup() {
 }
 trap cleanup EXIT
 mariadb-install-db --no-defaults --datadir="$dir/data" --auth-root-authentication-method=normal --skip-test-db >"$dir/install.log" 2>&1
-mariadbd --no-defaults --datadir="$dir/data" --socket="$dir/db.sock" --pid-file="$dir/db.pid" --skip-networking --log-error="$dir/server.log" ${FRWEB_TEST_DB_ARGS:-} &
+mariadbd --no-defaults --datadir="$dir/data" --socket="$dir/db.sock" --pid-file="$dir/db.pid" --skip-networking --log-error="$dir/server.log" &
 pid=$!
 for ((attempt=0; attempt<100; attempt++)); do
   if [[ -S "$dir/db.sock" ]] && mariadb --no-defaults --socket="$dir/db.sock" -u root -e 'CREATE DATABASE IF NOT EXISTS frweb_test' >/dev/null 2>&1; then break; fi
