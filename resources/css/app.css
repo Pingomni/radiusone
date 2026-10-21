@@ -1488,6 +1488,15 @@ td .list-menu > summary:hover { border-color: var(--line); background: var(--sur
 .usage-chart:has(.is-active) g:not(.is-active) .usage-bar { opacity: .35; }
 .usage-empty { padding: var(--sp-4) 0; color: var(--text-muted); font-size: var(--fs-sm); text-align: center; }
 .usage-note { color: var(--text-muted); font-size: var(--fs-xs); }
+.usage-cap { display: grid; gap: 6px; padding: var(--sp-2) 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); font-size: var(--fs-sm); }
+.usage-cap strong { color: var(--text-strong); font-variant-numeric: tabular-nums; }
+.usage-cap-percent { float: right; color: var(--text-muted); font-weight: 600; font-variant-numeric: tabular-nums; }
+.usage-cap-bar { height: 6px; border-radius: 3px; background: var(--neutral-bg); overflow: hidden; }
+.usage-cap-bar > span { display: block; height: 100%; border-radius: 3px; background: var(--accent-solid); }
+.usage-cap-bar.warning > span { background: var(--warning-solid); }
+.usage-cap-bar.danger > span { background: var(--danger-solid); }
+.usage-cap-note { color: var(--text-muted); font-size: var(--fs-xs); }
+.usage-cap-renews { white-space: nowrap; }
 @media (prefers-reduced-motion: reduce) { .usage-bar { transition: none; } }
 .overview > .overview-live { display: flex; justify-content: flex-end; margin: 0 calc(var(--sp-3) * -1); padding: 6px var(--sp-3) 0; }
 .overview-head { margin: 0 calc(var(--sp-3) * -1) var(--sp-1); }

@@ -5,7 +5,7 @@ import { Badge, Panel } from '@/components/ui';
 import AppLayout from '@/layouts/AppLayout';
 import { useCan } from '@/lib/auth';
 
-type Service = { id: number; name: string; group: string; download: string; upload: string; expired: string; price: string; enabled: boolean; clients: number };
+type Service = { id: number; name: string; group: string; download: string; upload: string; expired: string; price: string; cap: string; enabled: boolean; clients: number };
 
 function DeleteControl({ s }: { s: Service }) {
     if (s.clients > 0) {
@@ -43,7 +43,7 @@ export default function Services({ services }: { services: Service[] }) {
                         { header: 'Upload', cell: (s) => s.upload },
                         { header: 'Expired service', cell: (s) => s.expired },
                         { header: 'Price', cell: (s) => s.price },
-                        { header: 'Data cap', cell: () => 'Unavailable' },
+                        { header: 'Data cap', cell: (s) => s.cap },
                         { header: 'Status', cell: (s) => (s.enabled ? <Badge tone="success">enabled</Badge> : <Badge tone="danger">disabled</Badge>) },
                         { header: 'Clients', cell: (s) => s.clients },
                         {

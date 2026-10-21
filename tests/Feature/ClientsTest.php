@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Support\Db;
+use App\Support\UsageCaps;
 use Illuminate\Http\UploadedFile;
 use Tests\TestCase;
 
@@ -161,6 +162,7 @@ final class ClientsTest extends TestCase
             ['alice', date('Y-m-d', strtotime($today . ' -60 days')) . ' 12:00:00', 9000, 900], ['bob', $today . ' 10:00:00', 7000, 700]] as [$user, $when, $down, $up]) {
             $this->insertRow('radacct', ['username' => $user, 'acctstarttime' => $when, 'acctupdatetime' => $when, 'acctoutputoctets' => $down, 'acctinputoctets' => $up]);
         }
+        UsageCaps::collect();
 
         $this->get('/clients/alice/edit')->assertOk()->assertInertia(fn ($page) => $page
             ->where('client.usage.range', '30d')

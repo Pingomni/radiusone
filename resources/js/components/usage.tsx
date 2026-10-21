@@ -6,6 +6,8 @@ export interface UsageHistory {
     monthly: boolean;
     points: { key: string; down: number; up: number }[];
     total: { down: number; up: number };
+    /** The current cap cycle, when the client's plan has a data cap. */
+    cycle: { start: string; end: string; cap: number; used: number; capped: boolean; action: string; slowPlan: string | null } | null;
 }
 
 const RANGES: [UsageHistory['range'], string][] = [['7d', '7 days'], ['30d', '30 days'], ['12m', '12 months']];
@@ -14,6 +16,30 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', '
 /** "2026-10" → "Oct 2026"; days stay ISO like the rest of the portal. */
 function bucketLabel(key: string, monthly: boolean): string {
     return monthly ? `${MONTHS[Number(key.slice(5, 7)) - 1]} ${key.slice(0, 4)}` : key;
+}
+
+/** Used of the plan's data cap this cycle, with the day it renews and whether the client is slowed down. */
+function CapMeter({ cycle }: { cycle: NonNullable<UsageHistory['cycle']> }) {
+    const percent = Math.min(999, Math.floor((cycle.used * 100) / Math.max(1, cycle.cap)));
+    const tone = percent >= 100 ? 'danger' : percent >= 80 ? 'warning' : '';
+    const renews = new Date(`${cycle.end}T00:00:00Z`);
+    renews.setUTCDate(renews.getUTCDate() + 1);
+    return (
+        <div className="usage-cap">
+            <p>
+                <strong>{bytes(cycle.used)}</strong> of {bytes(cycle.cap)} this cycle <span className="usage-cap-percent">{percent}%</span>
+            </p>
+            <div className={`usage-cap-bar ${tone}`.trim()} role="meter" aria-label="Data cap used this cycle" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.min(100, percent)}>
+                <span style={{ width: `${Math.min(100, percent)}%` }} />
+            </div>
+            <p className="usage-cap-note">
+                {cycle.capped
+                    ? <span className="badge warning">Slowed down{cycle.slowPlan ? ` to ${cycle.slowPlan}` : ''}</span>
+                    : cycle.action === 'throttle' ? 'Slows down at 100%.' : 'Notify only at 100%.'}
+                {' '}<span className="usage-cap-renews">Renews {renews.toISOString().slice(0, 10)}.</span>
+            </p>
+        </div>
+    );
 }
 
 /** Bar with only its top corners rounded: the bottom stays square on the baseline (or on the bar below). */
@@ -89,6 +115,7 @@ export function UsageCard({ username, initial }: { username: string; initial: Us
                     <li><span className="usage-swatch usage-down" aria-hidden="true" />Download <strong>{bytes(data.total.down)}</strong></li>
                     <li><span className="usage-swatch usage-up" aria-hidden="true" />Upload <strong>{bytes(data.total.up)}</strong></li>
                 </ul>
+                {data.cycle && <CapMeter cycle={data.cycle} />}
                 {empty ? (
                     <p className="usage-empty">No traffic recorded in this period.</p>
                 ) : (
@@ -137,7 +164,7 @@ export function UsageCard({ username, initial }: { username: string; initial: Us
                     </>
                 )}
                 {failed && <p className="field-error">Could not load this period. Try again.</p>}
-                <p className="usage-note">Each session counts on the {data.monthly ? 'month' : 'day'} it last reported.</p>
+                <p className="usage-note">Updated every 5 minutes from RADIUS accounting.</p>
             </div>
         </section>
     );

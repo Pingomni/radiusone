@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Support;
 
+use App\Http\Support\Format;
 use App\Http\Support\MonitoringData;
 use App\Http\Support\Present;
 use InvalidArgumentException;
@@ -324,6 +325,15 @@ final class AdminAlerts
         $out[] = 'RADIUS, LAST 24 HOURS';
         $out[] = '- Logins accepted: ' . $auth['accepts'];
         $out[] = '- Logins rejected: ' . $auth['rejects'];
+
+        $capped = Db::select('SELECT c.username, u.used_bytes, u.cap_bytes, u.capped FROM usage_cycles u JOIN customer_profiles c ON c.id = u.customer_id WHERE u.reached = 1 ORDER BY u.used_bytes DESC LIMIT 20');
+        if ($capped) {
+            $out[] = '';
+            $out[] = 'DATA CAPS REACHED THIS CYCLE (' . count($capped) . (count($capped) === 20 ? '+' : '') . ')';
+            foreach ($capped as $c) {
+                $out[] = '- ' . $c['username'] . ': ' . Format::bytes((int) $c['used_bytes']) . ' of ' . Format::bytes((int) $c['cap_bytes']) . ($c['capped'] ? ', slowed down' : '');
+            }
+        }
 
         $out[] = '';
         $out[] = 'NAS DEVICES (' . count($overview['nas']) . ')';

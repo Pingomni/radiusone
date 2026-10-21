@@ -25,6 +25,7 @@ use App\Support\RadiusRepository;
 use App\Support\SchemaCompatibility;
 use App\Support\SessionDisconnect;
 use App\Support\SubscriberPolicy;
+use App\Support\UsageCaps;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -159,7 +160,7 @@ final class ClientController extends Controller
             'username' => (string) $row['username'],
             'header' => Clients::header($row, $planNames, $openInvoices),
             'overview' => Clients::overview($row),
-            'usage' => $this->usageHistory($ids, '30d'),
+            'usage' => $this->usageHistory($ids, '30d', (int) $row['id']),
             'weeklyTraffic' => array_reverse(array_map(static fn (array $r) => ['day' => (string) $r['traffic_time'], 'down' => (int) $r['down'], 'up' => (int) $r['up']], Db::select(
                 'SELECT DATE(COALESCE(acctupdatetime, acctstoptime, acctstarttime)) AS traffic_time, COALESCE(SUM(acctoutputoctets), 0) AS down, COALESCE(SUM(acctinputoctets), 0) AS up
                  FROM radacct WHERE ' . $in . ' AND COALESCE(acctupdatetime, acctstoptime, acctstarttime) >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
@@ -245,40 +246,39 @@ final class ClientController extends Controller
     /** Download and upload per day (7 or 30 days) or per month (12 months), for the client page's Usage card. */
     public function usage(Request $request, string $username): JsonResponse
     {
-        abort_if(!Db::value('SELECT 1 FROM customer_profiles WHERE username = ?', [$username]), 404, 'Client not found.');
+        $id = Db::value('SELECT id FROM customer_profiles WHERE username = ?', [$username]);
+        abort_if(!$id, 404, 'Client not found.');
         $range = (string) $request->query('range', '30d');
         abort_unless(isset(self::USAGE_RANGES[$range]), 404);
-        return response()->json($this->usageHistory(ClientQuery::usernames($username), $range))->header('Cache-Control', 'no-store');
+        return response()->json($this->usageHistory(ClientQuery::usernames($username), $range, (int) $id))->header('Cache-Control', 'no-store');
     }
 
     private const USAGE_RANGES = ['7d' => 7, '30d' => 30, '12m' => 12];
 
     /**
-     * RADIUS counters are per session, so each session counts on the day (or month) it last reported,
-     * like the Accounting tab. Buckets come from the database clock, which stored the times.
+     * From usage_daily (UsageCaps::collect, every five minutes): traffic on the day it happened, across
+     * the client's current and former usernames. Buckets come from the database clock.
      *
      * @param  list<string>  $ids
+     * @return array{range: string, monthly: bool, points: list<array{key: string, down: int, up: int}>, total: array{down: int, up: int}, cycle: array<string, mixed>|null}
      */
-    private function usageHistory(array $ids, string $range): array
+    private function usageHistory(array $ids, string $range, int $customerId): array
     {
         $count = self::USAGE_RANGES[$range];
         $monthly = $range === '12m';
         $in = ClientQuery::inUsernames('username', $ids);
-        $when = 'COALESCE(acctupdatetime, acctstoptime, acctstarttime)';
-        $today = (string) Db::value('SELECT CURDATE()');
-        $from = $monthly
-            ? date('Y-m-01', strtotime(substr($today, 0, 7) . '-01 -' . ($count - 1) . ' months'))
-            : date('Y-m-d', strtotime($today . ' -' . ($count - 1) . ' days'));
-        $key = $monthly ? "DATE_FORMAT($when, '%Y-%m')" : "DATE($when)";
+        $today = new \DateTimeImmutable((string) Db::value('SELECT CURDATE()'));
+        $first = $monthly ? $today->modify('first day of this month')->modify('-' . ($count - 1) . ' months') : $today->modify('-' . ($count - 1) . ' days');
+        $from = $first->format('Y-m-d');
+        $key = $monthly ? "DATE_FORMAT(day, '%Y-%m')" : 'day';
         $rows = Db::select(
-            "SELECT $key AS bucket, COALESCE(SUM(acctoutputoctets), 0) AS down, COALESCE(SUM(acctinputoctets), 0) AS up
-             FROM radacct WHERE $in AND $when >= ? GROUP BY bucket",
+            "SELECT $key AS bucket, SUM(down) AS down, SUM(up) AS up FROM usage_daily WHERE $in AND day >= ? GROUP BY bucket",
             [...$ids, $from]
         );
         $found = array_column($rows, null, 'bucket');
         $points = [];
         for ($i = 0; $i < $count; $i++) {
-            $bucket = $monthly ? date('Y-m', strtotime("$from +$i months")) : date('Y-m-d', strtotime("$from +$i days"));
+            $bucket = $monthly ? $first->modify("+$i months")->format('Y-m') : $first->modify("+$i days")->format('Y-m-d');
             $points[] = ['key' => $bucket, 'down' => (int) ($found[$bucket]['down'] ?? 0), 'up' => (int) ($found[$bucket]['up'] ?? 0)];
         }
         return [
@@ -286,6 +286,7 @@ final class ClientController extends Controller
             'monthly' => $monthly,
             'points' => $points,
             'total' => ['down' => array_sum(array_column($points, 'down')), 'up' => array_sum(array_column($points, 'up'))],
+            'cycle' => UsageCaps::summary($customerId),
         ];
     }
 

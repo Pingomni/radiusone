@@ -15,6 +15,8 @@ Schedule::command('frweb:poll-snmp')->everyMinute()->runInBackground()->appendOu
 // FreeRADIUS loads the NAS list when it starts: NAS saved before that are in effect.
 Schedule::command('frweb:mark-nas-applied --auto')->everyMinute()->runInBackground()->appendOutputTo($log('nas-applied'));
 Schedule::command('frweb:admin-alerts')->everyMinute()->runInBackground()->appendOutputTo($log('admin-alerts'));
+// Daily usage per client from RADIUS counters, then data caps (messages; slow-down via the expiry job).
+Schedule::command('frweb:collect-usage')->everyFiveMinutes()->runInBackground()->appendOutputTo($log('usage'));
 Schedule::command('frweb:generate-billing')->dailyAt('03:15')->appendOutputTo($log('billing'));
 // Needs DELETE on job_runs (ops/install/grants.sql).
 Schedule::command('frweb:prune-job-runs')->dailyAt('03:30')->appendOutputTo($log('maintenance'));

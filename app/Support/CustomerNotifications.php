@@ -10,8 +10,9 @@ use RuntimeException;
 /** Business events and reviewed bulk messages share one durable, immutable outbox. */
 final class CustomerNotifications
 {
-    public const LABELS = ['welcome' => 'Welcome', 'extended' => 'Service extended', 'custom' => 'Custom'];
-    public const TOKENS = ['name', 'username', 'service', 'expiry', 'app_name', 'phone', 'email'];
+    public const LABELS = ['welcome' => 'Welcome', 'extended' => 'Service extended', 'usage_warning' => 'Data cap 80% used', 'usage_reached' => 'Data cap reached', 'custom' => 'Custom'];
+    /** {used} {cap} {percent} {resets} are filled for the data-cap messages and empty elsewhere. */
+    public const TOKENS = ['name', 'username', 'service', 'expiry', 'app_name', 'phone', 'email', 'used', 'cap', 'percent', 'resets'];
 
     public static function templates(): array
     {
@@ -22,6 +23,8 @@ final class CustomerNotifications
         $defaults = [
             'welcome' => ['Welcome to {app_name}', "Hello {name},\n\nWelcome! Your {service} internet service is now active.\nUsername: {username}\nService valid until: {expiry}\n\nThank you for choosing {app_name}."],
             'extended' => ['Your service has been extended', "Hello {name},\n\nYour {service} internet service has been extended until {expiry}.\n\nThank you,\n{app_name}"],
+            'usage_warning' => ['You have used {percent}% of your data', "Hello {name},\n\nYou have used {used} of the {cap} included in your {service} plan this period ({percent}%). Your allowance renews on {resets}.\n\n{app_name}"],
+            'usage_reached' => ['You have reached your data limit', "Hello {name},\n\nYou have used all {cap} included in your {service} plan this period. Your allowance renews on {resets}; until then your speed may be reduced.\n\n{app_name}"],
             'custom' => ['An update from {app_name}', 'Hello {name}, '],
         ];
         $result = [];
@@ -123,6 +126,17 @@ final class CustomerNotifications
         self::automatic('extended', $id, 'extended:' . $id . ':' . $after);
     }
 
+    /**
+     * Data-cap message for one cycle (key usage_warning or usage_reached); sent once per cycle.
+     *
+     * @param  array<string, string>  $values
+     */
+    public static function usage(string $key, int $id, string $cycleStart, array $values): void
+    {
+        self::requireTransaction();
+        self::automatic($key, $id, $key . ':' . $id . ':' . $cycleStart, $values);
+    }
+
     /** Called only inside the transaction that records verified activation. */
     public static function activated(int $subscriptionId): void
     {
@@ -144,7 +158,8 @@ final class CustomerNotifications
         }
     }
 
-    private static function automatic(string $key, int $id, string $eventKey): void
+    /** @param  array<string, string>  $values */
+    private static function automatic(string $key, int $id, string $eventKey, array $values = []): void
     {
         $event = self::event($key, $eventKey, null);
         if ($event === null) {
@@ -155,7 +170,7 @@ final class CustomerNotifications
             return;
         }
         $template = self::templates()[$key];
-        NotificationService::withSettings(function () use ($event, $c, $template): void {
+        NotificationService::withSettings(function () use ($event, $c, $template, $values): void {
             foreach (['email', 'sms'] as $channel) {
                 if ($template[$channel . '_enabled'] !== '1') {
                     continue;
@@ -164,7 +179,7 @@ final class CustomerNotifications
                 if (!self::ready($channel)) {
                     $reason = 'Gateway disabled or incomplete';
                 }
-                $item = self::message($c, $channel, $template['subject'], $template[$channel . '_body']);
+                $item = self::message($c, $channel, $template['subject'], $template[$channel . '_body'], $values);
                 self::insert($event, $item, $reason);
             }
         });
@@ -177,11 +192,13 @@ final class CustomerNotifications
         return $changed ? (int) Db::pdo()->lastInsertId() : null;
     }
 
-    private static function message(array $c, string $channel, string $subject, string $body): array
+    /** @param  array<string, string>  $values */
+    private static function message(array $c, string $channel, string $subject, string $body, array $values = []): array
     {
         [$recipient,$reason] = self::eligibility($c, $channel);
-        $renderedSubject = $channel === 'email' ? NotificationService::applyTemplate($subject, $c, [], false) : '';
-        $renderedBody = NotificationService::applyTemplate($body, $c, [], false);
+        $values += ['used' => '', 'cap' => '', 'percent' => '', 'resets' => ''];
+        $renderedSubject = $channel === 'email' ? NotificationService::applyTemplate($subject, $c, $values, false) : '';
+        $renderedBody = NotificationService::applyTemplate($body, $c, $values, false);
         if (strlen($renderedSubject) > 998 || strlen($renderedBody) > 60000) {
             throw new InvalidArgumentException('Personalized message is too long.');
         }

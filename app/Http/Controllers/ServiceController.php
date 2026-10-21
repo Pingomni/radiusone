@@ -11,6 +11,7 @@ use App\Support\Currency;
 use App\Support\Db;
 use App\Support\RadiusRepository;
 use App\Support\StaticIpPool;
+use App\Support\UsageCaps;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -23,12 +24,12 @@ final class ServiceController extends Controller
 {
     /** Plan fields the form edits or carries through unchanged (legacy hidden inputs). */
     private const SERVICE_FIELDS = ['name', 'group_name', 'description', 'download_speed', 'upload_speed', 'burst_limit', 'burst_threshold', 'burst_time',
-        'priority', 'ip_mode', 'ip_pool', 'session_timeout', 'idle_timeout', 'simultaneous_use', 'download_quota', 'upload_quota', 'total_quota',
+        'priority', 'ip_mode', 'ip_pool', 'session_timeout', 'idle_timeout', 'simultaneous_use', 'download_quota', 'upload_quota', 'total_quota', 'cap_action', 'cap_service_group',
         'expiration_behavior', 'billing_mode', 'expired_service_group', 'price', 'currency', 'custom_group_attrs'];
 
     public function index(): Response
     {
-        $rows = Db::select('SELECT s.*, e.name AS expired_service_name, COUNT(c.id) AS clients FROM service_metadata s LEFT JOIN service_metadata e ON e.group_name=s.expired_service_group LEFT JOIN customer_profiles c ON c.service_group=s.group_name GROUP BY s.id, e.name ORDER BY s.name');
+        $rows = Db::select('SELECT s.*, e.name AS expired_service_name, slow.name AS cap_service_name, COUNT(c.id) AS clients FROM service_metadata s LEFT JOIN service_metadata e ON e.group_name=s.expired_service_group LEFT JOIN service_metadata slow ON slow.group_name=s.cap_service_group LEFT JOIN customer_profiles c ON c.service_group=s.group_name GROUP BY s.id, e.name, slow.name ORDER BY s.name');
         return Inertia::render('services/Index', [
             'services' => array_map(static fn (array $r) => [
                 'id' => (int) $r['id'],
@@ -38,6 +39,7 @@ final class ServiceController extends Controller
                 'upload' => (string) $r['upload_speed'],
                 'expired' => (string) ($r['expired_service_name'] ?: ($r['expired_service_group'] ?: '-')),
                 'price' => $r['price'] . ' ' . $r['currency'],
+                'cap' => UsageCaps::capBytes($r['total_quota']) === 0 ? 'No cap' : (0 + $r['total_quota']) . ' GB, ' . ($r['cap_action'] === 'throttle' ? 'then ' . ($r['cap_service_name'] ?: $r['cap_service_group']) : 'notify only'),
                 'enabled' => (bool) $r['enabled'],
                 'clients' => (int) $r['clients'],
             ], $rows),
@@ -58,12 +60,13 @@ final class ServiceController extends Controller
         }
         $values = ['id' => $r ? (int) $r['id'] : ''] + $values + ['enabled' => $r ? (bool) $r['enabled'] : true];
         if (!$r) {
-            $values = array_merge($values, ['ip_mode' => 'pool', 'simultaneous_use' => '1', 'billing_mode' => 'prepaid', 'price' => '0.00', 'currency' => Currency::code()]);
+            $values = array_merge($values, ['cap_action' => 'notify', 'ip_mode' => 'pool', 'simultaneous_use' => '1', 'billing_mode' => 'prepaid', 'price' => '0.00', 'currency' => Currency::code()]);
         }
         return Inertia::render('services/Form', [
             'service' => $values,
             'clientCount' => $r ? (int) Db::value('SELECT COUNT(*) FROM customer_profiles WHERE service_group=?', [$r['group_name']]) : null,
             'expiredOptions' => $expiredOptions,
+            'capOptions' => array_diff_key($expiredOptions, ['' => true]),
             'canManage' => Auth::can('services.manage'),
         ]);
     }

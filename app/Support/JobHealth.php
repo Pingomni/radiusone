@@ -16,6 +16,7 @@ final class JobHealth
         'expiry' => ['Expiry and policy publication', 60, 'Expires services and publishes access policies to RADIUS.'],
         'billing' => ['Recurring billing', 86400, 'Creates recurring invoices once a day.'],
         'customer-notifications' => ['Customer messages', 60, 'Sends queued customer email and SMS.'],
+        'usage' => ['Usage and data caps', 300, 'Records daily download/upload and applies plan data caps.'],
         'notifications' => ['Expiry reminders (legacy)', 300, 'Older expiry-reminder sender.'],
     ];
 

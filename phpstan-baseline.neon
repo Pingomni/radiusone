@@ -1579,7 +1579,7 @@ parameters:
 			path: app/Support/InvoiceQuery.php
 
 		-
-			message: '#^Method App\\Support\\JobHealth\:\:all\(\) should return array\<string, array\{label\: string, state\: string, ago\: int\|null, detail\: string, does\: string\}\> but returns array\{expiry\?\: array, billing\?\: array, customer\-notifications\?\: array, notifications\?\: array, snmp\: array, network\: array\{label\: ''Network worker'', does\: ''Sends queued router…'', ago\: null, state\: ''never'', detail\: ''Not set up \(policy…''\}\|array\{state\: ''idle''\|''running''\|''stuck'', detail\: non\-falsy\-string, label\: ''Network worker'', does\: ''Sends queued router…'', ago\: null\}\}\.$#'
+			message: '#^Method App\\Support\\JobHealth\:\:all\(\) should return array\<string, array\{label\: string, state\: string, ago\: int\|null, detail\: string, does\: string\}\> but returns array\{expiry\?\: array, billing\?\: array, customer\-notifications\?\: array, usage\?\: array, notifications\?\: array, snmp\: array, network\: array\{label\: ''Network worker'', does\: ''Sends queued router…'', ago\: null, state\: ''never'', detail\: ''Not set up \(policy…''\}\|array\{state\: ''idle''\|''running''\|''stuck'', detail\: non\-falsy\-string, label\: ''Network worker'', does\: ''Sends queued router…'', ago\: null\}\}\.$#'
 			identifier: return.type
 			count: 1
 			path: app/Support/JobHealth.php

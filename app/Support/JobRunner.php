@@ -11,11 +11,15 @@ final class JobRunner
 {
     public static function run(string $job, Closure $work): array
     {
-        SchemaCompatibility::require($job === 'customer-notifications' ? 'notifications' : ($job === 'expiry' ? 'policy' : 'billing'));
-        if (!in_array($job, ['billing', 'expiry', 'notifications', 'customer-notifications'], true)) {
+        SchemaCompatibility::require(match ($job) {
+            'customer-notifications' => 'notifications', 'expiry' => 'policy', 'usage' => 'usage', default => 'billing'
+        });
+        if (!in_array($job, ['billing', 'expiry', 'notifications', 'customer-notifications', 'usage'], true)) {
             throw new RuntimeException('Unknown lifecycle job.');
         }
-        $lock = (in_array($job, ['notifications', 'customer-notifications'], true) ? 'frweb:' . $job . ':' : 'frweb:lifecycle:') . substr(hash('sha256', (string) Db::value('SELECT DATABASE()')), 0, 40);
+        // Usage has its own lock: it may run next to billing and expiry (it only marks subscriptions for them).
+        $own = in_array($job, ['notifications', 'customer-notifications', 'usage'], true);
+        $lock = ($own ? 'frweb:' . $job . ':' : 'frweb:lifecycle:') . substr(hash('sha256', (string) Db::value('SELECT DATABASE()')), 0, 40);
         $acquired = Db::value('SELECT GET_LOCK(?,0)', [$lock]);
         if ($acquired === null || $acquired === false) {
             throw new RuntimeException('Lifecycle lock unavailable.');
@@ -27,7 +31,7 @@ final class JobRunner
         $id = null;
         try {
             // No previous holder is alive once this session owns the shared lock.
-            Db::exec('UPDATE job_runs SET state="failed",finished_at=NOW(),error_class="InterruptedWorker" WHERE state="running" AND ' . (in_array($job, ['notifications', 'customer-notifications'], true) ? 'job_name="' . $job . '"' : 'job_name IN ("billing","expiry")'));
+            Db::exec('UPDATE job_runs SET state="failed",finished_at=NOW(),error_class="InterruptedWorker" WHERE state="running" AND ' . ($own ? 'job_name="' . $job . '"' : 'job_name IN ("billing","expiry")'));
             Db::exec('INSERT INTO job_runs (job_name,state,started_at) VALUES (?,"running",NOW())', [$job]);
             $id = (int) Db::pdo()->lastInsertId();
             $summary = $work();

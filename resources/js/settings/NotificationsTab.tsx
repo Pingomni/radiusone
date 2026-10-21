@@ -177,6 +177,8 @@ function Gateways({ n }: { n: Notifications }) {
 const TEMPLATE_DESCRIPTIONS: Record<string, string> = {
     welcome: 'Sent once, after a new customer’s first verified service activation.',
     extended: 'Sent when a saved renewal or expiry change extends the service end date.',
+    usage_warning: 'Sent once per cycle when a customer has used 80% of their plan’s data cap.',
+    usage_reached: 'Sent once per cycle when a customer reaches their plan’s data cap.',
     custom: 'Your starting point for announcements and bulk messages.',
 };
 

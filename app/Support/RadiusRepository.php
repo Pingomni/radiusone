@@ -172,6 +172,17 @@ final class RadiusRepository
             if ($expiredGroup !== '' && !self::serviceIsEnabled($expiredGroup, $id)) {
                 throw new RuntimeException('Select an enabled expired service, or leave it blank.');
             }
+            $quota = trim((string) ($input['total_quota'] ?? ''));
+            if ($quota !== '' && (!is_numeric($quota) || (float) $quota <= 0 || (float) $quota > 1000000)) {
+                throw new RuntimeException('Enter the data cap in GB (a number above 0), or leave it blank for no cap.');
+            }
+            $input['total_quota'] = $quota === '' ? null : $quota;
+            $input['cap_action'] = ($input['cap_action'] ?? 'notify') === 'throttle' && $quota !== '' ? 'throttle' : 'notify';
+            $capGroup = $input['cap_action'] === 'throttle' ? trim((string) ($input['cap_service_group'] ?? '')) : '';
+            if ($input['cap_action'] === 'throttle' && ($capGroup === '' || $capGroup === $group || !self::serviceIsEnabled($capGroup, $id))) {
+                throw new RuntimeException('Choose the enabled plan to slow customers down to when they reach the cap.');
+            }
+            $input['cap_service_group'] = $capGroup;
             $download = Adapter::bps($input['download_speed'] ?? null);
             $upload = Adapter::bps($input['upload_speed'] ?? null);
             if (($download === null) !== ($upload === null)) {
@@ -190,7 +201,7 @@ final class RadiusRepository
                     self::assertServiceUnreferenced($oldGroup);
                 }
                 Db::exec(
-                    'UPDATE service_metadata SET group_name=?, name=?, description=?, enabled=?, download_speed=?, upload_speed=?, mikrotik_rate_limit=?, burst_limit=?, burst_threshold=?, burst_time=?, priority=?, ip_mode=?, ip_pool=?, static_ip_pool=?, session_timeout=?, idle_timeout=?, simultaneous_use=?, download_quota=?, upload_quota=?, total_quota=?, expiration_behavior=?, billing_mode=?, expired_service_group=?, price=?, currency=?, billing_period=?, custom_group_attrs=?, updated_at=NOW() WHERE id=?',
+                    'UPDATE service_metadata SET group_name=?, name=?, description=?, enabled=?, download_speed=?, upload_speed=?, mikrotik_rate_limit=?, burst_limit=?, burst_threshold=?, burst_time=?, priority=?, ip_mode=?, ip_pool=?, static_ip_pool=?, session_timeout=?, idle_timeout=?, simultaneous_use=?, download_quota=?, upload_quota=?, total_quota=?, cap_action=?, cap_service_group=?, expiration_behavior=?, billing_mode=?, expired_service_group=?, price=?, currency=?, billing_period=?, custom_group_attrs=?, updated_at=NOW() WHERE id=?',
                     self::serviceParams($input, [$id])
                 );
                 if ($oldGroup !== $group) {
@@ -199,13 +210,14 @@ final class RadiusRepository
                     }
                     Db::exec('UPDATE radusergroup SET groupname = ? WHERE groupname = ?', [$group, $oldGroup]);
                     Db::exec('UPDATE service_metadata SET expired_service_group = ? WHERE expired_service_group = ?', [$group, $oldGroup]);
+                    Db::exec('UPDATE service_metadata SET cap_service_group = ? WHERE cap_service_group = ?', [$group, $oldGroup]);
                     Db::exec('DELETE FROM radgroupcheck WHERE groupname = ?', [$oldGroup]);
                     Db::exec('DELETE FROM radgroupreply WHERE groupname = ?', [$oldGroup]);
                 }
             } else {
                 Db::exec(
-                    'INSERT INTO service_metadata (group_name, name, description, type, enabled, download_speed, upload_speed, mikrotik_rate_limit, burst_limit, burst_threshold, burst_time, priority, ip_mode, ip_pool, static_ip_pool, session_timeout, idle_timeout, simultaneous_use, download_quota, upload_quota, total_quota, expiration_behavior, billing_mode, expired_service_group, price, currency, billing_period, custom_group_attrs, created_at, updated_at)
-                     VALUES (?, ?, ?, "PPPoE", ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())',
+                    'INSERT INTO service_metadata (group_name, name, description, type, enabled, download_speed, upload_speed, mikrotik_rate_limit, burst_limit, burst_threshold, burst_time, priority, ip_mode, ip_pool, static_ip_pool, session_timeout, idle_timeout, simultaneous_use, download_quota, upload_quota, total_quota, cap_action, cap_service_group, expiration_behavior, billing_mode, expired_service_group, price, currency, billing_period, custom_group_attrs, created_at, updated_at)
+                     VALUES (?, ?, ?, "PPPoE", ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())',
                     self::serviceParams($input)
                 );
                 $id = (int) $pdo->lastInsertId();
@@ -312,6 +324,9 @@ final class RadiusRepository
             if (Db::value("SELECT COUNT(*) FROM $table WHERE $column=?", [$group])) {
                 throw new RuntimeException('Referenced services cannot be deleted or disabled.');
             }
+        }
+        if (Db::value('SELECT COUNT(*) FROM service_metadata WHERE cap_service_group=? AND cap_action="throttle"', [$group])) {
+            throw new RuntimeException('This plan is the slow-down plan of a data cap; choose another one there first.');
         }
     }
 
@@ -488,6 +503,11 @@ final class RadiusRepository
                 return $expiredGroup;
             }
         }
+        // Over the plan's data cap on a "slow down" plan: the slow plan until the next cycle (UsageCaps).
+        $capped = self::isExpiredAccount($input) ? null : UsageCaps::cappedGroup($input, $selectedGroup);
+        if ($capped !== null) {
+            return $capped;
+        }
 
         return $selectedGroup;
     }
@@ -600,7 +620,7 @@ final class RadiusRepository
             $input['download_speed'], $input['upload_speed'], $input['mikrotik_rate_limit'],
             $input['burst_limit'], $input['burst_threshold'], $input['burst_time'], self::intOrNull($input['priority']),
             $input['ip_mode'], $input['ip_pool'], self::nullIfBlank($input['static_ip_pool'] ?? ''), self::intOrNull($input['session_timeout']), self::intOrNull($input['idle_timeout']), self::intOrNull($input['simultaneous_use']),
-            $input['download_quota'] ?? null, $input['upload_quota'] ?? null, $input['total_quota'] ?? null, $input['expiration_behavior'],
+            $input['download_quota'] ?? null, $input['upload_quota'] ?? null, $input['total_quota'] ?? null, $input['cap_action'] ?? 'notify', self::nullIfBlank($input['cap_service_group'] ?? ''), $input['expiration_behavior'],
             $input['billing_mode'], self::nullIfBlank($input['expired_service_group'] ?? ''), self::decimalOrZero($input['price']), $input['currency'], $input['billing_period'] ?? 'monthly', $input['custom_group_attrs'],
         ], $tail);
     }
