@@ -12,6 +12,15 @@ export interface TabDef {
     keepMounted?: boolean;
 }
 
+/** Scrolls a horizontal tab strip so its current item is in view (phones show only part of the strip). */
+export function revealCurrent(list: HTMLElement | null): void {
+    const item = list?.querySelector<HTMLElement>('[aria-selected="true"], [aria-current="page"], [aria-current="true"]');
+    if (!list || !item || list.scrollWidth <= list.clientWidth) return;
+    const box = list.getBoundingClientRect();
+    const at = item.getBoundingClientRect();
+    list.scrollLeft += at.left + at.width / 2 - (box.left + box.width / 2);
+}
+
 function requestedTab(param: string): string | null {
     return new URL(window.location.href).searchParams.get(param);
 }
@@ -36,6 +45,7 @@ export function Tabs({ tabs, defaultTab, label, className = 'tabs', listClassNam
     const [active, setActive] = useState<string>(() => pick(typeof window === 'undefined' ? null : requestedTab(param)));
     const buttons = useRef<Record<string, HTMLButtonElement | null>>({});
     const root = useRef<HTMLElement>(null);
+    const list = useRef<HTMLDivElement>(null);
 
     const select = (key: string, focus = false, push = true) => {
         setActive(key);
@@ -47,6 +57,8 @@ export function Tabs({ tabs, defaultTab, label, className = 'tabs', listClassNam
         }
         if (focus) buttons.current[key]?.focus({ preventScroll: true });
     };
+
+    useEffect(() => revealCurrent(list.current), [active]);
 
     useEffect(() => {
         const onPop = () => setActive(pick(requestedTab(param)));
@@ -81,7 +93,7 @@ export function Tabs({ tabs, defaultTab, label, className = 'tabs', listClassNam
 
     return (
         <section className={className} ref={root} data-tabs-root="">
-            <div className={listClassName} role="tablist" aria-label={label} aria-orientation={vertical ? 'vertical' : undefined}>
+            <div className={listClassName} role="tablist" aria-label={label} aria-orientation={vertical ? 'vertical' : undefined} ref={list}>
                 {tabs.map((tab, index) => {
                     const selected = tab.key === active;
                     return (

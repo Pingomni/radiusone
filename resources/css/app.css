@@ -767,16 +767,16 @@ form.list-filterbar { padding: var(--sp-2) var(--sp-3); }
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  height: 20px;
-  padding: 0 7px;
+  max-width: 100%;
+  min-height: 20px;
+  padding: 2px 7px;
   border: 1px solid var(--neutral-line);
   border-radius: var(--radius-sm);
   background: var(--neutral-bg);
   color: var(--neutral-text);
   font-size: var(--fs-xs);
   font-weight: 600;
-  line-height: 1;
-  white-space: nowrap;
+  line-height: 1.2;
   vertical-align: middle;
 }
 .badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: .75; flex: none; }
@@ -1305,6 +1305,7 @@ td .list-menu > summary:hover { border-color: var(--line); background: var(--sur
 .health-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .health-item {
   display: grid;
+  align-content: start;
   gap: 2px;
   padding: var(--sp-2) var(--sp-3);
   border-bottom: 1px solid var(--line);
@@ -1442,6 +1443,7 @@ td .list-menu > summary:hover { border-color: var(--line); background: var(--sur
 .overview { position: sticky; top: calc(var(--topbar-h) + var(--sp-3)); padding: 0 var(--sp-3) var(--sp-3); }
 .overview > .overview-live { display: flex; justify-content: flex-end; margin: 0 calc(var(--sp-3) * -1); padding: 6px var(--sp-3) 0; }
 .overview-head { margin: 0 calc(var(--sp-3) * -1) var(--sp-1); }
+.overview > .live-head { margin: 0 calc(var(--sp-3) * -1) var(--sp-1); }
 .overview > .overview-head:first-child { margin-top: 0; }
 .overview-head h3 { font-size: var(--fs-lg); }
 .overview > .overview-live + .sr-only + [data-live-body] > .overview-head { border-radius: 0; border-top: 1px solid var(--line); margin-top: 6px; }
@@ -1477,7 +1479,8 @@ td .list-menu > summary:hover { border-color: var(--line); background: var(--sur
 /* Invoice page: the invoice itself on the left, payments on the right. */
 .invoice-toolbar { justify-content: space-between; }
 .invoice-layout, .invoice-form-layout { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(280px, 1fr); gap: var(--sp-3); align-items: start; }
-.invoice-sheet { padding: var(--sp-3); }
+.invoice-sheet { padding: var(--sp-4); }
+.invoice-sheet > * { margin-inline: 0; }
 .invoice-parties { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--sp-3); padding-bottom: var(--sp-3); border-bottom: 1px solid var(--line); }
 .invoice-parties > div { display: grid; gap: 2px; }
 .invoice-label { color: var(--text-muted); font-size: var(--fs-xs); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
@@ -1905,6 +1908,13 @@ td .list-menu > summary:hover { border-color: var(--line); background: var(--sur
   .metric { min-height: 56px; }
   .metric > div > strong { font-size: 20px; }
   .metric > div > span { white-space: normal; }
+  .metric-icon { display: none; }
+  /* Panel title and its tools stack, instead of squeezing a long title next to a button. */
+  .panel:has(> h2 ~ .table-tools) > h2 { grid-column: 1 / -1; border-bottom: 0; border-top-right-radius: var(--radius); }
+  .panel > h2 ~ .table-tools { grid-column: 1 / -1; grid-row: 2; justify-content: flex-start; padding-top: 0; border-radius: 0; }
+  /* Status tabs fill whole rows instead of leaving ragged gaps. */
+  .segmented, .notice-nav { display: flex; flex-wrap: wrap; width: 100%; }
+  .segmented a, .segmented button, .notice-nav a { flex: 1 1 auto; justify-content: center; white-space: nowrap; }
   .cards, .dashboard-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-2); }
 }
 .monitor-running { color: var(--text-muted); font-size: var(--fs-sm); }

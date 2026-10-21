@@ -1,6 +1,7 @@
 import { Link } from '@inertiajs/react';
-import { useId, useState, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import Icon from './Icon';
+import { revealCurrent } from './tabs';
 
 // Settings-style building blocks (legacy settingsSheet, settingsRows, settingsDestination, profile fields).
 
@@ -101,8 +102,10 @@ const SECTIONS: [key: string, label: string, href: string, icon: string, hint: s
 
 /** Settings section navigation (legacy settingsLinkNav). */
 export function SettingsLinkNav({ active }: { active: string }) {
+    const nav = useRef<HTMLElement>(null);
+    useEffect(() => revealCurrent(nav.current), [active]);
     return (
-        <nav className="settings-nav" aria-label="Settings sections">
+        <nav className="settings-nav" aria-label="Settings sections" ref={nav}>
             {SECTIONS.map(([key, label, href, icon, hint]) => (
                 <Link key={key} href={href} title={hint} className={key === active ? 'active' : undefined} aria-current={key === active ? 'page' : undefined} preserveScroll>
                     <Icon name={icon} />{label}

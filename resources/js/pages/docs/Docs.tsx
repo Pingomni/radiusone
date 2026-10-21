@@ -1,6 +1,7 @@
 import { Link } from '@inertiajs/react';
 import { useCallback, useEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react';
 import Icon from '@/components/Icon';
+import { revealCurrent } from '@/components/tabs';
 import AppLayout from '@/layouts/AppLayout';
 
 /*
@@ -501,6 +502,8 @@ function sectionInView(): string {
 
 export default function Docs() {
     const [active, setActive] = useState(SECTIONS[0].id);
+    const toc = useRef<HTMLElement>(null);
+    useEffect(() => revealCurrent(toc.current), [active]);
     // After a jump the clicked section stays highlighted (one near the end may not reach the top) until the reader scrolls.
     const pinned = useRef<string | null>(null);
 
@@ -556,7 +559,7 @@ export default function Docs() {
     return (
         <AppLayout title="Documentation">
             <div className="docs" onClick={onClick}>
-                <nav className="docs-toc" aria-label="Documentation contents">
+                <nav className="docs-toc" aria-label="Documentation contents" ref={toc}>
                     <strong>Contents</strong>
                     {SECTIONS.map((s) => (
                         <a key={s.id} href={`#${s.id}`} aria-current={active === s.id ? 'true' : undefined}><Icon name={s.icon} />{s.title}</a>
