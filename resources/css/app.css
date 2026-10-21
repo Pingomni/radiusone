@@ -102,8 +102,8 @@
   --line-strong: #3a4350;
   --text: #d5dbe3;
   --text-strong: #eef1f5;
-  --text-muted: #949fae;
-  --text-faint: #6c7686;
+  --text-muted: #a3adbb;
+  --text-faint: #848f9e;
   --accent: #6c9ef6;
   --accent-hover: #8fb5f8;
   --accent-solid: #2f6bd8;
@@ -150,8 +150,8 @@
     --line-strong: #3a4350;
     --text: #d5dbe3;
     --text-strong: #eef1f5;
-    --text-muted: #949fae;
-    --text-faint: #6c7686;
+    --text-muted: #a3adbb;
+    --text-faint: #848f9e;
     --accent: #6c9ef6;
     --accent-hover: #8fb5f8;
     --accent-solid: #2f6bd8;
@@ -1488,7 +1488,7 @@ td .list-menu > summary:hover { border-color: var(--line); background: var(--sur
 .billing-filters { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--sp-2); padding: var(--sp-2) var(--sp-3); }
 .billing-filters .segmented { flex-wrap: wrap; }
 .billing-count { margin-left: 6px; padding: 0 6px; border-radius: 999px; background: var(--line); color: var(--text-muted); font-size: var(--fs-xs); font-variant-numeric: tabular-nums; }
-.billing-filters a[aria-current="page"] .billing-count { background: var(--accent); color: #fff; }
+.billing-filters a[aria-current="page"] .billing-count { background: var(--accent-solid); color: var(--on-accent); }
 .billing-search { position: relative; flex: 1 1 240px; max-width: 340px; }
 .billing-search > svg { position: absolute; left: 10px; top: 50%; width: 16px; height: 16px; transform: translateY(-50%); color: var(--text-muted); pointer-events: none; }
 .billing-search input { width: 100%; min-height: var(--control-h); padding-left: 34px; }
