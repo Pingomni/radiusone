@@ -4,6 +4,16 @@ RadiusOne follows [semantic versioning](https://semver.org): **major** for chang
 upgrading, **minor** for new features, **patch** for fixes. The version is in the `VERSION` file and shows in
 the portal's sidebar and under Settings → System information.
 
+## 2.1.5 (2026-10-21)
+
+Fields, buttons and text in a row now line up:
+
+- Checkboxes sit centred on the line of fields and buttons beside them (they sat a few pixels high).
+- On touch screens, filter bars (Clients, Reports, Logs), the password Show buttons and the top-bar buttons are
+  the same height as the fields next to them.
+- Service plan form: "Billing mode" has a short label with the explanation underneath, so its field stays
+  on the same line as its neighbours.
+
 ## 2.1.4 (2026-10-21)
 
 Tablets, phones held sideways and large screens:
