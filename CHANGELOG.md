@@ -4,6 +4,19 @@ RadiusOne follows [semantic versioning](https://semver.org): **major** for chang
 upgrading, **minor** for new features, **patch** for fixes. The version is in the `VERSION` file and shows in
 the portal's sidebar and under Settings → System information.
 
+## 2.1.8 (2026-10-21)
+
+- **Accurate daily usage:** a background job (every 5 minutes) records each session's traffic on the day it
+  happened, so a customer online all week shows traffic on every day. The client Usage card reads it. On
+  the first run, past sessions are filled in on their last day.
+- **Data caps per plan:** set a cap in GB (download + upload) on a service plan, and choose what happens
+  when a customer reaches it: notify only, or slow down to another plan until the next cycle. A customer's
+  cycle ends on their expiry date. Customers get the new "Data cap 80% used" and "Data cap reached"
+  messages (turn them on under Settings → Notifications → Templates). The plans list shows each cap, the
+  Usage card shows the cycle's use and any slow-down, and the daily admin report lists customers who
+  reached their cap.
+- Database change: migration 029 (usage tables and two plan columns); the update applies it.
+
 ## 2.1.7 (2026-10-21)
 
 - **Usage card on the client page:** download and upload per day for the last 7 or 30 days, or per month for
