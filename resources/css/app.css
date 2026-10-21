@@ -89,6 +89,7 @@
   --chart-down-fill: rgba(22, 163, 74, .16);
   --chart-up: #1f5fd6;
   --chart-grid: #e1e5eb;
+  --scroll-shade: rgba(15, 20, 26, .22);
 }
 
 :root[data-theme="dark"] {
@@ -135,6 +136,7 @@
   --chart-down-fill: rgba(92, 207, 140, .16);
   --chart-up: #6c9ef6;
   --chart-grid: #2c3440;
+  --scroll-shade: rgba(0, 0, 0, .7);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -182,6 +184,7 @@
     --chart-down-fill: rgba(92, 207, 140, .16);
     --chart-up: #6c9ef6;
     --chart-grid: #2c3440;
+    --scroll-shade: rgba(0, 0, 0, .7);
   }
 }
 
@@ -528,6 +531,9 @@ details > summary { cursor: pointer; font-weight: 600; }
 .page-title h1 { overflow: hidden; font-size: var(--fs-2xl); white-space: nowrap; text-overflow: ellipsis; }
 .workspace-eyebrow {
   display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
   color: var(--text-muted);
   font-size: var(--fs-xs);
   font-weight: 500;
@@ -680,6 +686,16 @@ details > summary { cursor: pointer; font-weight: 600; }
    Tables
    -------------------------------------------------------------------------- */
 .table-wrap { width: 100%; overflow-x: auto; }
+/* A wide table scrolls inside its panel; a soft shade at the cut edge shows there is more to the side. */
+@media (min-width: 761px) {
+  .table-wrap {
+    background:
+      linear-gradient(to right, var(--surface) 30%, transparent) left / 24px 100% no-repeat local,
+      linear-gradient(to left, var(--surface) 30%, transparent) right / 24px 100% no-repeat local,
+      radial-gradient(farthest-side at 0 50%, var(--scroll-shade), transparent) left / 16px 100% no-repeat scroll,
+      radial-gradient(farthest-side at 100% 50%, var(--scroll-shade), transparent) right / 16px 100% no-repeat scroll;
+  }
+}
 table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
 th, td { padding: 6px 10px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: middle; }
 th {
@@ -1113,6 +1129,8 @@ td .list-menu > summary:hover { border-color: var(--line); background: var(--sur
   .topbar-search { order: 3; flex: 1 1 100%; margin-left: 0; }
 }
 @media (prefers-reduced-motion: reduce) { .sidebar { transition: none; } }
+/* Phones held sideways: the two-row top bar would cover a quarter of the screen, so it scrolls away. */
+@media (max-height: 500px) and (max-width: 980px) { .topbar { position: static; } }
 
 @media (max-width: 760px) {
   .workspace-content { padding: var(--sp-3); gap: var(--sp-3); }
