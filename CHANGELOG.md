@@ -4,6 +4,13 @@ RadiusOne follows [semantic versioning](https://semver.org): **major** for chang
 upgrading, **minor** for new features, **patch** for fixes. The version is in the `VERSION` file and shows in
 the portal's sidebar and under Settings → System information.
 
+## 2.1.7 (2026-10-21)
+
+- **Usage card on the client page:** download and upload per day for the last 7 or 30 days, or per month for
+  12 months, with totals. Select a bar to see that day's figures. It sits at the top of the right column
+  (first on phones). RADIUS counts traffic per session, so each session counts on the day it last reported.
+- Light theme: placeholder text, empty table cells and small notes are easier to read.
+
 ## 2.1.6 (2026-10-21)
 
 Dark theme, checked on every page:
