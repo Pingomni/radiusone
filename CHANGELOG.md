@@ -4,6 +4,19 @@ RadiusOne follows [semantic versioning](https://semver.org): **major** for chang
 upgrading, **minor** for new features, **patch** for fixes. The version is in the `VERSION` file and shows in
 the portal's sidebar and under Settings → System information.
 
+## 2.1.1 (2026-10-21)
+
+Security fixes. Updating from the portal (or with `install.sh`) applies them; nothing to do by hand.
+
+- **Root jobs no longer run code from the web user's cache folder.** The nightly backup, Back up now, the
+  time zone change, the installer and software updates ran Laravel as root, which loads cache files the
+  web server's user (www-data) can write. A compromised portal could have used them to run code as root.
+  These jobs now keep their own private cache (new `/usr/local/sbin/frweb-root-artisan`), and the update
+  repoints existing root cron lines at it.
+- **Turning off two-factor takes a code.** Profile → Disable two-factor asks for a current code from the
+  authenticator app; a signed-in session alone is no longer enough. Roles that require two-factor
+  (superadmin, admin, NOC, billing, security) cannot turn it off, as already enforced under Settings → Users.
+
 ## 2.1.0 (2026-10-20)
 
 - **Software update from the portal:** Settings → Overview → Software update checks GitHub for a newer
