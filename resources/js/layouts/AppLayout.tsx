@@ -245,9 +245,9 @@ export default function AppLayout({ title, children }: { title: string; children
                             <Icon name="user" />
                             {auth.user?.username}
                         </Link>
-                        <button type="button" onClick={() => router.post('/logout')}>
+                        <button type="button" className="logout-button" onClick={() => router.post('/logout')}>
                             <Icon name="logout" />
-                            Logout
+                            <span>Logout</span>
                         </button>
                     </div>
                 </header>

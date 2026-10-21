@@ -539,7 +539,7 @@ details > summary { cursor: pointer; font-weight: 600; }
 .operator { display: flex; align-items: center; gap: var(--sp-1); flex: none; }
 .operator form { margin: 0; }
 .topbar-clock { padding: 0 var(--sp-2); color: var(--text-muted); font-size: var(--fs-sm); font-variant-numeric: tabular-nums; white-space: nowrap; }
-.operator .theme-toggle, .operator form button, .operator-id {
+.operator .theme-toggle, .operator .logout-button, .operator-id {
   min-height: var(--control-h);
   padding: 0 var(--sp-2);
   border: 1px solid transparent;
@@ -550,7 +550,7 @@ details > summary { cursor: pointer; font-weight: 600; }
   font-weight: 600;
 }
 .operator-id { display: inline-flex; align-items: center; gap: 6px; }
-.operator .theme-toggle:hover, .operator form button:hover, .operator-id:hover { border-color: transparent; background: var(--surface-hover); color: var(--text-strong); text-decoration: none; }
+.operator .theme-toggle:hover, .operator .logout-button:hover, .operator-id:hover { border-color: transparent; background: var(--surface-hover); color: var(--text-strong); text-decoration: none; }
 .theme-toggle[aria-pressed="true"] { color: var(--accent); }
 
 .workspace-content {
@@ -1106,8 +1106,11 @@ td .list-menu > summary:hover { border-color: var(--line); background: var(--sur
   .main { margin-left: 0; }
   .mobile-nav-toggle { display: inline-flex; padding: 0 var(--sp-2); }
   .mobile-nav-toggle span { display: none; }
-  .topbar-search, .theme-toggle span { display: none; }
-  .topbar { padding: 0 var(--sp-3); }
+  .theme-toggle span { display: none; }
+  /* Phones keep the client search (field lookups by name, phone, IP or MAC) as a second top-bar row. */
+  .topbar { flex-wrap: wrap; height: auto; min-height: var(--topbar-h); padding: 6px var(--sp-3); row-gap: 6px; }
+  .page-title { flex: 1 1 0; }
+  .topbar-search { order: 3; flex: 1 1 100%; margin-left: 0; }
 }
 @media (prefers-reduced-motion: reduce) { .sidebar { transition: none; } }
 
@@ -1116,8 +1119,13 @@ td .list-menu > summary:hover { border-color: var(--line); background: var(--sur
   .form-grid, .compact-form { grid-template-columns: minmax(0, 1fr); }
   .operator-id { font-size: 0; gap: 0; }
   .operator-id svg.icon { width: 18px; height: 18px; }
-  .operator form button { font-size: 0; gap: 0; }
-  .operator form button svg.icon { width: 18px; height: 18px; }
+  .operator .logout-button { font-size: 0; gap: 0; }
+  .operator .logout-button svg.icon { width: 18px; height: 18px; }
+  .workspace-eyebrow { display: none; }
+  /* Client list: two filters per row so the first clients show without scrolling. */
+  form.client-filterbar { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: end; }
+  form.client-filterbar label.list-search { grid-column: 1 / -1; max-width: none; }
+  form.client-filterbar .list-filter-buttons > * { flex: 1 1 0; }
   .settings-list > div { grid-template-columns: minmax(0, 1fr); gap: 2px; }
   .list-filterbar label, .list-filterbar label.list-search { flex: 1 1 100%; }
   .list-filter-buttons { flex: 1 1 100%; }
@@ -1128,7 +1136,9 @@ td .list-menu > summary:hover { border-color: var(--line); background: var(--sur
 }
 
 @media (pointer: coarse) {
-  button, .button, input, select { min-height: 36px; }
+  button, .button, input, select { min-height: 44px; }
+  /* 16px stops phones from zooming the page when a field gets focus. */
+  input, select, textarea { font-size: 16px; }
   input[type="checkbox"], input[type="radio"] { width: 18px; height: 18px; min-height: 0; }
   .sidebar nav a { min-height: 40px; }
   .tab-buttons > button, .settings-nav > button, .settings-nav > a { min-height: 40px; }
@@ -1894,6 +1904,7 @@ td .list-menu > summary:hover { border-color: var(--line); background: var(--sur
   .two-factor-setup { grid-template-columns: minmax(0, 1fr); }
   .metric { min-height: 56px; }
   .metric > div > strong { font-size: 20px; }
+  .metric > div > span { white-space: normal; }
   .cards, .dashboard-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-2); }
 }
 .monitor-running { color: var(--text-muted); font-size: var(--fs-sm); }
@@ -1964,7 +1975,17 @@ td .list-menu > summary:hover { border-color: var(--line); background: var(--sur
   .table-wrap td[data-label=""] { display: block; }
   .table-wrap td[data-label=""]::before, .table-wrap td.empty::before { content: none; }
   .table-wrap td.empty { display: block; text-align: center; }
+  /* Everything in a cell stays in the value column: several links or badges stack instead of wrapping under the label. */
+  .table-wrap td > * { grid-column: 2; justify-self: start; margin-left: 0; }
+  .table-wrap td[data-label="Actions"] { row-gap: 0; }
+  .table-wrap td[data-label="Actions"] > * { display: inline-flex; align-items: center; min-height: 36px; }
+  .table-wrap td[data-label="Actions"] :is(.link, .danger-text) { padding-inline: 0; }
+  /* Two-column key/value tables: the first column is the card's heading, the second its text, without repeated labels. */
+  .table-wrap td.card-title, .table-wrap td.card-plain { display: block; }
+  .table-wrap td.card-title::before, .table-wrap td.card-plain::before { content: none; }
+  .table-wrap td.card-title { color: var(--text-strong); font-weight: 600; }
 }
+
 
 /* Settings → Notifications → Admin alerts: checkbox groups. */
 .admin-alert-checks { display: grid; gap: var(--sp-2); margin: 0; padding: 0; border: 0; }

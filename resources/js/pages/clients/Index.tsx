@@ -33,7 +33,7 @@ function FilterBar({ filters, plans, nasOptions }: { filters: Filters; plans: Op
         </label>
     );
     return (
-        <form className="toolbar list-filterbar" role="search" onSubmit={(e) => { e.preventDefault(); apply(values); }}>
+        <form className="toolbar list-filterbar client-filterbar" role="search" onSubmit={(e) => { e.preventDefault(); apply(values); }}>
             <label className="list-search">
                 <span>Search customers</span>
                 <input type="search" name="q" aria-label="Search clients" placeholder="Name, username or phone" value={values.q} onChange={(e) => setValues({ ...values, q: e.target.value })} />

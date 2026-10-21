@@ -42,7 +42,7 @@ export default function Diagnostics({ username, signals, operations, sources }: 
         <AppLayout title="Connection diagnostics">
             <div className="toolbar"><Link className="button" href={`/clients/${encodeURIComponent(username)}/edit`}>Back to customer</Link></div>
             <Panel title="Connection diagnostics">
-                <DataTable rows={signals} rowKey={(r) => r.signal} perPage={100} columns={[{ header: 'Signal', cell: (r) => r.signal }, { header: 'Evidence', cell: (r) => r.evidence }]} />
+                <DataTable rows={signals} rowKey={(r) => r.signal} perPage={100} columns={[{ header: 'Signal', cell: (r) => r.signal, className: 'card-title' }, { header: 'Evidence', cell: (r) => r.evidence, className: 'card-plain' }]} />
             </Panel>
             <Panel title="Network operations">
                 <DataTable
