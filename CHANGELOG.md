@@ -4,6 +4,17 @@ RadiusOne follows [semantic versioning](https://semver.org): **major** for chang
 upgrading, **minor** for new features, **patch** for fixes. The version is in the `VERSION` file and shows in
 the portal's sidebar and under Settings → System information.
 
+## 2.1.3 (2026-10-21)
+
+Layout fixes found by checking every page on a phone and on a computer:
+
+- Phones: key-figure cards drop their icons so amounts fit on one line; panel titles sit above their buttons
+  instead of squeezing beside them; status tabs (invoices, notifications) fill whole rows; tab bars
+  (settings, client, documentation) scroll to the current tab.
+- Status labels wrap inside narrow cards instead of running past the edge (Monitoring).
+- The client's Account Overview header spans the full card, and the invoice sheet lines up its parties,
+  lines and totals.
+
 ## 2.1.2 (2026-10-21)
 
 Phones and tablets, for technicians working on site:
