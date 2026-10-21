@@ -46,3 +46,7 @@ yarn-error.log
 /.github/agents
 /.github/hooks
 /.github/skills
+/PRODUCT.md
+/DESIGN.md
+/DESIGN.*.json
+/.impeccable
