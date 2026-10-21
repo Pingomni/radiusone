@@ -378,6 +378,7 @@ label.check, label.checkbox, .check, .checkbox {
   display: inline-flex;
   flex-wrap: wrap;
   align-items: center;
+  align-content: center;
   gap: 6px;
   min-height: var(--control-h);
   font-size: var(--fs-md);
@@ -393,6 +394,8 @@ label.check small, label.checkbox small { flex-basis: 100%; }
   align-items: start;
 }
 .form-grid > .span2, .form-grid > .wide-field, .form-grid > details, .form-grid > fieldset { grid-column: 1 / -1; }
+/* A checkbox among fields sits on the fields' control row, below where their labels are. */
+.form-grid > label.check, .form-grid > label.checkbox { margin-top: calc(var(--fs-sm) * var(--lh) + var(--sp-1)); }
 .form-grid > p, .form-grid > .hint { grid-column: 1 / -1; }
 .compact-form { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
 .form-section-title {
@@ -438,7 +441,7 @@ details > summary { cursor: pointer; font-weight: 600; }
 
 .password-control, .account-password-control { position: relative; display: flex; gap: var(--sp-1); align-items: center; }
 .password-control input, .account-password-control input { flex: 1 1 auto; }
-.password-control button, .account-password-control button { flex: none; min-height: var(--control-h); padding: 0 10px; font-size: var(--fs-sm); }
+.password-control button, .account-password-control button { flex: none; align-self: stretch; padding: 0 10px; font-size: var(--fs-sm); }
 .account-password-field { display: grid; gap: var(--sp-1); }
 .account-password-field > label { font-size: var(--fs-sm); }
 .confirm-type { display: grid; gap: var(--sp-1); font-weight: 400; }
@@ -758,7 +761,6 @@ form.list-filterbar { padding: var(--sp-2) var(--sp-3); }
 .list-filterbar label { flex: 0 1 180px; gap: 2px; }
 .list-filterbar label.list-search, .list-filterbar label:has(input[type="search"]) { flex: 1 1 240px; max-width: 420px; }
 .list-filterbar label > span:first-child { color: var(--text-muted); font-size: var(--fs-xs); font-weight: 600; }
-.list-filterbar input, .list-filterbar select { min-height: var(--control-h); }
 .list-filterbar > input, .list-filterbar form > input { flex: 1 1 220px; width: auto; }
 .list-filter-buttons { display: flex; gap: 6px; align-items: center; }
 
@@ -1154,7 +1156,8 @@ td .list-menu > summary:hover { border-color: var(--line); background: var(--sur
 }
 
 @media (pointer: coarse) {
-  button, .button, input, select { min-height: 44px; }
+  button, .button, input, select, label.check, label.checkbox { min-height: 44px; }
+  .operator .theme-toggle, .operator .logout-button, .operator-id { min-height: 44px; }
   /* 16px stops phones from zooming the page when a field gets focus. */
   input, select, textarea { font-size: 16px; }
   input[type="checkbox"], input[type="radio"] { width: 18px; height: 18px; min-height: 0; }
@@ -1865,7 +1868,8 @@ td .list-menu > summary:hover { border-color: var(--line); background: var(--sur
 .nas-vendor-option:hover { border-color: var(--accent-line); background: var(--surface-hover); }
 .nas-vendor-option:has(input:checked) { border-color: var(--accent-solid); background: var(--accent-bg); box-shadow: 0 0 0 1px var(--accent-solid); }
 .nas-vendor-option:has(input:focus-visible) { outline: 2px solid var(--accent-solid); outline-offset: 2px; }
-.nas-vendor-option input { margin-top: 3px; }
+.nas-vendor-option input { margin-top: calc((var(--fs-md) * var(--lh) - 15px) / 2); }
+@media (pointer: coarse) { .nas-vendor-option input { margin-top: calc((var(--fs-md) * var(--lh) - 18px) / 2); } }
 .nas-vendor-option > span { display: grid; gap: 2px; }
 .nas-vendor-option strong { color: var(--text-strong); font-weight: 600; }
 .nas-vendor-option small { color: var(--text-muted); font-size: var(--fs-sm); }

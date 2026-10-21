@@ -51,7 +51,7 @@ export default function ServiceForm({ service, clientCount, expiredOptions, canM
                     {field('Idle timeout', 'idle_timeout', { type: 'number' })}
                     {field('Simultaneous use default', 'simultaneous_use', { type: 'number' })}
                     {field('Expiration behavior', 'expiration_behavior')}
-                    <Select label="Billing mode (metadata; full payment required for renewal)" disabled={disabled} options={{ prepaid: 'prepaid', postpaid: 'postpaid' }} {...bind(form, 'billing_mode')} />
+                    <Select label="Billing mode" hint="Metadata only; renewal always needs full payment." disabled={disabled} options={{ prepaid: 'prepaid', postpaid: 'postpaid' }} {...bind(form, 'billing_mode')} />
                     <Select label="Expired service" disabled={disabled} options={expiredOptions} {...bind(form, 'expired_service_group')} />
                     {field(`Price (${currency})`, 'price', { type: 'number', step: '0.01', hint: 'Currency is set in Settings → Regional.' })}
                     <details className="span2">
