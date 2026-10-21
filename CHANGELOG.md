@@ -4,6 +4,16 @@ RadiusOne follows [semantic versioning](https://semver.org): **major** for chang
 upgrading, **minor** for new features, **patch** for fixes. The version is in the `VERSION` file and shows in
 the portal's sidebar and under Settings → System information.
 
+## 2.1.2 (2026-10-21)
+
+Phones and tablets, for technicians working on site:
+
+- The client search in the top bar (user, name, phone, IP or MAC) stays on phones, as a second row.
+- Logout is an icon on phones, so page titles fit.
+- On touch screens, buttons and fields are larger, and tapping a field no longer zooms the page.
+- Client list filters sit two per row; connection diagnostics read as one titled card per check; action
+  links in table cards line up; dashboard figures show their full labels.
+
 ## 2.1.1 (2026-10-21)
 
 Security fixes. Updating from the portal (or with `install.sh`) applies them; nothing to do by hand.
