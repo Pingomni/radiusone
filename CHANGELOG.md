@@ -4,6 +4,14 @@ RadiusOne follows [semantic versioning](https://semver.org): **major** for chang
 upgrading, **minor** for new features, **patch** for fixes. The version is in the `VERSION` file and shows in
 the portal's sidebar and under Settings → System information.
 
+## 2.1.6 (2026-10-21)
+
+Dark theme, checked on every page:
+
+- Placeholder text in fields and search boxes, the dash in empty table cells and small notes ("You",
+  "In use by…") are brighter and now easy to read; secondary text moved one step brighter to stay above them.
+- The count on the selected invoice tab (Billing) is readable: white on the solid button blue.
+
 ## 2.1.5 (2026-10-21)
 
 Fields, buttons and text in a row now line up:
