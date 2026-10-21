@@ -13,7 +13,8 @@ if systemctl is-active --quiet frweb-backup-now.service; then
 fi
 systemctl reset-failed frweb-backup-now.service 2>/dev/null || true
 # LOG_CHANNEL=stderr: a root process must not create Laravel log files that www-data then cannot write.
+# frweb-root-artisan: root must not load the cache files www-data can write in bootstrap/cache.
 systemd-run --quiet --collect --unit=frweb-backup-now --working-directory=/opt/freeradius-web-laravel \
   --setenv=FRWEB_OPERATOR_ENV_FILE=/etc/freeradius-web/backup.env --setenv=LOG_CHANNEL=stderr \
-  /bin/sh -c '/usr/bin/php artisan frweb:backup >/var/log/freeradius-web-backup.log 2>&1'
+  /bin/sh -c '/usr/local/sbin/frweb-root-artisan frweb:backup >/var/log/freeradius-web-backup.log 2>&1'
 echo 'Backup started.'

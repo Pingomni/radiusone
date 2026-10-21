@@ -234,7 +234,7 @@ cd /opt/radiusone && sudo git remote set-url origin git@github.com:<owner>/radiu
 
 ```bash
 cd /opt/radiusone
-sudo FRWEB_OPERATOR_ENV_FILE=/etc/freeradius-web/backup.env LOG_CHANNEL=stderr php artisan frweb:backup --no-upload
+sudo FRWEB_OPERATOR_ENV_FILE=/etc/freeradius-web/backup.env LOG_CHANNEL=stderr /usr/local/sbin/frweb-root-artisan frweb:backup --no-upload
 sudo git pull
 sudo bash install.sh
 ```

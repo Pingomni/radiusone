@@ -220,8 +220,16 @@ chown root:www-data "$APP/.env" && chmod 0640 "$APP/.env"
 
 # Root runs these steps: log to the terminal, never into storage/logs, which must stay www-data's.
 export LOG_CHANNEL=stderr COMPOSER_ALLOW_SUPERUSER=1
+# Root never loads Laravel's cache files from bootstrap/cache (www-data's; Laravel runs them as PHP code):
+# its artisan steps keep a private copy, as ops/frweb-root-artisan does. The portal builds its own.
+root_cache=$(mktemp -d /run/frweb-install.XXXXXX)
+trap 'rm -rf "$root_cache"' EXIT
+for name in config services packages routes events; do
+  export "APP_${name^^}_CACHE=$root_cache/$name.php"
+done
 cd "$APP"
 composer install --no-dev --optimize-autoloader --no-interaction --no-progress -q
+rm -f bootstrap/cache/packages.php bootstrap/cache/services.php
 grep -q '^APP_KEY=base64:' .env || php artisan key:generate --force -q
 npm ci --no-audit --no-fund --loglevel=error
 npm run build --silent >/dev/null
@@ -394,9 +402,10 @@ cat > /etc/cron.d/radiusone <<EOF
 SHELL=/bin/sh
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 # RadiusOne (install.sh). Every app job (billing, SNMP, alerts, expiry...) runs from the scheduler
-# (routes/console.php); the nightly backup runs as root with the read-only backup identity.
+# (routes/console.php); the nightly backup runs as root with the read-only backup identity, through
+# frweb-root-artisan (installed below), so root never loads the cache files www-data writes in bootstrap/cache.
 * * * * * www-data cd $APP && /usr/bin/php artisan schedule:run >>$LOGS/scheduler.log 2>&1
-15 2 * * * root cd $APP && FRWEB_OPERATOR_ENV_FILE=$ETC/backup.env LOG_CHANNEL=stderr /usr/bin/php artisan frweb:backup >/var/log/freeradius-web-backup.log 2>&1
+15 2 * * * root cd $APP && FRWEB_OPERATOR_ENV_FILE=$ETC/backup.env LOG_CHANNEL=stderr /usr/local/sbin/frweb-root-artisan frweb:backup >/var/log/freeradius-web-backup.log 2>&1
 EOF
 chmod 0644 /etc/cron.d/radiusone
 cat > /etc/logrotate.d/radiusone <<EOF

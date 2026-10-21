@@ -34,6 +34,7 @@ final class ProfileController extends Controller
             ],
             'twoFactor' => [
                 'state' => !empty($user['two_factor_enabled']) ? 'enabled' : ($pending ? 'pending' : 'off'),
+                'required' => in_array($user['role'], Operators::PRIVILEGED, true),
                 'tag' => $pending && empty($user['two_factor_secret']) ? Present::tag('setup required', 'warning') : Operators::twoFactorTag($user),
             ],
         ]);
@@ -141,6 +142,14 @@ final class ProfileController extends Controller
         $user = Auth::user();
         if (empty($user['two_factor_enabled']) && empty($user['two_factor_secret'])) {
             return $this->fail('Two-factor authentication is not enabled.');
+        }
+        // Same rule as Settings → Users: privileged roles keep two-factor.
+        if (in_array($user['role'], Operators::PRIVILEGED, true)) {
+            return $this->fail('Your role requires two-factor authentication.');
+        }
+        // A signed-in session alone does not remove the second factor: it takes a current code.
+        if (!empty($user['two_factor_enabled']) && !Auth::consumeTotp($user, (string) $user['two_factor_secret'], (string) $request->input('code', ''))) {
+            return $this->fail('Authenticator code is invalid.');
         }
         if (Db::exec('UPDATE portal_users SET two_factor_secret=NULL, two_factor_enabled=0, session_version=session_version+1, mfa_last_counter=NULL, updated_at=NOW() WHERE id=? AND session_version=?', [$user['id'], $user['session_version']]) !== 1) {
             return $this->fail('Credentials changed; sign in again.');

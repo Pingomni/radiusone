@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Support\Db;
+use App\Support\Security;
 use App\Support\Settings;
 use Illuminate\Http\UploadedFile;
 use Tests\TestCase;
@@ -47,8 +48,23 @@ final class SettingsTest extends TestCase
         $this->assertSame(1, (int) Db::value('SELECT two_factor_enabled FROM portal_users WHERE id=?', [$user['id']]));
         $this->get('/profile')->assertOk()->assertInertia(fn ($page) => $page->where('twoFactor.state', 'enabled'));
 
-        $this->post('/profile/2fa/disable')->assertRedirect('/profile');
+        // Turning it off takes a fresh code: the session alone is not enough, and a used code is not reused.
+        $this->post('/profile/2fa/disable')->assertSessionHas('flash.message', 'Authenticator code is invalid.');
+        $this->post('/profile/2fa/disable', ['code' => $this->totp($secret)])->assertSessionHas('flash.message', 'Authenticator code is invalid.');
+        $this->assertSame(1, (int) Db::value('SELECT two_factor_enabled FROM portal_users WHERE id=?', [$user['id']]));
+        $this->post('/profile/2fa/disable', ['code' => $this->totp($secret, 1)])->assertRedirect('/profile');
         $this->assertSame(0, (int) Db::value('SELECT two_factor_enabled FROM portal_users WHERE id=?', [$user['id']]));
+    }
+
+    public function test_privileged_operators_cannot_disable_their_own_two_factor(): void
+    {
+        $user = $this->actingAsOperator('admin');
+        $secret = Security::twoFactorSecret();
+        Db::exec('UPDATE portal_users SET two_factor_secret=?, two_factor_enabled=1 WHERE id=?', [$secret, $user['id']]);
+
+        $this->get('/profile')->assertOk()->assertInertia(fn ($page) => $page->where('twoFactor.required', true));
+        $this->post('/profile/2fa/disable', ['code' => $this->totp($secret)])->assertSessionHas('flash.message', 'Your role requires two-factor authentication.');
+        $this->assertSame(1, (int) Db::value('SELECT two_factor_enabled FROM portal_users WHERE id=?', [$user['id']]));
     }
 
     public function test_settings_tabs_render(): void

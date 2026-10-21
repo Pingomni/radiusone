@@ -83,6 +83,14 @@ if [[ $mode == schedule ]]; then
 fi
 
 # --- apply -------------------------------------------------------------------------------------------
+# Laravel runs bootstrap/cache/{config,packages,services}.php as PHP code, and www-data owns that folder:
+# everything Laravel this script starts as root (artisan, Composer's package:discover) uses a private copy
+# instead (as ops/frweb-root-artisan does), removed at the end.
+root_cache=$(mktemp -d /run/frweb-update.XXXXXX)
+trap 'rm -rf "$root_cache"' EXIT
+for name in config services packages routes events; do
+  export "APP_${name^^}_CACHE=$root_cache/$name.php"
+done
 mkdir -p "$(dirname "$log")"
 exec > >(tee -a "$log") 2>&1
 from=$(current)
@@ -99,6 +107,8 @@ dependencies() {
   as_owner composer install "${composer_flags[@]}" -d "$app"
   as_owner npm --prefix "$app" ci --no-audit --no-fund --loglevel=error
   as_owner npm --prefix "$app" run build --silent >/dev/null
+  # The portal's own package lists may now be out of date; it rebuilds them on the next request.
+  rm -f "$app/bootstrap/cache/packages.php" "$app/bootstrap/cache/services.php"
 }
 
 rollback() {

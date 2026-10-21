@@ -4,7 +4,9 @@
 # and a sudoers rule that lets www-data restart exactly FreeRADIUS, MariaDB, Nginx and PHP-FPM, schedule a
 # time zone change, start a backup, and check for or start an update (nothing else). Run as root:
 #   sudo bash <app>/ops/apply-service-control.sh
-# Undo: rm /etc/sudoers.d/freeradius-web-services /usr/local/sbin/frweb-service-restart /usr/local/sbin/frweb-set-timezone /usr/local/sbin/frweb-backup-now /usr/local/sbin/frweb-update
+# Also installs frweb-root-artisan, which the helpers and the nightly backup use to run artisan as root (not
+# in the sudoers rule), and points older root cron lines in /etc/cron.d (the nightly backup) at it.
+# Undo: rm /etc/sudoers.d/freeradius-web-services /usr/local/sbin/frweb-service-restart /usr/local/sbin/frweb-set-timezone /usr/local/sbin/frweb-backup-now /usr/local/sbin/frweb-update /usr/local/sbin/frweb-root-artisan
 set -euo pipefail
 app=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 helper=/usr/local/sbin/frweb-service-restart
@@ -14,11 +16,20 @@ update=/usr/local/sbin/frweb-update
 rule=/etc/sudoers.d/freeradius-web-services
 
 # The helpers name the app folder; write in the one this script runs from.
-for name in frweb-service-restart frweb-set-timezone frweb-backup-now frweb-update; do
+for name in frweb-service-restart frweb-set-timezone frweb-backup-now frweb-update frweb-root-artisan; do
   tmp=$(mktemp)
   sed "s#/opt/freeradius-web-laravel#$app#g" "$app/ops/$name" > "$tmp"
   install -o root -g root -m 0755 "$tmp" "/usr/local/sbin/$name"
   rm -f "$tmp"
+done
+
+# Servers installed before frweb-root-artisan run root cron jobs in the app folder (the nightly backup) with
+# plain php artisan, which loads the cache files www-data can write in bootstrap/cache. Any /etc/cron.d file
+# may hold them (install.sh writes radiusone; hand-built servers use other names).
+for cron in /etc/cron.d/*; do
+  [[ -f $cron ]] && grep -qF " root cd $app " "$cron" || continue
+  sed -i -e "\# root cd $app #s#/usr/bin/php artisan #/usr/local/sbin/frweb-root-artisan #" \
+         -e "\# root cd $app #s#\([ ;&]\)php artisan #\1/usr/local/sbin/frweb-root-artisan #" "$cron"
 done
 
 fpm=$(basename "$(ls /lib/systemd/system/php*-fpm.service | sort -V | tail -n 1)" .service)

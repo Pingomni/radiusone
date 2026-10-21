@@ -6,7 +6,7 @@ import { Badge, Field, Tag, type TagData } from '@/components/ui';
 import AppLayout from '@/layouts/AppLayout';
 
 type Profile = { name: string; email: string; username: string; role: string; enabled: boolean; lastLogin: string };
-type TwoFactor = { state: 'enabled' | 'pending' | 'off'; tag: TagData };
+type TwoFactor = { state: 'enabled' | 'pending' | 'off'; required: boolean; tag: TagData };
 
 function AccountForm({ profile }: { profile: Profile }) {
     const form = useForm({ name: profile.name, email: profile.email });
@@ -41,6 +41,27 @@ function PasswordForm() {
     );
 }
 
+/** Turning two-factor off takes a current code from the authenticator, not just the signed-in session. */
+function DisableTwoFactorForm() {
+    const form = useForm({ code: '' });
+    return (
+        <form onSubmit={(event) => { event.preventDefault(); form.post('/profile/2fa/disable', { preserveScroll: true, onFinish: () => form.reset() }); }}>
+            <Field
+                label="Authenticator code"
+                name="code"
+                required
+                inputMode="numeric"
+                pattern="[0-9]{6}"
+                maxLength={6}
+                autoComplete="one-time-code"
+                value={form.data.code}
+                onChange={(e) => form.setData('code', e.target.value)}
+            />
+            <div className="form-actions"><button className="danger" disabled={form.processing}>Disable two-factor</button></div>
+        </form>
+    );
+}
+
 function TwoFactorPanel({ twoFactor }: { twoFactor: TwoFactor }) {
     const enabled = twoFactor.state === 'enabled';
     const pending = twoFactor.state === 'pending';
@@ -49,8 +70,10 @@ function TwoFactorPanel({ twoFactor }: { twoFactor: TwoFactor }) {
         ? 'You’ll be asked for a code from your authenticator app when you sign in.'
         : pending ? 'Finish verifying your authenticator app to turn on two-factor protection.' : 'Add a second step at sign-in with a code from your authenticator app.';
     let action;
-    if (enabled) {
-        action = <PostButton action="/profile/2fa/disable" className="danger" label="Disable two-factor" confirm={{ message: 'Disable two-factor authentication for your account?', confirmLabel: 'Disable two-factor' }} />;
+    if (enabled && twoFactor.required) {
+        action = <p className="hint">Your role requires two-factor authentication.</p>;
+    } else if (enabled) {
+        action = <DisableTwoFactorForm />;
     } else if (pending) {
         action = <Link className="button primary" href="/profile/2fa/setup">Continue setup</Link>;
     } else {
