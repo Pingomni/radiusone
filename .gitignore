@@ -43,3 +43,6 @@ yarn-error.log
 /opencode.json
 /opencode.jsonc
 /skills-lock.json
+/.github/agents
+/.github/hooks
+/.github/skills
