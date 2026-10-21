@@ -149,6 +149,34 @@ final class ClientsTest extends TestCase
         $this->post('/documents/' . $doc['id'] . '/delete')->assertSessionHas('flash.type', 'danger');
     }
 
+    public function test_usage_history_per_day_and_month(): void
+    {
+        $this->actingAsOperator();
+        $this->plan();
+        $this->post('/clients/save', $this->client());
+        $today = (string) Db::value('SELECT CURDATE()');
+        $yesterday = date('Y-m-d', strtotime($today . ' -1 day'));
+        // Two sessions reported today, one yesterday, one long ago (outside 30 days), one for another client.
+        foreach ([['alice', $today . ' 08:00:00', 1000, 100], ['alice', $today . ' 09:00:00', 500, 50], ['alice', $yesterday . ' 23:00:00', 300, 30],
+            ['alice', date('Y-m-d', strtotime($today . ' -60 days')) . ' 12:00:00', 9000, 900], ['bob', $today . ' 10:00:00', 7000, 700]] as [$user, $when, $down, $up]) {
+            $this->insertRow('radacct', ['username' => $user, 'acctstarttime' => $when, 'acctupdatetime' => $when, 'acctoutputoctets' => $down, 'acctinputoctets' => $up]);
+        }
+
+        $this->get('/clients/alice/edit')->assertOk()->assertInertia(fn ($page) => $page
+            ->where('client.usage.range', '30d')
+            ->has('client.usage.points', 30)
+            ->where('client.usage.total', ['down' => 1800, 'up' => 180]));
+        $week = $this->getJson('/clients/alice/usage?range=7d')->assertOk()->assertJsonCount(7, 'points')->json();
+        $this->assertSame(['key' => $today, 'down' => 1500, 'up' => 150], $week['points'][6]);
+        $this->assertSame(['key' => $yesterday, 'down' => 300, 'up' => 30], $week['points'][5]);
+        $year = $this->getJson('/clients/alice/usage?range=12m')->assertOk()->assertJsonCount(12, 'points')->assertJsonPath('monthly', true)->json();
+        $this->assertSame(substr($today, 0, 7), $year['points'][11]['key']);
+        $this->assertSame(['down' => 10800, 'up' => 1080], $year['total']);
+
+        $this->getJson('/clients/alice/usage?range=5y')->assertNotFound();
+        $this->getJson('/clients/nobody/usage')->assertNotFound();
+    }
+
     public function test_view_role_is_read_only(): void
     {
         $this->actingAsOperator();

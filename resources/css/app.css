@@ -1462,6 +1462,33 @@ td .list-menu > summary:hover { border-color: var(--line); background: var(--sur
 .alert-options-label { color: var(--text); font-size: var(--fs-sm); font-weight: 600; }
 
 .overview { position: sticky; top: calc(var(--topbar-h) + var(--sp-3)); padding: 0 var(--sp-3) var(--sp-3); }
+/* Client page right column: the Usage card, then the (sticky) Account Overview. */
+.client-side { display: grid; gap: var(--sp-3); align-self: stretch; align-content: start; min-width: 0; }
+
+/* Usage card: download and upload per day or month, stacked bars (colours shared with the NAS traffic charts). */
+.usage-card .panel-head { flex-wrap: wrap; }
+.usage-card .segmented { margin-left: auto; }
+.usage-card .segmented button { padding: 0 8px; font-size: var(--fs-xs); }
+.usage-body { display: grid; gap: var(--sp-2); }
+.usage-legend { display: flex; flex-wrap: wrap; gap: var(--sp-1) var(--sp-3); margin: 0; padding: 0; list-style: none; color: var(--text-muted); font-size: var(--fs-sm); }
+.usage-legend li { display: inline-flex; align-items: center; gap: 6px; }
+.usage-legend strong { color: var(--text-strong); font-variant-numeric: tabular-nums; }
+.usage-swatch { width: 10px; height: 10px; border-radius: 2px; }
+.usage-swatch.usage-down, .usage-bar.usage-down { background: var(--nas-in); fill: var(--nas-in); }
+.usage-swatch.usage-up, .usage-bar.usage-up { background: var(--nas-out); fill: var(--nas-out); }
+.usage-readout { min-height: 1.45em; color: var(--text); font-size: var(--fs-sm); font-variant-numeric: tabular-nums; }
+.usage-readout > span:first-child { color: var(--text-muted); }
+.usage-chart { display: block; width: 100%; height: auto; overflow: visible; border-radius: var(--radius-sm); font-family: var(--font); }
+.usage-chart:focus-visible { outline: none; box-shadow: var(--focus); }
+.usage-axis { fill: var(--text-muted); font-size: 10px; font-variant-numeric: tabular-nums; }
+.usage-grid { stroke: var(--chart-grid); stroke-dasharray: 2 3; }
+.usage-baseline { stroke: var(--line-strong); }
+.usage-hit { fill: transparent; cursor: crosshair; }
+.usage-bar { transition: opacity .12s; }
+.usage-chart:has(.is-active) g:not(.is-active) .usage-bar { opacity: .35; }
+.usage-empty { padding: var(--sp-4) 0; color: var(--text-muted); font-size: var(--fs-sm); text-align: center; }
+.usage-note { color: var(--text-muted); font-size: var(--fs-xs); }
+@media (prefers-reduced-motion: reduce) { .usage-bar { transition: none; } }
 .overview > .overview-live { display: flex; justify-content: flex-end; margin: 0 calc(var(--sp-3) * -1); padding: 6px var(--sp-3) 0; }
 .overview-head { margin: 0 calc(var(--sp-3) * -1) var(--sp-1); }
 .overview > .live-head { margin: 0 calc(var(--sp-3) * -1) var(--sp-1); }
@@ -1899,6 +1926,9 @@ td .list-menu > summary:hover { border-color: var(--line); background: var(--sur
    -------------------------------------------------------------------------- */
 @media (max-width: 1100px) {
   .client-layout, .settings-edit-page, .branding-layout, .nas-layout { grid-template-columns: minmax(0, 1fr); }
+  /* One column: Usage comes first (field checks), the form next, Account Overview last. */
+  .client-side { display: contents; }
+  .client-layout > .client-side > .usage-card { order: -1; }
   .nas-setup { position: static; }
   .settings-edit-page > .settings-user-form, .settings-edit-page > .profile-settings-main { grid-row: auto; }
   .settings-edit-page > .settings-user-roles { grid-column: auto; }

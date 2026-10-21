@@ -6,6 +6,7 @@ import Icon from '@/components/Icon';
 import { LivePanel } from '@/components/LivePanel';
 import { DataTable } from '@/components/table';
 import { Tabs } from '@/components/tabs';
+import { UsageCard, type UsageHistory } from '@/components/usage';
 import { Badge, Check, ConnectionState, Empty, ErrorSummary, Field, Panel, Select, Tag, TextArea, type TagData } from '@/components/ui';
 import AppLayout from '@/layouts/AppLayout';
 import { useCan } from '@/lib/auth';
@@ -30,6 +31,7 @@ type Client = {
     username: string;
     header: Header;
     overview: Overview;
+    usage: UsageHistory;
     weeklyTraffic: { day: string; down: number; up: number }[];
     sessions: Session[];
     billing: { newInvoice: boolean; stats: Stat[]; overdue: string | null; invoices: InvoiceRow[]; payments: Payment[] };
@@ -436,7 +438,12 @@ export default function ClientForm({ values, draftRestored, draftTab, canEdit, c
                         <Link className="button" href="/clients">Back to clients</Link>
                     </div>}
                 </form>
-                {client ? <OverviewPanel username={client.username} initial={client.overview} /> : (
+                {client ? (
+                    <div className="client-side">
+                        <UsageCard username={client.username} initial={client.usage} />
+                        <OverviewPanel username={client.username} initial={client.overview} />
+                    </div>
+                ) : (
                     <aside className="overview">
                         <div className="overview-head"><h3>Set up a client</h3></div>
                         <ol className="setup-guide">
