@@ -4,6 +4,15 @@ RadiusOne follows [semantic versioning](https://semver.org): **major** for chang
 upgrading, **minor** for new features, **patch** for fixes. The version is in the `VERSION` file and shows in
 the portal's sidebar and under Settings → System information.
 
+## 2.1.4 (2026-10-21)
+
+Tablets, phones held sideways and large screens:
+
+- Wide tables that scroll sideways inside their panel (clients, invoices on tablets) show a soft shade at the
+  cut edge, so it is clear more columns follow.
+- The section name above the page title stays on one line on tablets.
+- On a phone held sideways the top bar scrolls away with the page instead of covering a quarter of the screen.
+
 ## 2.1.3 (2026-10-21)
 
 Layout fixes found by checking every page on a phone and on a computer:
