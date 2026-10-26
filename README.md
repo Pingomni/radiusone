@@ -1,5 +1,7 @@
 # RadiusOne
 
+**[Website](https://pingomni.com/radiusone/)** · **[Live demo](https://demo-radiusone.pingomni.com/?r=/login)** (demo / demo) · **[User guide](https://pingomni.com/docs/radiusone/)** · by [PingOmni](https://pingomni.com/)
+
 Client, billing and NAS management for FreeRADIUS: customers and service plans, PPPoE and DHCP access,
 invoices and payments, NAS monitoring over SNMP, notifications and encrypted backups.
 Built with Laravel 13, Inertia and React. The release number is in `VERSION`; what changed is in [CHANGELOG.md](CHANGELOG.md).
