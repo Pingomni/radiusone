@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Support\Db;
 use App\Support\License;
 use App\Support\Settings;
 use Tests\TestCase;
@@ -88,5 +89,58 @@ final class EditionsTest extends TestCase
         $this->assertSame(['monitoring' => true], array_filter(License::features()));
         $this->actingAsOperator();
         $this->get('/billing')->assertForbidden();
+    }
+
+    public function test_client_limits_by_edition(): void
+    {
+        $year = date('Y-m-d', strtotime('+1 year'));
+        License::save('');
+        $this->assertSame(150, License::clientLimit());
+        License::save(self::licenceKey(['all'], $year));
+        $this->assertSame(999, License::clientLimit(), 'a Pro key without a limit: 999');
+        License::save(self::licenceKey(['all'], $year, clients: 0));
+        $this->assertNull(License::clientLimit(), 'Pro Unlimited');
+        License::save(self::licenceKey(['all'], $year, clients: 20));
+        $this->assertSame(150, License::clientLimit(), 'never fewer than Community');
+        License::save(self::licenceKey(['all'], date('Y-m-d', strtotime('-1 day')), clients: 0));
+        $this->assertSame(150, License::clientLimit(), 'expired: new clients held to Community');
+    }
+
+    public function test_community_refuses_the_151st_client_and_keeps_the_rest(): void
+    {
+        License::save('');
+        $this->actingAsOperator();
+        $this->post('/services/save', [
+            'id' => '', 'name' => 'Home 50', 'group_name' => 'home50', 'description' => '', 'enabled' => true, 'download_speed' => '50', 'upload_speed' => '10',
+            'ip_mode' => 'pool', 'ip_pool' => '', 'session_timeout' => '', 'idle_timeout' => '', 'simultaneous_use' => '1', 'expiration_behavior' => '',
+            'billing_mode' => 'prepaid', 'expired_service_group' => '', 'price' => '20.00', 'currency' => 'EUR', 'custom_group_attrs' => '',
+        ])->assertSessionHas('flash.type', 'success');
+        // 149 clients, and archived ones that do not count.
+        for ($i = 1; $i <= 149; $i++) {
+            $this->insertRow('customer_profiles', ['username' => 'c' . $i, 'account_status' => $i % 2 ? 'active' : 'suspended']);
+        }
+        $this->insertRow('customer_profiles', ['username' => 'gone', 'account_status' => 'archived']);
+        $client = static fn (string $username) => [
+            'old_username' => '', 'auth_method' => 'pppoe', 'username' => $username, 'password' => 'pppoe-pass-1', 'verified' => '0',
+            'account_status' => 'enabled', 'expiry_date' => date('Y-m-d', strtotime('+30 days')), 'service_group' => 'home50',
+            'framed_ip_address' => '', 'framed_pool' => '', 'email_alert' => false, 'sms_alert' => false, 'access_profile_id' => '',
+            'dhcp_client_id' => '', 'circuit_id' => '', 'mac_address' => '', 'mac_lock' => false, 'nas_restriction_type' => 'all',
+            'nas_restriction_value' => '', 'language' => 'en', 'first_name' => 'New', 'last_name' => 'Client', 'company_name' => '',
+            'vat_tax_id' => '', 'phone' => '', 'cell_phone' => '', 'email' => '', 'address' => '', 'city' => '',
+            'state' => '', 'zip' => '', 'country' => 'AL', 'gps' => '', 'contract_id' => '', 'contract_valid_until' => '', 'notes' => '',
+            '_active_tab' => 'account',
+        ];
+
+        $this->post('/clients/save', $client('number150'))->assertSessionHas('flash.type', 'success');
+        $this->post('/clients/save', $client('number151'))->assertRedirect('/clients/create?tab=account');
+        $this->assertStringContainsString('Community covers up to 150 clients', (string) session('flash.message'));
+        $this->assertNull(Db::row('SELECT id FROM radcheck WHERE username="number151"'));
+        // Existing clients can still be changed.
+        $this->post('/clients/save', ['old_username' => 'number150', 'city' => 'Durres'] + $client('number150'))->assertSessionHas('flash.type', 'success');
+        $this->get('/settings?tab=license')->assertInertia(fn ($page) => $page->where('license.clientCount', 150)->where('license.clientLimit', 150));
+
+        // A Pro key makes room.
+        License::save(self::licenceKey(['all'], date('Y-m-d', strtotime('+1 year'))));
+        $this->post('/clients/save', $client('number151'))->assertSessionHas('flash.type', 'success');
     }
 }

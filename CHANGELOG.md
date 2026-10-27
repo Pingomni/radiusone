@@ -12,10 +12,14 @@ the portal's sidebar and under Settings → System information.
   customer notifications and admin alerts, NAS monitoring over SNMP with traffic graphs, remote backups
   and your logo. Keys come from your PingOmni account (account.pingomni.com) and are checked on the
   server; nothing is sent anywhere.
+- **Clients per edition:** Community up to 150 clients, Pro up to 999, Pro Unlimited with no limit.
+  Archived clients do not count. At the limit, every client keeps working and RADIUS is untouched; only
+  adding a new client is refused, with what to do. Settings → License shows how many are in use.
 - An expired licence never stops RADIUS or a Pro feature already set up: Pro pages stay readable and Pro
   jobs keep running, but Pro settings cannot be changed until the licence is renewed.
 - **Upgrading:** add your licence key under Settings → License right after updating. Until then billing,
-  notifications, NAS monitoring, remote backups and a custom logo are off (their data is kept).
+  notifications, NAS monitoring, remote backups and a custom logo are off (their data is kept), and a server
+  with more than 150 clients cannot add new ones.
 
 ## 2.1.8 (2026-10-21)
 

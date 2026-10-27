@@ -88,6 +88,8 @@ final class SettingsController extends Controller
                 ...License::current(),
                 'features' => License::features(),
                 'names' => License::FEATURES,
+                'clientCount' => License::clientCount(),
+                'clientLimit' => License::clientLimit(),
             ] : null,
             'retention' => $tab === 'retention' ? [
                 'periods' => Retention::settings(),

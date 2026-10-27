@@ -15,8 +15,12 @@ const STATE: Record<License['state'], [string, string]> = {
 export function LicenseTab({ l }: { l: License }) {
     const form = useForm({ license_key: '' });
     const ask = useConfirm();
-    const [label, tone] = STATE[l.state];
+    const [label, tone] = l.state === 'active' && l.clientLimit === null ? ['Pro Unlimited', 'success'] : STATE[l.state];
     const licensed = l.state === 'active' || l.state === 'expired';
+    const full = l.clientLimit !== null && l.clientCount >= l.clientLimit;
+    const clients = l.clientLimit === null
+        ? `${l.clientCount.toLocaleString()} (no limit)`
+        : `${l.clientCount.toLocaleString()} of ${l.clientLimit.toLocaleString()}${full ? ': new clients are refused until clients are archived or the licence covers more' : ''}`;
 
     return (
         <>
@@ -26,12 +30,17 @@ export function LicenseTab({ l }: { l: License }) {
                         ['Licensed to', l.customer || '-'],
                         ['Valid until', l.state === 'expired' ? `${l.expires} (expired: Pro keeps running as it is, but cannot be changed)` : (l.expires ?? '-')],
                         ['Licence id', l.id || '-'],
+                        ['Clients', clients],
                     ]} />
                 ) : (
-                    <p className="panel-text">
-                        This is RadiusOne Community: clients, services, NAS devices, RADIUS, the network queue, reports and local backups.
-                        A RadiusOne Pro key from your PingOmni account (account.pingomni.com) turns on the features below.
-                    </p>
+                    <>
+                        <p className="panel-text">
+                            This is RadiusOne Community: clients, services, NAS devices, RADIUS, the network queue, reports and local backups,
+                            for up to {l.clientLimit?.toLocaleString()} clients. A RadiusOne Pro key from your PingOmni account
+                            (account.pingomni.com) turns on the features below, for up to 999 clients, or with no limit with Pro Unlimited.
+                        </p>
+                        <SettingsRows rows={[['Clients', clients]]} />
+                    </>
                 )}
                 <div className="settings-list settings-sheet-list">
                     {Object.entries(l.names).map(([feature, name]) => (

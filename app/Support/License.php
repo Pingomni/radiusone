@@ -6,20 +6,29 @@ namespace App\Support;
 
 /**
  * RadiusOne Pro: a licence key under Settings → License turns on the Pro features. Without one RadiusOne runs
- * as RadiusOne Community: clients, services, NAS, RADIUS, the network queue, reports and local backups.
+ * as RadiusOne Community: clients, services, NAS, RADIUS, the network queue, reports and local backups, for
+ * up to COMMUNITY_CLIENTS clients. A Pro key also sets how many clients the server may hold: 999 (Pro) or
+ * no limit (Pro Unlimited).
  *
  * A key is RADIUSONE1.<base64url payload JSON>.<base64url Ed25519 signature of the payload>, signed by
  * PingOmni (the account portal, account.pingomni.com) with the same key as DNSOne's. The payload is
- * {"v":1,"id","customer","issued","expires","features"}, features ["all"] or feature names (FEATURES).
+ * {"v":1,"id","customer","issued","expires","features","clients"}, features ["all"] or feature names
+ * (FEATURES), clients the limit (0: none; missing: PRO_CLIENTS).
  *
  * An expired licence never stops RADIUS or a Pro feature already set up: its pages stay readable and its
- * jobs keep running, but nothing in it can be changed until the licence is renewed.
+ * jobs keep running, but nothing in it can be changed until the licence is renewed, and new clients are
+ * held to the Community limit. Over a limit, every client keeps working; only adding new ones is refused.
  *
- * @phpstan-type Licence array{state: string, customer?: string, id?: string, expires?: string, features?: list<string>, error?: string}
+ * @phpstan-type Licence array{state: string, customer?: string, id?: string, expires?: string, features?: list<string>, clients?: int|null, error?: string}
  */
 final class License
 {
     public const PREFIX = 'RADIUSONE1';
+
+    /** Clients (not archived) a server may hold without a licence, and with a Pro key that does not say. */
+    public const COMMUNITY_CLIENTS = 150;
+
+    public const PRO_CLIENTS = 999;
 
     /** The Pro features: licence feature name => what it is called in the portal. */
     public const FEATURES = [
@@ -58,6 +67,7 @@ final class License
             return ['state' => 'invalid', 'error' => 'This is not a RadiusOne licence key, or it was changed.'];
         }
         $features = array_values(array_filter((array) ($payload['features'] ?? []), 'is_string'));
+        $clients = $payload['clients'] ?? self::PRO_CLIENTS;
 
         return [
             'state' => (string) $payload['expires'] < date('Y-m-d') ? 'expired' : 'active',
@@ -65,7 +75,36 @@ final class License
             'id' => (string) ($payload['id'] ?? ''),
             'expires' => (string) $payload['expires'],
             'features' => in_array('all', $features, true) ? array_keys(self::FEATURES) : array_values(array_intersect($features, array_keys(self::FEATURES))),
+            // Never fewer than Community allows.
+            'clients' => is_int($clients) && $clients > 0 ? max($clients, self::COMMUNITY_CLIENTS) : null,
         ];
+    }
+
+    /** How many clients (not archived) this server may hold now; null: no limit. */
+    public static function clientLimit(): ?int
+    {
+        $licence = self::current();
+
+        return $licence['state'] === 'active' ? ($licence['clients'] ?? null) : self::COMMUNITY_CLIENTS;
+    }
+
+    /** Clients that count toward the limit: every one not archived (suspended and expired ones too). */
+    public static function clientCount(): int
+    {
+        return (int) Db::value('SELECT COUNT(*) FROM customer_profiles WHERE account_status <> "archived"');
+    }
+
+    /** Refuses a new client once the server holds as many as its licence allows. Existing clients are never affected. */
+    public static function assertRoomForClient(): void
+    {
+        $limit = self::clientLimit();
+        if ($limit !== null && self::clientCount() >= $limit) {
+            throw new \RuntimeException(match (self::current()['state']) {
+                'active' => "This RadiusOne Pro licence covers {$limit} clients, and they are all in use. Archive clients you no longer serve, or upgrade to RadiusOne Pro Unlimited.",
+                'expired' => "The RadiusOne Pro licence has expired: new clients are limited to {$limit} until it is renewed. Existing clients keep working.",
+                default => "RadiusOne Community covers up to {$limit} clients. Archive clients you no longer serve, or add a RadiusOne Pro licence under Settings → License.",
+            });
+        }
     }
 
     /** Whether a Pro feature may run (an active or expired licence for it), or, with $write, be changed (active only). */

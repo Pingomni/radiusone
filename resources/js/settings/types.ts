@@ -100,4 +100,6 @@ export type Regional = {
 export type License = {
     state: 'none' | 'active' | 'expired' | 'invalid'; customer?: string; id?: string; expires?: string; error?: string;
     features: Record<string, boolean>; names: Record<string, string>;
+    /** Clients that count (not archived) and how many this licence allows; null: no limit. */
+    clientCount: number; clientLimit: number | null; clients?: number | null;
 };

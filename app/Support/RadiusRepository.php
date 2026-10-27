@@ -63,6 +63,10 @@ final class RadiusRepository
             if ($profile && $profile['account_status'] === 'archived') {
                 throw new RuntimeException('Archived customers cannot be provisioned or renamed.');
             }
+            if (!$profile) {
+                // A new client: within the licence's client limit (RadiusOne Community 150, Pro 999).
+                License::assertRoomForClient();
+            }
 
             self::assertIdentityAvailable($username, $oldUsername);
             if ($oldUsername && $oldUsername !== $username) {
