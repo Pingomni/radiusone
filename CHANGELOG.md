@@ -4,6 +4,12 @@ RadiusOne follows [semantic versioning](https://semver.org): **major** for chang
 upgrading, **minor** for new features, **patch** for fixes. The version is in the `VERSION` file and shows in
 the portal's sidebar and under Settings → System information.
 
+## 2.2.1 (2026-10-27)
+
+- **PingOmni teal.** The portal's colours follow the PingOmni brand: links, buttons, focus rings, the menu
+  marker and charts are teal in the light and dark themes, and the logo, favicon and app icons have the teal
+  gradient. Status colours, the NAS traffic chart and every page stay as they were.
+
 ## 2.2.0 (2026-10-27)
 
 - **RadiusOne Community and RadiusOne Pro.** Without a licence, RadiusOne runs as Community: clients,
