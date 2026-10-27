@@ -6,6 +6,7 @@ namespace Tests;
 
 use App\Support\Backup\BackupNow;
 use App\Support\Db;
+use App\Support\License;
 use App\Support\MigrationRunner;
 use App\Support\Security;
 use App\Support\SoftwareUpdate;
@@ -44,6 +45,22 @@ abstract class TestCase extends BaseTestCase
         SoftwareUpdate::$isActive = ['false'];
         SoftwareUpdate::$statusFile = $dir . '/update-status.json';
         SoftwareUpdate::$logFile = $dir . '/update.log';
+        // RadiusOne Pro for every test (EditionsTest removes it): a key signed with a test-only key pair.
+        License::save(self::licenceKey(['all'], date('Y-m-d', strtotime('+1 year'))));
+    }
+
+    /** A RadiusOne key signed with this process's test key pair, which License then trusts. */
+    protected static function licenceKey(array $features, string $expires, string $customer = 'Test ISP'): string
+    {
+        static $pair = null;
+        if ($pair === null) {
+            $pair = sodium_crypto_sign_keypair();
+            License::$publicKeys[] = base64_encode(sodium_crypto_sign_publickey($pair));
+        }
+        $b64 = static fn (string $s): string => rtrim(strtr(base64_encode($s), '+/', '-_'), '=');
+        $payload = json_encode(['v' => 1, 'id' => bin2hex(random_bytes(6)), 'customer' => $customer, 'issued' => date('Y-m-d'), 'expires' => $expires, 'features' => $features], JSON_THROW_ON_ERROR);
+
+        return License::PREFIX . '.' . $b64($payload) . '.' . $b64(sodium_crypto_sign_detached($payload, sodium_crypto_sign_secretkey($pair)));
     }
 
     protected function tearDown(): void

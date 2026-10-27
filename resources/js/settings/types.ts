@@ -95,3 +95,9 @@ export type Regional = {
     timezone: string; timezones: Record<string, string>; timezoneLog: string[]; timezoneReady: boolean;
     currency: string; currencies: Record<string, string>; issuedOther: number;
 };
+
+/** Settings → License (SettingsController::settings, License::current). */
+export type License = {
+    state: 'none' | 'active' | 'expired' | 'invalid'; customer?: string; id?: string; expires?: string; error?: string;
+    features: Record<string, boolean>; names: Record<string, string>;
+};

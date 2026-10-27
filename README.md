@@ -54,6 +54,18 @@ Where things are:
 After installing, add your routers under **NAS**, then restart FreeRADIUS from **Monitoring → RADIUS
 server** so it loads them. RADIUS listens on UDP 1812 (authentication) and 1813 (accounting).
 
+## Editions
+
+RadiusOne runs as **RadiusOne Community** without a licence: clients and service plans, PPPoE and DHCP
+access, NAS devices, FreeRADIUS, the network operations queue, reports, the monitoring overview and the
+RADIUS server page, and local backups. **RadiusOne Pro** turns on with a licence key under
+**Settings → License**: billing and invoices, customer notifications and admin alerts, NAS monitoring over
+SNMP with traffic graphs, encrypted remote backups, and your own logo. Keys are bought at
+[account.pingomni.com](https://account.pingomni.com) and checked on the server (`app/Support/License.php`,
+Ed25519); nothing is sent anywhere. An expired licence never stops RADIUS: Pro features keep running as
+they were, and can be changed again once it is renewed. Compare the editions at
+[pingomni.com/radiusone](https://pingomni.com/radiusone/#editions).
+
 ## Development
 
 ```bash

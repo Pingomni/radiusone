@@ -20,6 +20,7 @@ use App\Support\Currency;
 use App\Support\Db;
 use App\Support\Diagnostics;
 use App\Support\Documents;
+use App\Support\License;
 use App\Support\NetworkOperations;
 use App\Support\RadiusRepository;
 use App\Support\SchemaCompatibility;
@@ -215,7 +216,7 @@ final class ClientController extends Controller
         $overdue = (float) array_sum(array_column($sums, 'overdue'));
         $stat = static fn (string $label, string $value, string $note, string $tone = '') => ['label' => $label, 'value' => trim($value), 'note' => $note, 'tone' => $tone];
         return [
-            'newInvoice' => Auth::can('billing.manage') && !Clients::isArchived($client),
+            'newInvoice' => Auth::can('billing.manage') && License::allows('billing', write: true) && !Clients::isArchived($client),
             'stats' => [
                 $stat('Total billed', $total('billed'), 'Issued invoices only'),
                 $stat('Paid', $total('paid'), 'Payments received', 'success'),

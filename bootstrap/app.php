@@ -4,6 +4,7 @@ use App\Http\Middleware\Authenticate;
 use App\Http\Middleware\ForceHttps;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\RequirePermission;
+use App\Http\Middleware\RequirePro;
 use App\Http\Middleware\RequireRecentAuth;
 use App\Http\Middleware\SecurityHeaders;
 use App\Support\Diagnostics;
@@ -42,6 +43,7 @@ $app = Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'frweb.auth' => Authenticate::class,
             'permission' => RequirePermission::class,
+            'pro' => RequirePro::class,
             'recent-auth' => RequireRecentAuth::class,
         ]);
     })

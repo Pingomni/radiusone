@@ -7,6 +7,7 @@ namespace App\Http\Support;
 use App\Support\BillingCalendar;
 use App\Support\BillingDocuments;
 use App\Support\Branding;
+use App\Support\License;
 use App\Support\Settings;
 use App\Support\SimplePdf;
 
@@ -155,7 +156,7 @@ final class Invoices
         $currency = (string) $invoice['currency'];
         $period = self::periodLabel((string) ($invoice['billing_period'] ?? 'monthly'));
         $money = static fn ($value) => Format::money($value) . ' ' . $currency;
-        $logo = Settings::value('portal_logo_path', '');
+        $logo = License::allows('branding') ? Settings::value('portal_logo_path', '') : '';
         return SimplePdf::receipt([
             'title' => BillingDocuments::fill($title, $invoice),
             'payment_state' => $paymentState,

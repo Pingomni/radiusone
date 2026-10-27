@@ -98,6 +98,7 @@ const SECTIONS: [key: string, label: string, href: string, icon: string, hint: s
     ['regional', 'Regional', '/settings?tab=regional', 'calendar', 'Time zone and currency'],
     ['backups', 'Backups', '/settings?tab=backups', 'server', 'Encrypted remote copies'],
     ['retention', 'Data retention', '/settings?tab=retention', 'logs', 'Session and login records'],
+    ['license', 'License', '/settings?tab=license', 'lock', 'RadiusOne Pro key'],
 ];
 
 /** Settings section navigation (legacy settingsLinkNav). */

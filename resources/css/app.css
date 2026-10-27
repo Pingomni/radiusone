@@ -486,6 +486,15 @@ details > summary { cursor: pointer; font-weight: 600; }
   letter-spacing: .04em;
   text-transform: uppercase;
 }
+.sidebar nav a .nav-pro {
+  margin-left: auto;
+  padding: 1px 6px;
+  border: 1px solid var(--sidebar-line);
+  border-radius: 999px;
+  color: var(--sidebar-muted);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+}
 .sidebar nav a {
   position: relative;
   display: flex;

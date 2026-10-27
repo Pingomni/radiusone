@@ -59,36 +59,51 @@ Route::middleware('frweb.auth')->group(function () {
         Route::get('/docs', [SettingsController::class, 'docs']);
         Route::get('/settings/notifications/{channel}', [SettingsController::class, 'legacyNotificationPage'])->whereIn('channel', ['general', 'sms', 'email']);
         Route::post('/settings/branding/name', [SettingsController::class, 'saveCompanyName']);
-        Route::post('/settings/branding/logo', [SettingsController::class, 'saveLogo']);
-        Route::post('/settings/branding/logo/delete', [SettingsController::class, 'deleteLogo']);
-        Route::post('/settings/branding/logo/url', [SettingsController::class, 'saveLogoUrl']);
-        Route::post('/settings/notifications/templates', [SettingsController::class, 'saveNotificationTemplates']);
-        Route::post('/settings/notifications/bulk-preview', [SettingsController::class, 'notificationBulkPreview']);
-        Route::post('/settings/notifications/bulk-confirm', [SettingsController::class, 'notificationBulkConfirm']);
-        Route::post('/settings/notifications/{channel}-test', [SettingsController::class, 'testGateway'])->whereIn('channel', ['email', 'sms']);
-        Route::post('/settings/notifications/admin/telegram-chats', [SettingsController::class, 'telegramChats']);
-        Route::post('/settings/notifications/admin/{kind}', [SettingsController::class, 'sendAdminAlert'])->whereIn('kind', ['test', 'report']);
-        Route::post('/settings/documents', [SettingsController::class, 'saveDocuments']);
-        Route::get('/settings/documents/preview/{kind}', [SettingsController::class, 'previewDocument'])->whereIn('kind', ['request', 'receipt']);
         Route::post('/settings/backups/run', [BackupSettingsController::class, 'runNow']);
         Route::post('/settings/update/check', [SoftwareUpdateController::class, 'check']);
         Route::get('/settings/update/status', [SoftwareUpdateController::class, 'status']);
-        Route::post('/settings/backups/destinations/{id}/test', [BackupSettingsController::class, 'test'])->where('id', '[0-9a-f]{12}');
-        foreach (['general', 'sms-template', 'email-template', 'send-sms'] as $legacy) {
-            Route::post('/settings/notifications/' . $legacy, [SettingsController::class, 'notificationLegacy']);
-        }
         Route::middleware('recent-auth')->group(function () {
-            Route::post('/settings/notifications/sms-gateway', [SettingsController::class, 'saveSmsGateway']);
-            Route::post('/settings/notifications/email-gateway', [SettingsController::class, 'saveEmailGateway']);
-            Route::post('/settings/notifications/admin', [SettingsController::class, 'saveAdminAlerts']);
+            Route::post('/settings/license', [SettingsController::class, 'saveLicense']);
             Route::post('/settings/retention', [SettingsController::class, 'saveRetention']);
             Route::post('/settings/currency', [SettingsController::class, 'saveCurrency']);
             Route::post('/settings/timezone', [SettingsController::class, 'saveTimezone']);
-            Route::post('/settings/backups/passphrase', [BackupSettingsController::class, 'passphrase']);
             Route::post('/settings/update/start', [SoftwareUpdateController::class, 'start']);
             Route::post('/settings/backups/local', [BackupSettingsController::class, 'local']);
-            Route::post('/settings/backups/destinations', [BackupSettingsController::class, 'save']);
-            Route::post('/settings/backups/destinations/{id}/delete', [BackupSettingsController::class, 'delete'])->where('id', '[0-9a-f]{12}');
+        });
+
+        // RadiusOne Pro (License::FEATURES): changes need an active licence.
+        Route::middleware('pro:branding')->group(function () {
+            Route::post('/settings/branding/logo', [SettingsController::class, 'saveLogo']);
+            Route::post('/settings/branding/logo/delete', [SettingsController::class, 'deleteLogo']);
+            Route::post('/settings/branding/logo/url', [SettingsController::class, 'saveLogoUrl']);
+        });
+        Route::middleware('pro:notifications')->group(function () {
+            Route::post('/settings/notifications/templates', [SettingsController::class, 'saveNotificationTemplates']);
+            Route::post('/settings/notifications/bulk-preview', [SettingsController::class, 'notificationBulkPreview']);
+            Route::post('/settings/notifications/bulk-confirm', [SettingsController::class, 'notificationBulkConfirm']);
+            Route::post('/settings/notifications/{channel}-test', [SettingsController::class, 'testGateway'])->whereIn('channel', ['email', 'sms']);
+            Route::post('/settings/notifications/admin/telegram-chats', [SettingsController::class, 'telegramChats']);
+            Route::post('/settings/notifications/admin/{kind}', [SettingsController::class, 'sendAdminAlert'])->whereIn('kind', ['test', 'report']);
+            foreach (['general', 'sms-template', 'email-template', 'send-sms'] as $legacy) {
+                Route::post('/settings/notifications/' . $legacy, [SettingsController::class, 'notificationLegacy']);
+            }
+            Route::middleware('recent-auth')->group(function () {
+                Route::post('/settings/notifications/sms-gateway', [SettingsController::class, 'saveSmsGateway']);
+                Route::post('/settings/notifications/email-gateway', [SettingsController::class, 'saveEmailGateway']);
+                Route::post('/settings/notifications/admin', [SettingsController::class, 'saveAdminAlerts']);
+            });
+        });
+        Route::middleware('pro:billing')->group(function () {
+            Route::post('/settings/documents', [SettingsController::class, 'saveDocuments']);
+            Route::get('/settings/documents/preview/{kind}', [SettingsController::class, 'previewDocument'])->whereIn('kind', ['request', 'receipt']);
+        });
+        Route::middleware('pro:backups')->group(function () {
+            Route::post('/settings/backups/destinations/{id}/test', [BackupSettingsController::class, 'test'])->where('id', '[0-9a-f]{12}');
+            Route::middleware('recent-auth')->group(function () {
+                Route::post('/settings/backups/passphrase', [BackupSettingsController::class, 'passphrase']);
+                Route::post('/settings/backups/destinations', [BackupSettingsController::class, 'save']);
+                Route::post('/settings/backups/destinations/{id}/delete', [BackupSettingsController::class, 'delete'])->where('id', '[0-9a-f]{12}');
+            });
         });
 
         foreach (['/settings/users', '/portal-users'] as $base) {
@@ -150,7 +165,7 @@ Route::middleware('frweb.auth')->group(function () {
         // The Access tab (access profiles) was removed; old links open the NAS page.
         Route::get('/nas/{id}/access', fn (string $id) => redirect('/nas/' . (int) $id . '/edit'))->whereNumber('id');
         Route::middleware('recent-auth')->group(function () {
-            Route::post('/nas/{id}/snmp', [NasController::class, 'snmpSave'])->whereNumber('id');
+            Route::post('/nas/{id}/snmp', [NasController::class, 'snmpSave'])->whereNumber('id')->middleware('pro:monitoring');
             Route::post('/nas/save', [NasController::class, 'save']);
             Route::post('/nas/{id}/delete', [NasController::class, 'delete'])->whereNumber('id');
         });
@@ -160,17 +175,20 @@ Route::middleware('frweb.auth')->group(function () {
         Route::get('/monitoring/server', [MonitoringController::class, 'server']);
         Route::get('/monitoring/server/live', [MonitoringController::class, 'serverLive']);
         Route::post('/monitoring/server/restart', [MonitoringController::class, 'restartService'])->middleware(['permission:settings.manage', 'recent-auth']);
-        Route::post('/monitoring/poll', [MonitoringController::class, 'poll']);
-        Route::get('/nas/{id}/monitor', [MonitoringController::class, 'nas'])->whereNumber('id');
-        Route::get('/nas/{id}/monitor/live', [MonitoringController::class, 'nasLive'])->whereNumber('id');
-        Route::get('/nas/{id}/monitor/tables/{table}', [MonitoringController::class, 'nasTable'])->whereNumber('id')->whereIn('table', array_keys(NasTables::TABLES));
-        Route::get('/nas/{id}/monitor/graph', [MonitoringController::class, 'trafficGraph'])->whereNumber('id');
-        Route::get('/nas/{id}/monitor/health', [MonitoringController::class, 'healthGraph'])->whereNumber('id');
-        Route::get('/nas/{id}/monitor/temperature', [MonitoringController::class, 'temperatureGraph'])->whereNumber('id');
+        // RadiusOne Pro: SNMP polling and each NAS's monitoring, tables and graphs.
+        Route::middleware('pro:monitoring')->group(function () {
+            Route::post('/monitoring/poll', [MonitoringController::class, 'poll']);
+            Route::get('/nas/{id}/monitor', [MonitoringController::class, 'nas'])->whereNumber('id');
+            Route::get('/nas/{id}/monitor/live', [MonitoringController::class, 'nasLive'])->whereNumber('id');
+            Route::get('/nas/{id}/monitor/tables/{table}', [MonitoringController::class, 'nasTable'])->whereNumber('id')->whereIn('table', array_keys(NasTables::TABLES));
+            Route::get('/nas/{id}/monitor/graph', [MonitoringController::class, 'trafficGraph'])->whereNumber('id');
+            Route::get('/nas/{id}/monitor/health', [MonitoringController::class, 'healthGraph'])->whereNumber('id');
+            Route::get('/nas/{id}/monitor/temperature', [MonitoringController::class, 'temperatureGraph'])->whereNumber('id');
+        });
     });
 
-    // Billing.
-    Route::middleware('permission:billing.view')->group(function () {
+    // Billing (RadiusOne Pro).
+    Route::middleware(['permission:billing.view', 'pro:billing'])->group(function () {
         Route::get('/billing', [BillingController::class, 'index']);
         Route::get('/billing/export', [BillingController::class, 'export']);
         Route::get('/billing/invoices/create', [BillingController::class, 'form']);

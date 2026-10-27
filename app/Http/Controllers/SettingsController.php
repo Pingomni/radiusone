@@ -17,6 +17,7 @@ use App\Support\Currency;
 use App\Support\CustomerNotifications;
 use App\Support\Db;
 use App\Support\EmailProviders;
+use App\Support\License;
 use App\Support\NotificationService;
 use App\Support\Retention;
 use App\Support\SchemaCompatibility;
@@ -41,7 +42,7 @@ final class SettingsController extends Controller
     {
         $tab = (string) $request->query('tab', 'overview');
         $tab = $tab === 'custom' ? 'branding' : $tab;
-        $tab = in_array($tab, ['overview', 'users', 'notifications', 'branding', 'documents', 'regional', 'retention', 'backups'], true) ? $tab : 'overview';
+        $tab = in_array($tab, ['overview', 'users', 'notifications', 'branding', 'documents', 'regional', 'retention', 'backups', 'license'], true) ? $tab : 'overview';
 
         $userCount = (int) Db::value('SELECT COUNT(*) FROM portal_users');
         $enabledUsers = (int) Db::value('SELECT COUNT(*) FROM portal_users WHERE enabled = 1');
@@ -82,6 +83,11 @@ final class SettingsController extends Controller
                 'currency' => Currency::code(),
                 'currencies' => Currency::OPTIONS,
                 'issuedOther' => (int) Db::value('SELECT COUNT(*) FROM billing_invoices WHERE status NOT IN ("draft","void") AND currency<>?', [Currency::code()]),
+            ] : null,
+            'license' => $tab === 'license' ? [
+                ...License::current(),
+                'features' => License::features(),
+                'names' => License::FEATURES,
             ] : null,
             'retention' => $tab === 'retention' ? [
                 'periods' => Retention::settings(),
@@ -264,6 +270,23 @@ final class SettingsController extends Controller
     public function legacyNotificationPage(string $channel): RedirectResponse
     {
         return redirect('/settings?tab=notifications&view=gateways' . ($channel === 'general' ? '' : '&gateway=' . $channel));
+    }
+
+    /** Settings → License: adds, replaces or (empty) removes the RadiusOne Pro key. */
+    public function saveLicense(Request $request): RedirectResponse
+    {
+        $before = License::current();
+        $licence = License::save((string) $request->input('license_key', ''));
+        if ($licence['state'] === 'invalid') {
+            return $this->fail($licence['error'] ?? 'This is not a RadiusOne licence key.', '/settings?tab=license');
+        }
+        Audit::log('update', 'setting', 'license_key', ['license' => $before['id'] ?? null], ['license' => $licence['id'] ?? null, 'expires' => $licence['expires'] ?? null]);
+        $expires = $licence['expires'] ?? '';
+        return match ($licence['state']) {
+            'none' => $this->ok('/settings?tab=license', 'Licence removed: this is RadiusOne Community. Pro data is kept; its pages and jobs are off.'),
+            'expired' => $this->warn('/settings?tab=license', "Licence saved, but it expired on {$expires}: its Pro features run as they are and cannot be changed until it is renewed."),
+            default => $this->ok('/settings?tab=license', "RadiusOne Pro is on until {$expires}."),
+        };
     }
 
     public function saveCompanyName(Request $request): RedirectResponse

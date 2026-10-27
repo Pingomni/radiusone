@@ -7,6 +7,7 @@ namespace App\Support\Backup;
 use App\Support\App;
 use App\Support\BoundedProcess;
 use App\Support\DatabaseBackup;
+use App\Support\License;
 use RuntimeException;
 use Throwable;
 
@@ -32,7 +33,8 @@ final class BackupRunner
             $docsFile = self::documents($dir);
             $status['documents'] = ['file' => basename($docsFile), 'size' => (int) filesize($docsFile)];
 
-            $destinations = array_values(array_filter(BackupDestinations::all(), static fn ($d) => !empty($d['enabled'])));
+            // Remote copies are RadiusOne Pro; the local backup is not.
+            $destinations = License::allows('backups') ? array_values(array_filter(BackupDestinations::all(), static fn ($d) => !empty($d['enabled']))) : [];
             if ($upload && $destinations) {
                 $passphrase = BackupDestinations::passphrase();
                 if ($passphrase === '') {

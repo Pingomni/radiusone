@@ -4,6 +4,19 @@ RadiusOne follows [semantic versioning](https://semver.org): **major** for chang
 upgrading, **minor** for new features, **patch** for fixes. The version is in the `VERSION` file and shows in
 the portal's sidebar and under Settings → System information.
 
+## Unreleased: 2.2.0
+
+- **RadiusOne Community and RadiusOne Pro.** Without a licence, RadiusOne runs as Community: clients,
+  services, NAS devices, RADIUS, the network queue, reports, monitoring overview, the RADIUS server page
+  and local backups. A RadiusOne Pro key, added under **Settings → License**, turns on billing and invoices,
+  customer notifications and admin alerts, NAS monitoring over SNMP with traffic graphs, remote backups
+  and your logo. Keys come from your PingOmni account (account.pingomni.com) and are checked on the
+  server; nothing is sent anywhere.
+- An expired licence never stops RADIUS or a Pro feature already set up: Pro pages stay readable and Pro
+  jobs keep running, but Pro settings cannot be changed until the licence is renewed.
+- **Upgrading:** add your licence key under Settings → License right after updating. Until then billing,
+  notifications, NAS monitoring, remote backups and a custom logo are off (their data is kept).
+
 ## 2.1.8 (2026-10-21)
 
 - **Accurate daily usage:** a background job (every 5 minutes) records each session's traffic on the day it

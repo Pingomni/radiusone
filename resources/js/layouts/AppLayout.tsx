@@ -4,6 +4,7 @@ import Icon from '@/components/Icon';
 import { FlashMessage } from '@/components/ui';
 import { useCan, useShared } from '@/lib/auth';
 import { useServerClock } from '@/lib/clock';
+import type { ProFeature } from '@/lib/types';
 
 // Each label appears once: items are listed in group order.
 const NAV: [href: string, label: string, permission: string, icon: string, group: string][] = [
@@ -19,6 +20,9 @@ const NAV: [href: string, label: string, permission: string, icon: string, group
     ['/settings', 'Settings', 'settings.manage', 'settings', 'Workspace'],
     ['/docs', 'Documentation', 'settings.manage', 'book', 'Workspace'],
 ];
+
+// Menu items that are RadiusOne Pro features: marked "Pro" while this server has no licence for them.
+const PRO_NAV: Record<string, ProFeature> = { '/billing': 'billing' };
 
 const CONTEXTS: Record<string, string> = {
     '': 'Workspace / Overview',
@@ -113,7 +117,7 @@ function useMobileNav() {
 
 /** Workspace shell: sidebar, topbar and page feedback (legacy render()). */
 export default function AppLayout({ title, children }: { title: string; children: ReactNode }) {
-    const { auth, flash, clock, appName, appVersion } = useShared();
+    const { auth, flash, clock, appName, appVersion, pro } = useShared();
     const time = useServerClock();
     const can = useCan();
     const { url } = usePage();
@@ -195,6 +199,7 @@ export default function AppLayout({ title, children }: { title: string; children
                                 <Link className={active ? 'active' : ''} href={href} aria-current={active ? 'page' : undefined}>
                                     <Icon name={icon} />
                                     <span>{label}</span>
+                                    {PRO_NAV[href] && pro[PRO_NAV[href]] === false && <span className="nav-pro">Pro</span>}
                                 </Link>
                             </Fragment>
                         );

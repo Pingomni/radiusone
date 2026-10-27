@@ -28,9 +28,9 @@ final class Settings
         );
     }
 
-    /** Browser-loadable logo source, or null for the default mark. */
+    /** Browser-loadable logo source, or null for the default mark (also without RadiusOne Pro: a custom logo is a Pro feature). */
     public static function logo(): ?string
     {
-        return Branding::source(self::value('portal_logo_path', ''));
+        return License::allows('branding') ? Branding::source(self::value('portal_logo_path', '')) : null;
     }
 }

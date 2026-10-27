@@ -14,6 +14,8 @@ export interface AuthUser {
     two_factor_enabled: boolean;
 }
 
+export type ProFeature = 'billing' | 'notifications' | 'monitoring' | 'backups' | 'branding';
+
 export interface SharedProps {
     appName: string;
     /** RadiusOne release, e.g. "2.0.0"; null when signed out. */
@@ -24,6 +26,8 @@ export interface SharedProps {
     clock: { time: string; now: number; timezone: string };
     /** System currency code (Settings → Regional): EUR, USD or ALL. */
     currency: string;
+    /** RadiusOne Pro features (License::FEATURES) and whether each may run here; empty when signed out. */
+    pro: Partial<Record<ProFeature, boolean>>;
     errors: Record<string, string>;
     [key: string]: unknown;
 }
