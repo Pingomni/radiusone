@@ -34,6 +34,16 @@ final class SoftwareUpdateTest extends TestCase
         return json_encode(['ok' => 1, 'current' => '2.0.1', 'latest' => '9.1.0', 'newer' => 1, 'tag' => 'v9.1.0', 'notes' => "## 9.1.0\n- New things", 'problem' => $problem]);
     }
 
+    public function test_the_update_addresses_opened_as_pages_go_to_settings(): void
+    {
+        $this->actingAsOperator();
+        // A reload, Back or a reopened tab after the update was started: no 405, just the Settings page.
+        $this->get('/settings/update/start')->assertRedirect('/settings');
+        $this->get('/settings/update/check')->assertRedirect('/settings');
+        // Any other button-only address opened as a page gets the portal's own error page.
+        $this->get('/settings/license')->assertStatus(405)->assertInertia(fn ($page) => $page->where('title', 'Not a page'));
+    }
+
     public function test_without_the_helper_the_page_says_how_to_enable_updates(): void
     {
         $this->actingAsOperator();

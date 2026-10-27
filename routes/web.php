@@ -62,6 +62,9 @@ Route::middleware('frweb.auth')->group(function () {
         Route::post('/settings/backups/run', [BackupSettingsController::class, 'runNow']);
         Route::post('/settings/update/check', [SoftwareUpdateController::class, 'check']);
         Route::get('/settings/update/status', [SoftwareUpdateController::class, 'status']);
+        // The update buttons post here; a browser left on these addresses (a reload, Back, a reopened tab after the
+        // update) lands on Settings instead of an error.
+        Route::get('/settings/update/{action}', static fn () => redirect('/settings'))->whereIn('action', ['check', 'start']);
         Route::middleware('recent-auth')->group(function () {
             Route::post('/settings/license', [SettingsController::class, 'saveLicense']);
             Route::post('/settings/retention', [SettingsController::class, 'saveRetention']);

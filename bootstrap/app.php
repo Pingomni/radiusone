@@ -52,7 +52,7 @@ $app = Application::configure(basePath: dirname(__DIR__))
 
         $exceptions->respond(function (Response $response, Throwable $e, Request $request) {
             $status = $e instanceof SchemaMismatch ? 503 : $response->getStatusCode();
-            if (!in_array($status, [403, 404, 419, 500, 503], true) || ($status === 500 && config('app.debug'))) {
+            if (!in_array($status, [403, 404, 405, 419, 500, 503], true) || ($status === 500 && config('app.debug'))) {
                 return $response;
             }
 
@@ -63,6 +63,8 @@ $app = Application::configure(basePath: dirname(__DIR__))
                 $status === 403 => ['Access denied', $detail !== '' && $detail !== 'Forbidden' ? $detail
                     : 'Your role does not include this action. Ask a workspace administrator if you need access.'],
                 $status === 404 => ['Not found', $detail !== '' && $detail !== 'Not Found' ? $detail : 'Page not found.'],
+                // An address a button posts to, opened as a page (a reload or Back after the form was sent).
+                $status === 405 => ['Not a page', 'This address is used by a button, not opened as a page. Go back and use the page instead.'],
                 $status === 419 || $e instanceof TokenMismatchException => ['Page expired', 'This form was open too long or you signed in again in another tab, so it was not submitted. Go back, reload the page and submit again.'],
                 $status === 503 => ['Maintenance', 'Application maintenance. Please retry shortly.'],
                 default => ['Application error', 'Something went wrong. Reference: ' . $reference . '.'],
