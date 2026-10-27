@@ -4,6 +4,12 @@ RadiusOne follows [semantic versioning](https://semver.org): **major** for chang
 upgrading, **minor** for new features, **patch** for fixes. The version is in the `VERSION` file and shows in
 the portal's sidebar and under Settings → System information.
 
+## 2.2.3 (2026-10-27)
+
+- **Software update** (Settings → Overview) is laid out like DNSOne's: what is installed, what is available,
+  the release notes (or the update log) in one box, and **Install RadiusOne X**, **Check for updates** and
+  **Release notes** buttons.
+
 ## 2.2.2 (2026-10-27)
 
 - **Phone menu:** the drawer closes with a small ✕ beside the logo, instead of a wide "Close navigation" box
