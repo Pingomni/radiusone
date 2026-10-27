@@ -27,7 +27,7 @@ function accountRow(a: License['activation']): string {
 export function LicenseTab({ l }: { l: License }) {
     const form = useForm({ license_key: '' });
     const ask = useConfirm();
-    const [label, tone] = l.state === 'active' && l.clientLimit === null ? ['Pro Unlimited', 'success'] : STATE[l.state];
+    const [label, tone] = STATE[l.state];
     const licensed = l.state === 'active' || l.state === 'expired';
     const full = l.clientLimit !== null && l.clientCount >= l.clientLimit;
     const clients = l.clientLimit === null
@@ -50,7 +50,7 @@ export function LicenseTab({ l }: { l: License }) {
                         <p className="panel-text">
                             This is RadiusOne Community: clients, services, NAS devices, RADIUS, the network queue, reports and local backups,
                             for up to {l.clientLimit?.toLocaleString()} clients. A RadiusOne Pro key from your PingOmni account
-                            (account.pingomni.com) turns on the features below, for up to 999 clients, or with no limit with Pro Unlimited.
+                            (account.pingomni.com) turns on the features below, for up to 999 clients (Licence 1), 4,999 (Licence 2) or with no limit (Licence 3).
                         </p>
                         <SettingsRows rows={[['Clients', clients]]} />
                     </>

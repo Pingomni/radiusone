@@ -60,8 +60,8 @@ RadiusOne runs as **RadiusOne Community** without a licence: clients and service
 access, NAS devices, FreeRADIUS, the network operations queue, reports, the monitoring overview and the
 RADIUS server page, and local backups, for up to **150 clients**. **RadiusOne Pro** turns on with a licence key under
 **Settings → License**: billing and invoices, customer notifications and admin alerts, NAS monitoring over
-SNMP with traffic graphs, encrypted remote backups, and your own logo, for up to **999 clients**, or with
-no limit with **RadiusOne Pro Unlimited**. Archived clients do not count; over the limit, every client keeps
+SNMP with traffic graphs, encrypted remote backups, and your own logo, by licence: up to **999 clients**
+(Licence 1), up to **4,999** (Licence 2) or **no limit** (Licence 3). Archived clients do not count; over the limit, every client keeps
 working and only new ones are refused. Keys are bought at
 [account.pingomni.com](https://account.pingomni.com) and checked on the server (`app/Support/License.php`,
 Ed25519); nothing is sent anywhere. An expired licence never stops RADIUS: Pro features keep running as

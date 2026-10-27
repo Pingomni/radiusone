@@ -99,7 +99,7 @@ final class EditionsTest extends TestCase
         License::save(self::licenceKey(['all'], $year));
         $this->assertSame(999, License::clientLimit(), 'a Pro key without a limit: 999');
         License::save(self::licenceKey(['all'], $year, clients: 0));
-        $this->assertNull(License::clientLimit(), 'Pro Unlimited');
+        $this->assertNull(License::clientLimit(), 'Licence 3: no limit');
         License::save(self::licenceKey(['all'], $year, clients: 20));
         $this->assertSame(150, License::clientLimit(), 'never fewer than Community');
         License::save(self::licenceKey(['all'], date('Y-m-d', strtotime('-1 day')), clients: 0));

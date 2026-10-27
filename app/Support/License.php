@@ -7,8 +7,8 @@ namespace App\Support;
 /**
  * RadiusOne Pro: a licence key under Settings → License turns on the Pro features. Without one RadiusOne runs
  * as RadiusOne Community: clients, services, NAS, RADIUS, the network queue, reports and local backups, for
- * up to COMMUNITY_CLIENTS clients. A Pro key also sets how many clients the server may hold: 999 (Pro) or
- * no limit (Pro Unlimited).
+ * up to COMMUNITY_CLIENTS clients. A Pro key also sets how many clients the server may hold, by the licence
+ * bought: Licence 1 up to 999, Licence 2 up to 4,999, Licence 3 no limit.
  *
  * A key is RADIUSONE1.<base64url payload JSON>.<base64url Ed25519 signature of the payload>, signed by
  * PingOmni (the account portal, account.pingomni.com) with the same key as DNSOne's. The payload is
@@ -100,7 +100,7 @@ final class License
         $limit = self::clientLimit();
         if ($limit !== null && self::clientCount() >= $limit) {
             throw new \RuntimeException(match (self::current()['state']) {
-                'active' => "This RadiusOne Pro licence covers {$limit} clients, and they are all in use. Archive clients you no longer serve, or upgrade to RadiusOne Pro Unlimited.",
+                'active' => "This RadiusOne Pro licence covers {$limit} clients, and they are all in use. Archive clients you no longer serve, or move to a licence for more clients in your PingOmni account (account.pingomni.com): Licence 2 covers 4,999, Licence 3 has no limit.",
                 'expired' => "The RadiusOne Pro licence has expired: new clients are limited to {$limit} until it is renewed. Existing clients keep working.",
                 default => "RadiusOne Community covers up to {$limit} clients. Archive clients you no longer serve, or add a RadiusOne Pro licence under Settings → License.",
             });

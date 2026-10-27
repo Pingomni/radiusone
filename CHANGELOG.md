@@ -17,7 +17,8 @@ the portal's sidebar and under Settings → System information.
   after a renewal the server installs the new key by itself. It sends the key, a hash of `/etc/machine-id`
   and the host name. Report only: Pro never depends on it; Settings → License shows the registration, and
   `RADIUSONE_ACCOUNT_URL=` (empty) in `.env` turns it off. `php artisan license:check-in --force` runs it now.
-- **Clients per edition:** Community up to 150 clients, Pro up to 999, Pro Unlimited with no limit.
+- **Clients per edition:** Community up to 150 clients; RadiusOne Pro by licence: up to 999 (Licence 1), up to
+  4,999 (Licence 2) or no limit (Licence 3).
   Archived clients do not count. At the limit, every client keeps working and RADIUS is untouched; only
   adding a new client is refused, with what to do. Settings → License shows how many are in use.
 - An expired licence never stops RADIUS or a Pro feature already set up: Pro pages stay readable and Pro
