@@ -4,6 +4,12 @@ RadiusOne follows [semantic versioning](https://semver.org): **major** for chang
 upgrading, **minor** for new features, **patch** for fixes. The version is in the `VERSION` file and shows in
 the portal's sidebar and under Settings → System information.
 
+## 2.2.4 (2026-10-27)
+
+- **Fixed: "405 Method Not Allowed" after an update.** Reloading or reopening the page a phone was left on after
+  pressing *Install* now opens Settings. Any other address that only a button uses shows the portal's own error
+  page, with a way back.
+
 ## 2.2.3 (2026-10-27)
 
 - **Software update** (Settings → Overview) is laid out like DNSOne's: what is installed, what is available,
