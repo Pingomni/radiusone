@@ -4,7 +4,7 @@ RadiusOne follows [semantic versioning](https://semver.org): **major** for chang
 upgrading, **minor** for new features, **patch** for fixes. The version is in the `VERSION` file and shows in
 the portal's sidebar and under Settings → System information.
 
-## Unreleased: 2.2.0
+## 2.2.0 (2026-10-27)
 
 - **RadiusOne Community and RadiusOne Pro.** Without a licence, RadiusOne runs as Community: clients,
   services, NAS devices, RADIUS, the network queue, reports, monitoring overview, the RADIUS server page
