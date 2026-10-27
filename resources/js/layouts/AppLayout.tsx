@@ -60,7 +60,7 @@ export function BrandMark() {
     return (
         <svg viewBox="0 0 64 64" aria-hidden="true" focusable="false">
             <defs>
-                <linearGradient id={id} x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stopColor="#2f6bf0" /><stop offset="1" stopColor="#4338ca" /></linearGradient>
+                <linearGradient id={id} x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stopColor="#0d7f78" /><stop offset="1" stopColor="#155e75" /></linearGradient>
             </defs>
             <rect width="64" height="64" rx="15" fill={`url(#${id})`} />
             <path d="M22 47V17h10.5a8.75 8.75 0 0 1 0 17.5H22" {...line} />
