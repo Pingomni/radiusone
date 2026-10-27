@@ -7,6 +7,7 @@ namespace App\Http\Controllers;
 use App\Http\Support\Invoices;
 use App\Http\Support\Operators;
 use App\Http\Support\Present;
+use App\Support\Activation;
 use App\Support\AdminAlerts;
 use App\Support\App;
 use App\Support\Audit;
@@ -90,7 +91,7 @@ final class SettingsController extends Controller
                 'names' => License::FEATURES,
                 'clientCount' => License::clientCount(),
                 'clientLimit' => License::clientLimit(),
-                'activation' => \App\Support\Activation::public(),
+                'activation' => Activation::public(),
             ] : null,
             'retention' => $tab === 'retention' ? [
                 'periods' => Retention::settings(),

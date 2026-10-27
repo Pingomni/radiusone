@@ -79,6 +79,7 @@ final class Activation
         return time() - (int) strtotime((string) $state['last_attempt']) >= $wait;
     }
 
+    /** @param array<string, mixed> $body */
     private static function post(string $path, array $body): Response
     {
         return Http::baseUrl(self::url())->acceptJson()->timeout(8)->withUserAgent('RadiusOne')->post($path, $body);
@@ -175,7 +176,11 @@ final class Activation
         return $state;
     }
 
-    /** What Settings → License shows. @return array<string, mixed> */
+    /**
+     * What Settings → License shows.
+     *
+     * @return array<string, mixed>
+     */
     public static function public(): array
     {
         $state = self::state();
