@@ -4,6 +4,11 @@ RadiusOne follows [semantic versioning](https://semver.org): **major** for chang
 upgrading, **minor** for new features, **patch** for fixes. The version is in the `VERSION` file and shows in
 the portal's sidebar and under Settings → System information.
 
+## 2.2.2 (2026-10-27)
+
+- **Phone menu:** the drawer closes with a small ✕ beside the logo, instead of a wide "Close navigation" box
+  above it.
+
 ## 2.2.1 (2026-10-27)
 
 - **PingOmni teal.** The portal's colours follow the PingOmni brand: links, buttons, focus rings, the menu
