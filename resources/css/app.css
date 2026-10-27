@@ -1107,15 +1107,25 @@ td .list-menu > summary:hover { border-color: var(--line); background: var(--sur
     box-shadow: var(--shadow-pop);
   }
   body.nav-open .sidebar { transform: none; visibility: visible; }
+  /* A small ✕ in the drawer's top-right corner, level with the brand (which leaves it room). */
   .nav-close {
-    display: flex;
-    align-self: flex-end;
-    margin: var(--sp-2) var(--sp-2) 0;
-    border-color: var(--sidebar-line);
+    position: absolute;
+    top: calc((var(--topbar-h) - 36px) / 2);
+    right: var(--sp-2);
+    z-index: 1;
+    display: grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    min-height: 0;
+    padding: 0;
+    border: 0;
+    border-radius: var(--radius);
     background: transparent;
     color: var(--sidebar-text);
-    font-size: var(--fs-sm);
   }
+  .nav-close .icon { width: 20px; height: 20px; }
+  .sidebar .brand { padding-right: 52px; }
   .nav-close:hover { background: var(--sidebar-hover); color: #fff; }
   .nav-backdrop {
     position: fixed;

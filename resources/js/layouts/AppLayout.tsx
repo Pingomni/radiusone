@@ -182,7 +182,9 @@ export default function AppLayout({ title, children }: { title: string; children
                 role={open ? 'dialog' : undefined}
                 aria-modal={open ? true : undefined}
             >
-                <button type="button" className="nav-close" onClick={() => { setOpen(false); toggle.current?.focus(); }}>Close navigation</button>
+                <button type="button" className="nav-close" aria-label="Close navigation" title="Close navigation" onClick={() => { setOpen(false); toggle.current?.focus(); }}>
+                    <Icon name="close" />
+                </button>
                 <div className="brand">
                     <BrandLogo />
                     {/* A company name keeps the product name underneath, so people still know what this is. */}
