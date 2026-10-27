@@ -11,6 +11,18 @@ const STATE: Record<License['state'], [string, string]> = {
     invalid: ['Key not valid', 'danger'],
 };
 
+function accountRow(a: License['activation']): string {
+    const when = a.last_ok ? a.last_ok.replace('T', ' ').slice(0, 16) : '';
+    switch (a.status) {
+        case 'registered': return `Registered as ${a.hostname ?? 'this server'}, last check-in ${when}`;
+        case 'pending': return 'Registering with your PingOmni account (within five minutes)';
+        case 'unreachable': return `Not registered yet: ${a.message} Retried every hour.`;
+        case 'in_use':
+        case 'refused': return `Not registered: ${a.message}`;
+        default: return 'Off (RADIUSONE_ACCOUNT_URL is empty)';
+    }
+}
+
 /** Settings → License: the RadiusOne Pro key, what it turns on, and adding, replacing or removing it. */
 export function LicenseTab({ l }: { l: License }) {
     const form = useForm({ license_key: '' });
@@ -31,6 +43,7 @@ export function LicenseTab({ l }: { l: License }) {
                         ['Valid until', l.state === 'expired' ? `${l.expires} (expired: Pro keeps running as it is, but cannot be changed)` : (l.expires ?? '-')],
                         ['Licence id', l.id || '-'],
                         ['Clients', clients],
+                        ['PingOmni account', accountRow(l.activation)],
                     ]} />
                 ) : (
                     <>
@@ -55,7 +68,7 @@ export function LicenseTab({ l }: { l: License }) {
                         name="license_key"
                         rows={4}
                         placeholder="RADIUSONE1.…"
-                        hint="Paste the whole key. It is checked on this server; nothing is sent anywhere. After a renewal, paste the new key here."
+                        hint="Paste the whole key from your PingOmni account. It is checked on this server; the server then registers with your account, so you see it there, and picks up a renewed key by itself. Pro never depends on that."
                         value={form.data.license_key}
                         error={form.errors.license_key}
                         onChange={(e) => form.setData('license_key', e.target.value)}

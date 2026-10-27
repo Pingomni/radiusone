@@ -90,6 +90,7 @@ final class SettingsController extends Controller
                 'names' => License::FEATURES,
                 'clientCount' => License::clientCount(),
                 'clientLimit' => License::clientLimit(),
+                'activation' => \App\Support\Activation::public(),
             ] : null,
             'retention' => $tab === 'retention' ? [
                 'periods' => Retention::settings(),

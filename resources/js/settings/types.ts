@@ -102,4 +102,6 @@ export type License = {
     features: Record<string, boolean>; names: Record<string, string>;
     /** Clients that count (not archived) and how many this licence allows; null: no limit. */
     clientCount: number; clientLimit: number | null; clients?: number | null;
+    /** The licence's registration with the PingOmni account portal (report only: Pro never depends on it). */
+    activation: { status: 'off' | 'pending' | 'registered' | 'in_use' | 'refused' | 'unreachable'; message: string; hostname: string | null; last_ok: string | null; account_url: string };
 };

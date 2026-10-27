@@ -30,6 +30,9 @@ Schedule::command('frweb:prune-job-runs')->dailyAt('03:30')->appendOutputTo($log
 // Needs DELETE on radacct/radpostauth (ops/install/grants.sql).
 Schedule::command('frweb:prune-radius')->dailyAt('03:45')->appendOutputTo($log('maintenance'));
 
+// The licence's server, registered with the PingOmni account when due (report only: never changes a Pro feature).
+Schedule::command('license:check-in')->everyFiveMinutes()->runInBackground()->appendOutputTo($log('license'));
+
 // Paused in the legacy cron (migration 018 rollout; notification delivery); enable explicitly.
 Schedule::command('frweb:sync-expired')->everyMinute()->runInBackground()->appendOutputTo($log('expiry'))
     ->when(static fn () => config('app.schedule_expiry_sync'));

@@ -35,4 +35,11 @@ return [
         ],
     ],
 
+
+    // The PingOmni account portal, where the licence's server is registered (App\Support\Activation); empty: off.
+    'pingomni_account' => [
+        'url' => env('RADIUSONE_ACCOUNT_URL', 'https://account.pingomni.com'),
+        'machine_id_file' => env('RADIUSONE_MACHINE_ID_FILE', '/etc/machine-id'),
+    ],
+
 ];

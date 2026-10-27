@@ -11,7 +11,12 @@ the portal's sidebar and under Settings → System information.
   and local backups. A RadiusOne Pro key, added under **Settings → License**, turns on billing and invoices,
   customer notifications and admin alerts, NAS monitoring over SNMP with traffic graphs, remote backups
   and your logo. Keys come from your PingOmni account (account.pingomni.com) and are checked on the
-  server; nothing is sent anywhere.
+  server.
+- **The server registers with your PingOmni account**, as DNSOne does: with a key saved, it activates and
+  checks in twice a day, so the licence's page in your account shows the server and its last check-in, and
+  after a renewal the server installs the new key by itself. It sends the key, a hash of `/etc/machine-id`
+  and the host name. Report only: Pro never depends on it; Settings → License shows the registration, and
+  `RADIUSONE_ACCOUNT_URL=` (empty) in `.env` turns it off. `php artisan license:check-in --force` runs it now.
 - **Clients per edition:** Community up to 150 clients, Pro up to 999, Pro Unlimited with no limit.
   Archived clients do not count. At the limit, every client keeps working and RADIUS is untouched; only
   adding a new client is refused, with what to do. Settings → License shows how many are in use.
