@@ -8,9 +8,12 @@ use App\Support\NasTraffic;
 use RuntimeException;
 use Throwable;
 
-final class PollSnmp extends FrwebCommand
+final class PollSnmp extends RadiusOneCommand
 {
-    protected $signature = 'frweb:poll-snmp';
+    protected $signature = 'radiusone:poll-snmp';
+
+    /** The name before RadiusOne 2.3, still accepted (cron lines, scripts). */
+    protected $aliases = ['frweb:poll-snmp'];
     // "Poll now" on the Monitoring page runs the same recording.
     protected $description = 'Record RADIUS server and SNMP NAS samples for the monitoring graphs';
 

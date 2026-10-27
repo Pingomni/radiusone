@@ -95,7 +95,7 @@ export default function Monitoring({ overview, lastPoll }: { overview: Overview;
                 {lastPoll === null
                     ? <span className="hint">No poll recorded yet.</span>
                     : lastPoll.stale
-                        ? <span className="field-warning">The scheduled poller last ran {lastPoll.age} ago. Check <code>/etc/cron.d/freeradius-web-snmp</code>.</span>
+                        ? <span className="field-warning">The scheduled poller last ran {lastPoll.age} ago. Check <code>/etc/cron.d/radiusone</code>.</span>
                         : <span className="hint">Polled automatically every minute; last run {lastPoll.age} ago.</span>}
             </div>
             <LivePanel

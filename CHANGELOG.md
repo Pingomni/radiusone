@@ -4,6 +4,31 @@ RadiusOne follows [semantic versioning](https://semver.org): **major** for chang
 upgrading, **minor** for new features, **patch** for fixes. The version is in the `VERSION` file and shows in
 the portal's sidebar and under Settings → System information.
 
+## 2.3.0 (2026-10-27)
+
+- **Updates work like DNSOne's.** Every release is published on GitHub as `radiusone-X.Y.Z.tar.gz` with the
+  PHP libraries and the web pages built in, plus its checksum. *Settings → Overview → Software update* reads
+  the latest release, and **Install** only leaves a request: `radiusone-update` (started by
+  `radiusone-update.path`) downloads and checks the release, backs up the database, archives the app, installs
+  it, applies migrations and permissions, and rolls back if a step fails. The server needs no git, Composer or
+  Node.js, and no access to the repository. On the server: `sudo radiusone-update` (`--check`, or a version).
+- **RadiusOne names everywhere.** The names of the project RadiusOne grew from are gone:
+  - app `/opt/radiusone`; folders `/etc/radiusone`, `/var/lib/radiusone`, `/var/log/radiusone`,
+    `/var/backups/radiusone`;
+  - database accounts `radiusone_portal`, `radiusone_radius`, `radiusone_migration`, `radiusone_backup`;
+  - commands `php artisan radiusone:...` (the `frweb:...` names still work);
+  - settings `RADIUSONE_...` in `.env` (the `FRWEB_...` names are still read);
+  - helpers `/usr/local/sbin/radiusone-*`, `/etc/sudoers.d/radiusone`;
+  - backups `radiusone-*.sql.gz` and, remotely, `radiusone-db-...`/`radiusone-docs-...` (older copies with the
+    old names are still listed, restored and pruned).
+- **Moving a server installed before 2.3.** Install 2.3 with the update button as usual, then press **Finish
+  moving to RadiusOne** under *Software update* (or run `sudo radiusone-update --move`). It backs up the
+  database, archives every file it changes, moves the app and the folders (the old paths stay as links),
+  renames the database accounts with their passwords and rights, and rewrites `.env`, cron, logrotate, nginx,
+  sudoers and FreeRADIUS's SQL login. If a step fails, everything goes back. Operators sign in once more
+  afterwards. To see what it would change first: `sudo bash ops/radiusone-upgrade-2.3 --dry-run`.
+- **Fixed:** the time zone and Back up now buttons could fail with a PHP notice on some servers.
+
 ## 2.2.4 (2026-10-27)
 
 - **Fixed: "405 Method Not Allowed" after an update.** Reloading or reopening the page a phone was left on after

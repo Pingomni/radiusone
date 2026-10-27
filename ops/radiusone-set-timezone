@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # Root helper behind Settings → Regional → Time zone. Moves the server, MariaDB, FreeRADIUS and the
 # portal to another time zone and converts the times already stored, so old and new records line up.
-#   frweb-set-timezone schedule <Zone/Name>   what www-data may run through sudo: checks the zone and
+#   radiusone-set-timezone schedule <Zone/Name>   what www-data may run through sudo: checks the zone and
 #                                             starts "apply" five seconds later in a transient systemd
 #                                             unit, so the web request that asked for it can answer first
-#   frweb-set-timezone apply <Zone/Name>      the change itself (as root, to change the zone from the shell)
-# Installed by ops/apply-service-control.sh as /usr/local/sbin/frweb-set-timezone. Progress and the result
-# go to /var/log/freeradius-web/timezone.log, which the Settings page shows.
+#   radiusone-set-timezone apply <Zone/Name>      the change itself (as root, to change the zone from the shell)
+# Installed by ops/radiusone-postinstall as /usr/local/sbin/radiusone-set-timezone. Progress and the result
+# go to /var/log/radiusone/timezone.log, which the Settings page shows.
 #
 # Every DATETIME column in the radius database holds server-local time; each is converted with CONVERT_TZ
 # (old zone → new zone), which follows both zones' summer/winter time history. radpostauth.authdate is a
@@ -15,8 +15,8 @@
 # A database backup is taken first; undo by running the helper again with the old zone.
 set -Eeuo pipefail
 PATH=/usr/sbin:/usr/bin:/sbin:/bin
-app=/opt/freeradius-web-laravel
-log=/var/log/freeradius-web/timezone.log
+app=/opt/radiusone
+log=/var/log/radiusone/timezone.log
 
 mode=${1:-}
 zone=${2:-}
@@ -27,10 +27,10 @@ old=$(timedatectl show -p Timezone --value)
 
 case "$mode" in
   schedule)
-    if systemctl list-units --no-legend 'frweb-timezone-*' | grep -q .; then echo 'A time zone change is already running.' >&2; exit 3; fi
+    if systemctl list-units --no-legend 'radiusone-timezone-*' | grep -q .; then echo 'A time zone change is already running.' >&2; exit 3; fi
     mkdir -p "$(dirname "$log")"
     echo "$(date '+%F %T %Z') scheduled: $old → $zone" >> "$log"
-    systemd-run --quiet --collect --on-active=5 --unit="frweb-timezone-$(date +%s)" /usr/local/sbin/frweb-set-timezone apply "$zone"
+    systemd-run --quiet --collect --on-active=5 --unit="radiusone-timezone-$(date +%s)" /usr/local/sbin/radiusone-set-timezone apply "$zone"
     echo "Time zone change to $zone scheduled."
     exit 0 ;;
   apply) ;;
@@ -45,11 +45,11 @@ cd "$app"
 sql() { mariadb -N "$@"; }
 [[ "$(sql -e 'SELECT @@global.time_zone')" =~ ^(SYSTEM|$old)$ ]] || { echo "failed: MariaDB time_zone is $(sql -e 'SELECT @@global.time_zone'), not the server's $old."; exit 1; }
 
-# Root runs artisan through frweb-root-artisan: never with the cache files www-data can write in bootstrap/cache.
-artisan() { LOG_CHANNEL=stderr /usr/local/sbin/frweb-root-artisan "$@"; }
+# Root runs artisan through radiusone-root-artisan: never with the cache files www-data can write in bootstrap/cache.
+artisan() { LOG_CHANNEL=stderr /usr/local/sbin/radiusone-root-artisan "$@"; }
 
 echo '== backup'
-FRWEB_OPERATOR_ENV_FILE=/etc/freeradius-web/backup.env artisan frweb:backup --no-upload
+RADIUSONE_OPERATOR_ENV_FILE=/etc/radiusone/backup.env artisan radiusone:backup --no-upload
 
 echo '== time zone tables for MariaDB'
 mariadb-tzinfo-to-sql /usr/share/zoneinfo 2>/dev/null | mariadb mysql

@@ -11,9 +11,12 @@ use App\Support\SchemaCompatibility;
 use RuntimeException;
 use Throwable;
 
-final class ProcessNetworkOperations extends FrwebCommand
+final class ProcessNetworkOperations extends RadiusOneCommand
 {
-    protected $signature = 'frweb:process-network-operations';
+    protected $signature = 'radiusone:process-network-operations';
+
+    /** The name before RadiusOne 2.3, still accepted (cron lines, scripts). */
+    protected $aliases = ['frweb:process-network-operations'];
     protected $description = 'Apply queued network operations (needs NETWORK_WORKER_ENABLED=true)';
 
     public function handle(): int

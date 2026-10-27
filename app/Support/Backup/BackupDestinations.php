@@ -22,7 +22,7 @@ final class BackupDestinations
         's3' => ['provider', 'endpoint', 'region', 'bucket', 'prefix', 'access_key'],
         'sftp' => ['host', 'port', 'user', 'path'],
     ];
-    private const DEFAULTS = ['provider' => 'b2', 'prefix' => 'freeradius-web', 'port' => '22', 'path' => 'backups/freeradius-web'];
+    private const DEFAULTS = ['provider' => 'b2', 'prefix' => 'radiusone', 'port' => '22', 'path' => 'backups/radiusone'];
     private const SECRETS = ['s3' => ['secret_key'], 'sftp' => ['private_key']];
 
     /** @return list<array<string, mixed>> */
@@ -151,9 +151,9 @@ final class BackupDestinations
     public static function test(array $destination): void
     {
         $target = self::target($destination);
-        $name = 'frweb-test-' . bin2hex(random_bytes(4)) . '.txt';
-        $file = tempnam(sys_get_temp_dir(), 'frweb-test-');
-        file_put_contents($file, "freeradius-web backup destination test\n");
+        $name = 'radiusone-test-' . bin2hex(random_bytes(4)) . '.txt';
+        $file = tempnam(sys_get_temp_dir(), 'radiusone-test-');
+        file_put_contents($file, "RadiusOne backup destination test\n");
         try {
             $target->put($file, $name);
             $listed = $target->list();

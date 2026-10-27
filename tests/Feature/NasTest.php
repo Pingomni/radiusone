@@ -69,7 +69,7 @@ final class NasTest extends TestCase
         $this->post('/nas/save', ['id' => $id, 'section' => 'device', 'vendor' => 'mikrotik', 'shortname' => 'bras-01', 'nasname' => '10.10.0.1', 'secret' => '', 'enabled' => true, 'coa_enabled' => true, 'coa_port' => '1700'])
             ->assertSessionHas('flash.message', 'NAS saved. These settings apply at once.');
 
-        $this->artisan('frweb:mark-nas-applied --auto')->assertExitCode(0);
+        $this->artisan('radiusone:mark-nas-applied --auto')->assertExitCode(0);
     }
 
     public function test_api_tab_keeps_device_fields_and_secret(): void

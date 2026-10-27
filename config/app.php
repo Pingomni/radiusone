@@ -18,6 +18,9 @@ return [
     // RadiusOne release (major.minor.patch), from the VERSION file at the project root.
     'version' => is_file(base_path('VERSION')) ? trim((string) file_get_contents(base_path('VERSION'))) : 'dev',
 
+    // Where Settings → Software update looks for releases (a fork can set its own).
+    'update_repo' => env('RADIUSONE_UPDATE_REPO', 'n-geraldo/radiusone'),
+
     /*
     |--------------------------------------------------------------------------
     | Application Environment
@@ -72,8 +75,8 @@ return [
     'force_https' => (bool) filter_var(env('FORCE_HTTPS', env('APP_ENV', 'production') === 'production'), FILTER_VALIDATE_BOOL),
 
     // Scheduled jobs that are paused in production until explicitly enabled (routes/console.php).
-    'schedule_expiry_sync' => (bool) filter_var(env('FRWEB_SCHEDULE_EXPIRY_SYNC', false), FILTER_VALIDATE_BOOL),
-    'schedule_expiry_notifications' => (bool) filter_var(env('FRWEB_SCHEDULE_EXPIRY_NOTIFICATIONS', false), FILTER_VALIDATE_BOOL),
+    'schedule_expiry_sync' => (bool) filter_var(env('RADIUSONE_SCHEDULE_EXPIRY_SYNC', false), FILTER_VALIDATE_BOOL),
+    'schedule_expiry_notifications' => (bool) filter_var(env('RADIUSONE_SCHEDULE_EXPIRY_NOTIFICATIONS', false), FILTER_VALIDATE_BOOL),
 
     // The server's time zone (timedatectl), so the portal, MariaDB and FreeRADIUS share one clock.
     // APP_TIMEZONE in .env overrides it; UTC if the server's zone cannot be read.

@@ -3,15 +3,15 @@
 # bootstrap/cache. www-data owns that folder, and Laravel runs config.php, packages.php and services.php from
 # it as PHP code, so a root process that read them would run whatever www-data put there. Root keeps its own
 # copies in a fresh private folder instead (Laravel builds what it needs) and removes it afterwards.
-#   frweb-root-artisan frweb:backup      as root only; the environment (FRWEB_OPERATOR_ENV_FILE...) passes through
-# Installed by ops/apply-service-control.sh as /usr/local/sbin/frweb-root-artisan. It is not in the sudoers
+#   radiusone-root-artisan radiusone:backup      as root only; the environment (RADIUSONE_OPERATOR_ENV_FILE...) passes through
+# Installed by ops/radiusone-postinstall as /usr/local/sbin/radiusone-root-artisan. It is not in the sudoers
 # rule: www-data cannot run it.
 set -euo pipefail
 PATH=/usr/sbin:/usr/bin:/sbin:/bin
-app=/opt/freeradius-web-laravel
+app=/opt/radiusone
 
 [[ $EUID -eq 0 ]] || { echo 'Run as root.' >&2; exit 2; }
-cache=$(mktemp -d /run/frweb-artisan.XXXXXX)
+cache=$(mktemp -d /run/radiusone-artisan.XXXXXX)
 trap 'rm -rf "$cache"' EXIT
 for name in config services packages routes events; do
   export "APP_${name^^}_CACHE=$cache/$name.php"

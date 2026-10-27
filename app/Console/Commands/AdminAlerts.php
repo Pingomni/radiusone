@@ -9,9 +9,12 @@ use App\Support\Db;
 use RuntimeException;
 use Throwable;
 
-final class AdminAlerts extends FrwebCommand
+final class AdminAlerts extends RadiusOneCommand
 {
-    protected $signature = 'frweb:admin-alerts';
+    protected $signature = 'radiusone:admin-alerts';
+
+    /** The name before RadiusOne 2.3, still accepted (cron lines, scripts). */
+    protected $aliases = ['frweb:admin-alerts'];
     protected $description = 'Alert the admin recipients about service, NAS, resource and job problems, and send the daily report';
 
     public function handle(): int

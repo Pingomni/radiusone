@@ -9,9 +9,12 @@ use App\Support\JobRunner;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
-final class GenerateBilling extends FrwebCommand
+final class GenerateBilling extends RadiusOneCommand
 {
-    protected $signature = 'frweb:generate-billing {--username= : Only this customer}';
+    protected $signature = 'radiusone:generate-billing {--username= : Only this customer}';
+
+    /** The name before RadiusOne 2.3, still accepted (cron lines, scripts). */
+    protected $aliases = ['frweb:generate-billing'];
     protected $description = 'Generate due recurring invoices and mark overdue ones';
 
     public function handle(): int

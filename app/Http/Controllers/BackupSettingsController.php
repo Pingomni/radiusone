@@ -26,7 +26,7 @@ final class BackupSettingsController extends Controller
     {
         $dir = self::directory();
         $local = [];
-        foreach (array_merge(glob($dir . '/freeradius-web-*.sql.gz') ?: [], glob($dir . '/documents-*.tar.gz') ?: []) as $file) {
+        foreach (array_merge(glob($dir . '/radiusone-*.sql.gz') ?: [], glob($dir . '/freeradius-web-*.sql.gz') ?: [], glob($dir . '/documents-*.tar.gz') ?: []) as $file) {
             $local[] = ['name' => basename($file), 'size' => (int) filesize($file), 'at' => date('Y-m-d H:i', (int) filemtime($file))];
         }
         usort($local, static fn ($a, $b) => strcmp($b['at'], $a['at']));

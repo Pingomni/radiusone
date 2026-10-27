@@ -9,8 +9,8 @@ use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
-/** Shared output for the frweb:* operator commands (ported from the legacy bin/*.php scripts). */
-abstract class FrwebCommand extends Command
+/** Shared output for the radiusone:* operator commands (ported from the legacy bin/*.php scripts). */
+abstract class RadiusOneCommand extends Command
 {
     /** Exit code when another run of the same job holds its lock (cron treats it as "try later"). */
     public const BUSY = 75;

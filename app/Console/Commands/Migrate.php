@@ -9,12 +9,15 @@ use App\Support\MigrationRunner;
 use RuntimeException;
 use Throwable;
 
-final class Migrate extends FrwebCommand
+final class Migrate extends RadiusOneCommand
 {
-    protected $signature = 'frweb:migrate
+    protected $signature = 'radiusone:migrate
         {--baseline-through= : Record migrations up to this one as applied without running them}
         {--confirm-schema-reviewed : Required with --baseline-through}';
-    // Run with FRWEB_OPERATOR_ENV_FILE=/etc/freeradius-web/migration.env (the portal identity cannot ALTER).
+
+    /** The name before RadiusOne 2.3, still accepted (cron lines, scripts). */
+    protected $aliases = ['frweb:migrate'];
+    // Run with RADIUSONE_OPERATOR_ENV_FILE=/etc/radiusone/migration.env (the portal identity cannot ALTER).
     protected $description = 'Apply pending database/sql migrations (same ledger as the legacy bin/migrate.php)';
 
     public function handle(): int

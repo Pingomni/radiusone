@@ -29,7 +29,7 @@ final class SftpTarget implements BackupTarget
     {
         $dir = self::tempDir();
         try {
-            $result = BoundedProcess::run(['ssh-keygen', '-q', '-t', 'ed25519', '-N', '', '-C', 'freeradius-web-backup', '-f', $dir . '/key'], '', 10);
+            $result = BoundedProcess::run(['ssh-keygen', '-q', '-t', 'ed25519', '-N', '', '-C', 'radiusone-backup', '-f', $dir . '/key'], '', 10);
             if ($result['exit'] !== 0) {
                 throw new RuntimeException('Could not generate an SSH key.');
             }
@@ -73,7 +73,7 @@ final class SftpTarget implements BackupTarget
         $files = [];
         foreach (explode("\n", $output) as $line) {
             $name = basename(trim($line));
-            if (str_starts_with($name, 'frweb-')) {
+            if (str_starts_with($name, 'radiusone-') || str_starts_with($name, 'frweb-')) {
                 $files[$name] = $name;
             }
         }
@@ -92,7 +92,7 @@ final class SftpTarget implements BackupTarget
 
     private static function name(string $name): string
     {
-        if (!preg_match('/^frweb-[A-Za-z0-9._-]+$/D', $name)) {
+        if (!preg_match('/^(radiusone|frweb)-[A-Za-z0-9._-]+$/D', $name)) {
             throw new RuntimeException('Unexpected backup file name.');
         }
         return $name;

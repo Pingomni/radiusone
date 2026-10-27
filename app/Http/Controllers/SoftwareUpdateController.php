@@ -26,6 +26,8 @@ final class SoftwareUpdateController extends Controller
             'check' => SoftwareUpdate::lastCheck(),
             'status' => SoftwareUpdate::status(),
             'log' => SoftwareUpdate::log(),
+            // Before 2.3's layout (the freeradius-web names): offer "Finish moving to RadiusOne".
+            'move' => SoftwareUpdate::needsMove(),
         ];
     }
 
@@ -47,7 +49,20 @@ final class SoftwareUpdateController extends Controller
             return $this->fail($e->getMessage(), self::PAGE);
         }
         Audit::log('update', 'software', $version, ['version' => SoftwareUpdate::current()], ['version' => $version]);
-        return $this->ok(self::PAGE, 'Update to ' . $version . ' started. The portal pauses for a few minutes; this page shows the progress.');
+        return $this->ok(self::PAGE, 'Installing RadiusOne ' . $version . '. The portal pauses for a few minutes; this page shows the progress.');
+    }
+
+    /** Moves this server to the RadiusOne layout (ops/radiusone-upgrade-2.3), from the portal. */
+    public function move(): RedirectResponse
+    {
+        try {
+            SoftwareUpdate::move();
+        } catch (InvalidArgumentException|RuntimeException $e) {
+            return $this->fail($e->getMessage(), self::PAGE);
+        }
+        Audit::log('update', 'software', 'move', ['version' => SoftwareUpdate::current()], ['layout' => 'radiusone']);
+
+        return $this->ok(self::PAGE, 'Moving to the RadiusOne layout. The portal pauses for a few minutes; this page shows the progress.');
     }
 
     /** Polled while an update runs; reachable during maintenance mode (bootstrap/app.php). */

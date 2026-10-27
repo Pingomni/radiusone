@@ -8,9 +8,12 @@ use App\Support\JobRunner;
 use App\Support\RadiusRepository;
 use Throwable;
 
-final class SyncExpired extends FrwebCommand
+final class SyncExpired extends RadiusOneCommand
 {
-    protected $signature = 'frweb:sync-expired';
+    protected $signature = 'radiusone:sync-expired';
+
+    /** The name before RadiusOne 2.3, still accepted (cron lines, scripts). */
+    protected $aliases = ['frweb:sync-expired'];
     protected $description = 'Move expired customers to their expired service group';
 
     public function handle(): int

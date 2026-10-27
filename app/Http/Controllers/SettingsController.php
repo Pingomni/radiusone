@@ -20,6 +20,7 @@ use App\Support\Db;
 use App\Support\EmailProviders;
 use App\Support\License;
 use App\Support\NotificationService;
+use App\Support\Paths;
 use App\Support\Retention;
 use App\Support\SchemaCompatibility;
 use App\Support\Security;
@@ -105,7 +106,7 @@ final class SettingsController extends Controller
     {
         $engine = (string) (Db::value('SELECT setting_value FROM settings WHERE setting_key = "web_server_engine"') ?: App::env('WEB_SERVER_ENGINE', 'nginx'));
         $twoFactorUsers = (int) Db::value('SELECT COUNT(*) FROM portal_users WHERE two_factor_enabled = 1');
-        $backupPath = rtrim((string) App::env('BACKUP_PATH', '/var/backups/freeradius-web'), '/');
+        $backupPath = rtrim((string) App::env('BACKUP_PATH', Paths::backups()), '/');
         $backups = glob($backupPath . '/*.sql.gz') ?: [];
         usort($backups, static fn (string $a, string $b): int => filemtime($b) <=> filemtime($a));
         $lastBackup = $backups[0] ?? '';
@@ -502,7 +503,7 @@ final class SettingsController extends Controller
             . ($relabelled ? " {$counts['services']} service plans, {$counts['pools']} IP pools and {$counts['drafts']} draft invoices now use it: check their prices, amounts were not converted." : ''));
     }
 
-    /** Starts the server-wide switch (ops/frweb-set-timezone); the portal is in maintenance for about a minute. */
+    /** Starts the server-wide switch (ops/radiusone-set-timezone); the portal is in maintenance for about a minute. */
     public function saveTimezone(Request $request): RedirectResponse
     {
         $zone = (string) $request->input('timezone');

@@ -8,9 +8,12 @@ use App\Support\NasRepository;
 use RuntimeException;
 use Throwable;
 
-final class MarkNasApplied extends FrwebCommand
+final class MarkNasApplied extends RadiusOneCommand
 {
-    protected $signature = 'frweb:mark-nas-applied {--id=} {--revision=} {--evidence=} {--verified-activation} {--auto}';
+    protected $signature = 'radiusone:mark-nas-applied {--id=} {--revision=} {--evidence=} {--verified-activation} {--auto}';
+
+    /** The name before RadiusOne 2.3, still accepted (cron lines, scripts). */
+    protected $aliases = ['frweb:mark-nas-applied'];
     protected $description = 'Record a NAS configuration revision as in effect: --auto for every NAS saved before FreeRADIUS last started, or one verified revision (performs no network operation)';
 
     public function handle(): int

@@ -164,7 +164,7 @@ final class NasRepository
     /**
      * FreeRADIUS reads the NAS list (client_query) only when it starts and refuses to start with a broken
      * one. So while it is running, every NAS saved before it started is in effect: record those revisions,
-     * including removals. Runs every minute (frweb:mark-nas-applied --auto).
+     * including removals. Runs every minute (radiusone:mark-nas-applied --auto).
      *
      * @param  int|null  $radiusStartedAt  epoch FreeRADIUS became active; read from systemd when null
      * @return array<int, int> nas id => revision recorded

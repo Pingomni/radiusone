@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
 # RadiusOne installer: sets up a complete, running system on a fresh Ubuntu 24.04 server.
 #
-#   git clone <repo> /opt/radiusone && cd /opt/radiusone && sudo bash install.sh [options]
+#   a release (radiusone-X.Y.Z.tar.gz, libraries and pages included):
+#     mkdir /opt/radiusone && tar -xzf radiusone-X.Y.Z.tar.gz -C /opt/radiusone --strip-components=1
+#     cd /opt/radiusone && sudo bash install.sh [options]
+#   or the source: git clone <repo> /opt/radiusone && cd /opt/radiusone && sudo bash install.sh [options]
 #
-# Installs and configures nginx (HTTPS), PHP 8.3-FPM, MariaDB, FreeRADIUS (SQL backend) and Node 22
-# (to build the web assets), creates the database with one least-privilege user per role, generates
+# Installs and configures nginx (HTTPS), PHP 8.3-FPM, MariaDB, FreeRADIUS (SQL backend) and, from the
+# source only, Composer and Node 22 (to build the web assets), creates the database with one least-privilege user per role, generates
 # every key and password, schedules the jobs and backups, and creates the first portal administrator.
 # Its password is shown once, at the end.
 #
@@ -22,15 +25,18 @@
 set -Eeuo pipefail
 
 APP=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-ETC=/etc/freeradius-web
-DATA=/var/lib/freeradius-web
-BACKUPS=/var/backups/freeradius-web
-LOGS=/var/log/freeradius-web
+ETC=/etc/radiusone
+DATA=/var/lib/radiusone
+BACKUPS=/var/backups/radiusone
+LOGS=/var/log/radiusone
 DB=radius
 PHP=8.3
 NODE_VERSION=22.20.0
 RADDB=/etc/freeradius/3.0
 MARKER=$ETC/.installed-by-install-sh
+# A release tarball carries the libraries and the built pages; a git checkout builds them here.
+BUILT=0
+[[ -f "$APP/vendor/autoload.php" && -f "$APP/public/build/manifest.json" && ! -d "$APP/.git" ]] && BUILT=1
 
 DOMAIN=''
 EMAIL=''
@@ -78,7 +84,9 @@ fi
 [[ "$ADMIN_EMAIL" =~ ^[^[:space:]\"\\@]+@[^[:space:]\"\\@]+\.[^[:space:]\"\\@]+$ ]] || fail "--admin-email: not an email address: $ADMIN_EMAIL"
 [[ -z "$EMAIL" || $is_ip == 0 ]] || fail '--email needs --domain with a real host name (Let'"'"'s Encrypt does not issue certificates for IPs).'
 if [[ $FORCE == 0 && ! -f "$MARKER" ]]; then
-  if [[ -d /opt/freeradius-web ]] || { command -v mariadb >/dev/null && mariadb -N -e "SHOW DATABASES LIKE '$DB'" 2>/dev/null | grep -q .; }; then
+  # RadiusOne before 2.3 lived in /opt/freeradius-web-laravel with /etc/freeradius-web: move it with
+  # ops/radiusone-upgrade-2.3 instead.
+  if [[ -d /opt/freeradius-web || -d /opt/freeradius-web-laravel || -d /etc/freeradius-web ]] || { command -v mariadb >/dev/null && mariadb -N -e "SHOW DATABASES LIKE '$DB'" 2>/dev/null | grep -q .; }; then
     fail "this server already has a '$DB' database or an older install that this script did not create. Use --force only if you are sure."
   fi
 fi
@@ -94,7 +102,8 @@ apt-get install -y -q --no-install-recommends \
   nginx mariadb-server mariadb-client \
   freeradius freeradius-mysql freeradius-utils \
   "php$PHP-fpm" "php$PHP-cli" "php$PHP-mysql" "php$PHP-mbstring" "php$PHP-xml" "php$PHP-curl" \
-  "php$PHP-zip" "php$PHP-intl" "php$PHP-bcmath" composer
+  "php$PHP-zip" "php$PHP-intl" "php$PHP-bcmath" rsync
+[[ $BUILT == 1 ]] || apt-get install -y -q --no-install-recommends composer
 [[ -n "$EMAIL" ]] && apt-get install -y -q --no-install-recommends certbot
 
 if [[ -n "$TIMEZONE" ]]; then
@@ -105,7 +114,7 @@ if [[ -n "$TIMEZONE" ]]; then
   note "Time zone: $TIMEZONE"
 fi
 
-if ! node -e 'const [a,b]=process.versions.node.split(".").map(Number);process.exit(a>22||(a===22&&b>=12)||(a===20&&b>=19)?0:1)' 2>/dev/null; then
+if [[ $BUILT == 0 ]] && ! node -e 'const [a,b]=process.versions.node.split(".").map(Number);process.exit(a>22||(a===22&&b>=12)||(a===20&&b>=19)?0:1)' 2>/dev/null; then
   step "Installing Node.js $NODE_VERSION (only used to build the web pages)"
   tmp=$(mktemp -d)
   file="node-v$NODE_VERSION-linux-x64.tar.xz"
@@ -145,19 +154,19 @@ DB_PASSWORD=$3
 EOF
   install -o root -g "$4" -m "$5" "$tmp" "$1"; rm -f "$tmp"
 }
-identity "$ETC/portal.env" frweb_portal "$PORTAL_PASS" www-data 0640
+identity "$ETC/portal.env" radiusone_portal "$PORTAL_PASS" www-data 0640
 # The app reads its secrets key from the shared file under this name (App\Support\SharedEnv).
 echo "APP_KEY=$SECRETS_KEY" >> "$ETC/portal.env"
-identity "$ETC/migration.env" frweb_migration "$MIGRATION_PASS" root 0600
-identity "$ETC/backup.env" frweb_backup "$BACKUP_PASS" root 0600
-identity "$ETC/radius.env" frweb_radius "$RADIUS_PASS" root 0600
+identity "$ETC/migration.env" radiusone_migration "$MIGRATION_PASS" root 0600
+identity "$ETC/backup.env" radiusone_backup "$BACKUP_PASS" root 0600
+identity "$ETC/radius.env" radiusone_radius "$RADIUS_PASS" root 0600
 note "Saved in $ETC (readable by root only; portal.env also by the web server)."
 
 # --- database ----------------------------------------------------------------------------------------
 step 'Creating the database'
 systemctl enable --now mariadb >/dev/null
 mariadb -e "CREATE DATABASE IF NOT EXISTS \`$DB\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
-for pair in "frweb_portal:$PORTAL_PASS" "frweb_migration:$MIGRATION_PASS" "frweb_backup:$BACKUP_PASS" "frweb_radius:$RADIUS_PASS"; do
+for pair in "radiusone_portal:$PORTAL_PASS" "radiusone_migration:$MIGRATION_PASS" "radiusone_backup:$BACKUP_PASS" "radiusone_radius:$RADIUS_PASS"; do
   user=${pair%%:*} pass=${pair#*:}
   mariadb -e "CREATE USER IF NOT EXISTS '$user'@'localhost' IDENTIFIED BY '$pass'; ALTER USER '$user'@'localhost' IDENTIFIED BY '$pass';"
 done
@@ -179,7 +188,7 @@ APP_DEBUG=false
 APP_URL=https://$DOMAIN
 
 # Secrets (database password, credentials key) are read from this protected file at boot.
-FRWEB_SHARED_ENV=$ETC/portal.env
+RADIUSONE_SHARED_ENV=$ETC/portal.env
 
 LOG_CHANNEL=daily
 LOG_LEVEL=info
@@ -188,11 +197,11 @@ DB_CONNECTION=mysql
 DB_HOST=127.0.0.1
 DB_PORT=3306
 DB_DATABASE=$DB
-DB_USERNAME=frweb_portal
+DB_USERNAME=radiusone_portal
 
 SESSION_DRIVER=file
 SESSION_LIFETIME=480
-SESSION_COOKIE=frweb_session
+SESSION_COOKIE=radiusone_session
 SESSION_SECURE_COOKIE=true
 SESSION_SAME_SITE=lax
 CACHE_STORE=file
@@ -212,7 +221,7 @@ RADCLIENT_TIMEOUT=5
 NOTIFICATION_HTTP_ALLOWED_HOSTS=
 WEB_SERVER_ENGINE=nginx
 
-FRWEB_SCHEDULE_EXPIRY_SYNC=true
+RADIUSONE_SCHEDULE_EXPIRY_SYNC=true
 NETWORK_WORKER_ENABLED=true
 EOF
 fi
@@ -221,30 +230,34 @@ chown root:www-data "$APP/.env" && chmod 0640 "$APP/.env"
 # Root runs these steps: log to the terminal, never into storage/logs, which must stay www-data's.
 export LOG_CHANNEL=stderr COMPOSER_ALLOW_SUPERUSER=1
 # Root never loads Laravel's cache files from bootstrap/cache (www-data's; Laravel runs them as PHP code):
-# its artisan steps keep a private copy, as ops/frweb-root-artisan does. The portal builds its own.
-root_cache=$(mktemp -d /run/frweb-install.XXXXXX)
+# its artisan steps keep a private copy, as ops/radiusone-root-artisan does. The portal builds its own.
+root_cache=$(mktemp -d /run/radiusone-install.XXXXXX)
 trap 'rm -rf "$root_cache"' EXIT
 for name in config services packages routes events; do
   export "APP_${name^^}_CACHE=$root_cache/$name.php"
 done
 cd "$APP"
-composer install --no-dev --optimize-autoloader --no-interaction --no-progress -q
+[[ $BUILT == 1 ]] || composer install --no-dev --optimize-autoloader --no-interaction --no-progress -q
 rm -f bootstrap/cache/packages.php bootstrap/cache/services.php
 grep -q '^APP_KEY=base64:' .env || php artisan key:generate --force -q
-npm ci --no-audit --no-fund --loglevel=error
-npm run build --silent >/dev/null
+if [[ $BUILT == 0 ]]; then
+  npm ci --no-audit --no-fund --loglevel=error
+  npm run build --silent >/dev/null
+fi
 chown -R www-data:www-data storage bootstrap/cache
 
 step 'Creating the application tables'
-FRWEB_OPERATOR_ENV_FILE="$ETC/migration.env" php artisan frweb:migrate >/dev/null
-mariadb < "$APP/ops/install/grants.sql"
+RADIUSONE_OPERATOR_ENV_FILE="$ETC/migration.env" php artisan radiusone:migrate >/dev/null
+mariadb < "$APP/ops/install/radiusone-grants.sql"
 mariadb -e 'FLUSH PRIVILEGES'
-sudo -u www-data LOG_CHANNEL=stderr php artisan frweb:check-schema >/dev/null || fail 'the schema check failed (php artisan frweb:check-schema).'
+sudo -u www-data LOG_CHANNEL=stderr php artisan radiusone:check-schema >/dev/null || fail 'the schema check failed (php artisan radiusone:check-schema).'
 
 # --- FreeRADIUS --------------------------------------------------------------------------------------
 step 'Connecting FreeRADIUS to the database'
 for f in mods-config/sql/main/mysql/queries.conf sites-available/default; do
-  [[ -f "$RADDB/$f.frweb-orig" ]] || cp -a "$RADDB/$f" "$RADDB/$f.frweb-orig"
+  # Copies of the originals; before 2.3 they were named .frweb-orig.
+  [[ -f "$RADDB/$f.frweb-orig" && ! -e "$RADDB/$f.radiusone-orig" ]] && mv "$RADDB/$f.frweb-orig" "$RADDB/$f.radiusone-orig"
+  [[ -f "$RADDB/$f.radiusone-orig" ]] || cp -a "$RADDB/$f" "$RADDB/$f.radiusone-orig"
 done
 cat > "$RADDB/mods-available/sql" <<EOF
 # Written by RadiusOne install.sh: the SQL backend (users, groups, accounting and the NAS list).
@@ -256,7 +269,7 @@ sql {
 	}
 	server = "localhost"
 	port = 3306
-	login = "frweb_radius"
+	login = "radiusone_radius"
 	password = "$RADIUS_PASS"
 	radius_db = "$DB"
 	acct_table1 = "radacct"
@@ -290,7 +303,7 @@ chown freerad:freerad "$RADDB/mods-available/sql" && chmod 0640 "$RADDB/mods-ava
 ln -sfn ../mods-available/sql "$RADDB/mods-enabled/sql"
 
 queries="$RADDB/mods-config/sql/main/mysql/queries.conf"
-cp -a "$queries.frweb-orig" "$queries"
+cp -a "$queries.radiusone-orig" "$queries"
 # Only NAS devices switched on in the portal, and not being removed, are RADIUS clients.
 perl -0pi -e 's/\tSELECT id, nasname, shortname, type, secret, server \\\n\tFROM \$\{client_table\}"/\tSELECT n.id, n.nasname, n.shortname, n.type, n.secret, n.server \\\n\tFROM \${client_table} n \\\n\tLEFT JOIN nas_metadata m ON m.nas_id=n.id \\\n\tWHERE COALESCE(m.enabled, 1)=1 AND COALESCE(m.pending_delete, 0)=0"/' "$queries"
 # The post-auth log never stores passwords.
@@ -299,7 +312,7 @@ grep -q 'LEFT JOIN nas_metadata m ON m.nas_id=n.id' "$queries" || fail "could no
 grep -q 'User-Password}:-%{Chap-Password' "$queries" && fail "could not remove passwords from the post-auth log in $queries."
 
 site="$RADDB/sites-available/default"
-cp -a "$site.frweb-orig" "$site"
+cp -a "$site.radiusone-orig" "$site"
 # Simultaneous-Use (per-customer session limit) is checked against radacct.
 [[ $(grep -cP '^#\tsql$' "$site") == 1 ]] || fail "could not enable the session check in $site (FreeRADIUS version changed?)."
 sed -i -E 's/^#\tsql$/\tsql/' "$site"
@@ -341,7 +354,7 @@ server {
     ssl_certificate_key $key;
     ssl_protocols TLSv1.2 TLSv1.3;
 
-    if (-f $DATA/frweb-maintenance) { return 503; }
+    if (-f $DATA/radiusone-maintenance) { return 503; }
     root $APP/public;
     index index.php;
     # Security headers come from the app (App\\Http\\Middleware\\SecurityHeaders).
@@ -375,7 +388,7 @@ EOF
 }
 
 # The app accepts ID documents up to 8 MB each, two per client form.
-cat > "/etc/php/$PHP/fpm/conf.d/99-frweb.ini" <<'EOF'
+cat > "/etc/php/$PHP/fpm/conf.d/99-radiusone.ini" <<'EOF'
 ; RadiusOne (install.sh)
 upload_max_filesize = 10M
 post_max_size = 24M
@@ -403,9 +416,9 @@ SHELL=/bin/sh
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 # RadiusOne (install.sh). Every app job (billing, SNMP, alerts, expiry...) runs from the scheduler
 # (routes/console.php); the nightly backup runs as root with the read-only backup identity, through
-# frweb-root-artisan (installed below), so root never loads the cache files www-data writes in bootstrap/cache.
+# radiusone-root-artisan (installed below), so root never loads the cache files www-data writes in bootstrap/cache.
 * * * * * www-data cd $APP && /usr/bin/php artisan schedule:run >>$LOGS/scheduler.log 2>&1
-15 2 * * * root cd $APP && FRWEB_OPERATOR_ENV_FILE=$ETC/backup.env LOG_CHANNEL=stderr /usr/local/sbin/frweb-root-artisan frweb:backup >/var/log/freeradius-web-backup.log 2>&1
+15 2 * * * root cd $APP && RADIUSONE_OPERATOR_ENV_FILE=$ETC/backup.env LOG_CHANNEL=stderr /usr/local/sbin/radiusone-root-artisan radiusone:backup >$LOGS/backup.log 2>&1
 EOF
 chmod 0644 /etc/cron.d/radiusone
 cat > /etc/logrotate.d/radiusone <<EOF
@@ -421,8 +434,9 @@ $LOGS/*.log {
 }
 EOF
 systemctl enable --now cron >/dev/null
-# Restart buttons, time zone switch and Back up now in the portal (root helpers + a narrow sudoers rule).
-bash "$APP/ops/apply-service-control.sh" >/dev/null
+# Restart buttons, time zone switch, Back up now and Software update in the portal (root helpers, a narrow
+# sudoers rule and radiusone-update.path).
+bash "$APP/ops/radiusone-postinstall" >/dev/null
 
 if command -v ufw >/dev/null && ufw status | grep -q '^Status: active'; then
   ufw allow 80/tcp >/dev/null; ufw allow 443/tcp >/dev/null
@@ -437,7 +451,7 @@ existing=$(mariadb -N "$DB" -e 'SELECT COUNT(*) FROM portal_users')
 if [[ "$existing" == 0 ]]; then
   ADMIN_PASS=$(random 24)
   printf '{"username":"%s","name":"Administrator","email":"%s","password":"%s"}' "$ADMIN_USER" "$ADMIN_EMAIL" "$ADMIN_PASS" \
-    | sudo -u www-data LOG_CHANNEL=stderr php artisan frweb:bootstrap-operator --create-first-superadmin >/dev/null
+    | sudo -u www-data LOG_CHANNEL=stderr php artisan radiusone:bootstrap-operator --create-first-superadmin >/dev/null
 else
   note "The portal already has $existing user(s); none created."
 fi

@@ -8,10 +8,13 @@ use App\Support\App;
 use App\Support\Backup\BackupRunner;
 use App\Support\DatabaseBackup;
 
-final class Backup extends FrwebCommand
+final class Backup extends RadiusOneCommand
 {
-    protected $signature = 'frweb:backup {--no-upload : Only write the local copies}';
-    // Run with FRWEB_OPERATOR_ENV_FILE=/etc/freeradius-web/backup.env: the portal identity cannot dump.
+    protected $signature = 'radiusone:backup {--no-upload : Only write the local copies}';
+
+    /** The name before RadiusOne 2.3, still accepted (cron lines, scripts). */
+    protected $aliases = ['frweb:backup'];
+    // Run with RADIUSONE_OPERATOR_ENV_FILE=/etc/radiusone/backup.env: the portal identity cannot dump.
     protected $description = 'Back up the database and customer documents; upload encrypted copies to the destinations in Settings → Backups';
 
     public function handle(): int

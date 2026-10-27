@@ -7,9 +7,12 @@ namespace App\Console\Commands;
 use App\Support\Retention;
 use Throwable;
 
-final class PruneRadius extends FrwebCommand
+final class PruneRadius extends RadiusOneCommand
 {
-    protected $signature = 'frweb:prune-radius {--max-seconds=600 : Stop after this long; the rest is deleted the next night}';
+    protected $signature = 'radiusone:prune-radius {--max-seconds=600 : Stop after this long; the rest is deleted the next night}';
+
+    /** The name before RadiusOne 2.3, still accepted (cron lines, scripts). */
+    protected $aliases = ['frweb:prune-radius'];
     // Needs DELETE on radacct and radpostauth (ops/install/grants.sql).
     protected $description = 'Delete session and login records older than the periods chosen under Settings → Data retention';
 

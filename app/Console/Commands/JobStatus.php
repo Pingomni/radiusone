@@ -8,9 +8,12 @@ use App\Support\Db;
 use App\Support\NetworkOperations;
 use App\Support\SchemaCompatibility;
 
-final class JobStatus extends FrwebCommand
+final class JobStatus extends RadiusOneCommand
 {
-    protected $signature = 'frweb:job-status';
+    protected $signature = 'radiusone:job-status';
+
+    /** The name before RadiusOne 2.3, still accepted (cron lines, scripts). */
+    protected $aliases = ['frweb:job-status'];
     protected $description = 'Recent job runs, schema state, network lag and notification queue';
 
     public function handle(): int

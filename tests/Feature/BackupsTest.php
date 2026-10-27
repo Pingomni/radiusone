@@ -20,7 +20,7 @@ final class BackupsTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->work = getenv('FRWEB_TEST_DIR') . '/backups-' . bin2hex(random_bytes(4));
+        $this->work = getenv('RADIUSONE_TEST_DIR') . '/backups-' . bin2hex(random_bytes(4));
         mkdir($this->work . '/local', 0700, true);
     }
 
@@ -47,7 +47,7 @@ final class BackupsTest extends TestCase
     /** The private test database (tests/run.sh), never the server's. */
     private function testDatabase(): array
     {
-        return ['DB_HOST' => 'localhost', 'DB_PORT' => '3306', 'DB_USERNAME' => 'root', 'DB_PASSWORD' => '', 'DB_DATABASE' => 'frweb_test', 'DB_SOCKET' => (string) getenv('DB_SOCKET')];
+        return ['DB_HOST' => 'localhost', 'DB_PORT' => '3306', 'DB_USERNAME' => 'root', 'DB_PASSWORD' => '', 'DB_DATABASE' => 'radiusone_test', 'DB_SOCKET' => (string) getenv('DB_SOCKET')];
     }
 
     public function test_passphrase_and_local_retention_settings(): void
@@ -100,10 +100,12 @@ final class BackupsTest extends TestCase
             return [$method === 'PUT' ? 200 : 204, ''];
         });
         $this->post('/settings/backups/destinations/' . $id . '/test')->assertSessionHas('flash.message', 'B2 works: a test file was uploaded, listed and deleted.');
-        $this->assertSame(['PUT', 'GET', 'DELETE'], array_column($this->sent, 'method'));
-        $this->assertMatchesRegularExpression('#^https://s3\.eu-central-003\.backblazeb2\.com/isp\.backups/radius/frweb-test-[0-9a-f]{8}\.txt$#', $this->sent[0]['url']);
+        // The test file, then the listing under both name prefixes (radiusone- and frweb- before 2.3), then the delete.
+        $this->assertSame(['PUT', 'GET', 'GET', 'DELETE'], array_column($this->sent, 'method'));
+        $this->assertMatchesRegularExpression('#^https://s3\.eu-central-003\.backblazeb2\.com/isp\.backups/radius/radiusone-test-[0-9a-f]{8}\.txt$#', $this->sent[0]['url']);
         $this->assertMatchesRegularExpression('#^AWS4-HMAC-SHA256 Credential=0035f1c2a3b4c5d0000000001/\d{8}/eu-central-003/s3/aws4_request, SignedHeaders=host;x-amz-content-sha256;x-amz-date, Signature=[0-9a-f]{64}$#', $this->sent[0]['headers']['Authorization']);
-        $this->assertStringContainsString('list-type=2&prefix=radius%2Ffrweb-', $this->sent[1]['url']);
+        $this->assertStringContainsString('list-type=2&prefix=radius%2Fradiusone-', $this->sent[1]['url']);
+        $this->assertStringContainsString('list-type=2&prefix=radius%2Ffrweb-', $this->sent[2]['url']);
 
         // Cloudflare R2 signs with region "auto".
         $this->post('/settings/backups/destinations', ['type' => 's3', 'name' => 'R2', 'enabled' => true, 'keep' => '3', 'provider' => 'r2', 'endpoint' => '0123abcd4567ef890123abcd4567ef89.r2.cloudflarestorage.com',
@@ -126,9 +128,9 @@ final class BackupsTest extends TestCase
         $this->actingAsOperator();
         $key = ['type' => 's3', 'enabled' => true, 'access_key' => '6d1e2f3a4b5c6d7e8f9a0b1c', 'secret_key' => 'secret'];
         foreach ([
-            ['https://s3.eu-central-003.backblazeb2.com/isp-backups', 'b2', 's3.eu-central-003.backblazeb2.com', 'isp-backups', 'eu-central-003', 'freeradius-web'],
+            ['https://s3.eu-central-003.backblazeb2.com/isp-backups', 'b2', 's3.eu-central-003.backblazeb2.com', 'isp-backups', 'eu-central-003', 'radiusone'],
             ['https://0123abcd4567ef890123abcd4567ef89.r2.cloudflarestorage.com/radius/nightly', 'r2', '0123abcd4567ef890123abcd4567ef89.r2.cloudflarestorage.com', 'radius', 'auto', 'nightly'],
-            ['https://radius.s3.us-east-005.backblazeb2.com', 'b2', 's3.us-east-005.backblazeb2.com', 'radius', 'us-east-005', 'freeradius-web'],
+            ['https://radius.s3.us-east-005.backblazeb2.com', 'b2', 's3.us-east-005.backblazeb2.com', 'radius', 'us-east-005', 'radiusone'],
         ] as [$url, $provider, $endpoint, $bucket, $region, $prefix]) {
             // The chosen provider is only a starting point: the address decides.
             $this->post('/settings/backups/destinations', $key + ['provider' => 'b2', 'url' => $url])->assertSessionHas('flash.type', 'success');
@@ -210,9 +212,9 @@ final class BackupsTest extends TestCase
         $page = '/settings?tab=backups';
         $this->get($page)->assertInertia(fn ($p) => $p->where('backups.manualReady', false)->where('backups.running', false));
         $this->post('/settings/backups/run')->assertRedirect($page)
-            ->assertSessionHas('flash.message', fn (string $m) => str_contains($m, 'apply-service-control.sh'));
+            ->assertSessionHas('flash.message', fn (string $m) => str_contains($m, 'radiusone-postinstall'));
 
-        $dir = (string) getenv('FRWEB_TEST_DIR');
+        $dir = (string) getenv('RADIUSONE_TEST_DIR');
         file_put_contents($dir . '/backup-helper', "#!/bin/sh\ntouch " . escapeshellarg($dir . '/backup-started') . "\necho 'Backup started.'\n");
         chmod($dir . '/backup-helper', 0755);
         BackupNow::$command = [$dir . '/backup-helper'];
@@ -235,7 +237,7 @@ final class BackupsTest extends TestCase
         $lock = fopen($this->work . '/local/.backup.lock', 'c');
         flock($lock, LOCK_EX);
         try {
-            $this->artisan('frweb:backup --no-upload')->expectsOutputToContain('Another backup is still running.')->assertExitCode(75);
+            $this->artisan('radiusone:backup --no-upload')->expectsOutputToContain('Another backup is still running.')->assertExitCode(75);
         } finally {
             flock($lock, LOCK_UN);
             fclose($lock);
@@ -274,26 +276,27 @@ final class BackupsTest extends TestCase
         file_put_contents($this->sshd . '/authorized_keys', $destination['public_key'] . "\n");
         $this->post('/settings/backups/destinations/' . $destination['id'] . '/test')->assertSessionHas('flash.type', 'success');
 
-        // Nine older copies already on the server: after tonight's upload only the newest seven remain.
+        // Nine older copies already on the server, the oldest four with the names from before 2.3 (frweb-): after
+        // tonight's upload only the newest seven remain, whatever their names.
         is_dir($remote) || mkdir($remote, 0700, true);
         for ($day = 1; $day <= 9; $day++) {
-            touch($remote . sprintf('/frweb-db-202601%02d-021500-aaaa.sql.gz.enc', $day));
+            touch($remote . sprintf('/%s-db-202601%02d-021500-aaaa.sql.gz.enc', $day <= 4 ? 'frweb' : 'radiusone', $day));
         }
         $status = BackupRunner::run($this->work . '/local', $this->testDatabase());
         $this->assertTrue($status['ok'], json_encode($status));
         $this->assertSame(['ok' => true, 'removed' => 3], array_intersect_key($status['destinations'][$destination['id']], ['ok' => 1, 'removed' => 1]));
-        $db = glob($remote . '/frweb-db-*.enc');
-        $this->assertCount(7, $db);
-        $docs = glob($remote . '/frweb-docs-*.enc');
+        $this->assertCount(1, glob($remote . '/frweb-db-*.enc'));
+        $this->assertCount(6, glob($remote . '/radiusone-db-*.enc'));
+        $docs = glob($remote . '/radiusone-docs-*.enc');
         $this->assertCount(1, $docs);
 
         // The uploaded copy decrypts to the same dump that stayed on the server.
-        $tonight = $remote . '/frweb-db-' . preg_replace('/^freeradius-web-|\.sql\.gz$/', '', $status['database']['file']) . '.sql.gz.enc';
-        $this->artisan('frweb:backup-decrypt', ['file' => $tonight, '--out' => $this->work . '/restored.sql.gz'])
+        $tonight = $remote . '/radiusone-db-' . preg_replace('/^radiusone-|\.sql\.gz$/', '', $status['database']['file']) . '.sql.gz.enc';
+        $this->artisan('radiusone:backup-decrypt', ['file' => $tonight, '--out' => $this->work . '/restored.sql.gz'])
             ->expectsQuestion('Backup passphrase', 'correct horse battery')->assertExitCode(0);
         $this->assertSame(sha1_file($this->work . '/local/' . $status['database']['file']), sha1_file($this->work . '/restored.sql.gz'));
         $this->assertStringContainsString('CREATE TABLE `customer_profiles`', (string) gzdecode((string) file_get_contents($this->work . '/restored.sql.gz')));
-        $this->artisan('frweb:backup-decrypt', ['file' => $tonight, '--out' => $this->work . '/wrong.sql.gz'])
+        $this->artisan('radiusone:backup-decrypt', ['file' => $tonight, '--out' => $this->work . '/wrong.sql.gz'])
             ->expectsQuestion('Backup passphrase', 'not the passphrase')->assertExitCode(1);
 
         // The page reads the status that the nightly run wrote into BACKUP_PATH.
@@ -313,7 +316,8 @@ final class BackupsTest extends TestCase
         $this->provider();
         $local = $this->work . '/local';
         for ($i = 1; $i <= 6; $i++) {
-            touch($local . "/freeradius-web-2026010$i-021500-aaaa.sql.gz", time() - (60 + $i) * 86400);
+            // Named as before 2.3 or as now: both are pruned.
+            touch($local . '/' . ($i % 2 ? 'freeradius-web' : 'radiusone') . "-2026010$i-021500-aaaa.sql.gz", time() - (60 + $i) * 86400);
         }
         $status = BackupRunner::run($local, $this->testDatabase());
         $this->assertFalse($status['ok']);
@@ -326,7 +330,7 @@ final class BackupsTest extends TestCase
         $this->assertTrue($status['ok'], json_encode($status));
         // Tonight's two dumps plus the newest older one stay; five 60-day-old dumps go.
         $this->assertSame(5, $status['local_removed']);
-        $this->assertCount(3, glob($local . '/freeradius-web-*.sql.gz'));
+        $this->assertCount(3, [...glob($local . '/freeradius-web-*.sql.gz'), ...glob($local . '/radiusone-*.sql.gz')]);
     }
 
     private function startSshd(): int

@@ -33,7 +33,7 @@ final class DatabaseBackup
             self::run(['mysqldump', '--defaults-file=' . $defaults, '--single-transaction', '--skip-routines', '--triggers', $settings['DB_DATABASE']], '/dev/null', $sql, 'Database dump');
             self::run(['gzip', '-c', $sql], '/dev/null', $compressed, 'Compression');
             self::run(['gzip', '-t', $compressed], '/dev/null', '/dev/null', 'Backup integrity check');
-            $file = rtrim($directory, '/') . '/freeradius-web-' . date('Ymd-His') . '-' . bin2hex(random_bytes(4)) . '.sql.gz';
+            $file = rtrim($directory, '/') . '/radiusone-' . date('Ymd-His') . '-' . bin2hex(random_bytes(4)) . '.sql.gz';
             if (!rename($compressed, $file)) {
                 throw new RuntimeException('Could not publish backup.');
             }
@@ -70,7 +70,7 @@ final class DatabaseBackup
 
     private static function temporary(string $directory): string
     {
-        $file = tempnam($directory, '.frweb-');
+        $file = tempnam($directory, '.radiusone-');
         if ($file === false) {
             throw new RuntimeException('Could not create temporary file.');
         }

@@ -1,0 +1,10 @@
+[Unit]
+Description=RadiusOne: install the latest release, or finish the move to the RadiusOne layout (asked for in the portal)
+Wants=network-online.target
+After=network-online.target mariadb.service
+
+[Service]
+Type=oneshot
+# root: installs the app and restarts PHP-FPM. Progress: /var/lib/radiusone/update-status.
+ExecStart=/usr/local/sbin/radiusone-update --console
+TimeoutStartSec=3600

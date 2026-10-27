@@ -31,38 +31,40 @@ final class CommandsTest extends TestCase
     public function test_generate_billing_is_idempotent_and_recorded_as_a_job(): void
     {
         $this->billableCustomer();
-        $this->artisan('frweb:generate-billing')->expectsOutputToContain('"created":1')->assertExitCode(0);
-        $this->artisan('frweb:generate-billing', ['--username' => 'alice'])->expectsOutputToContain('"created":0')->assertExitCode(0);
+        $this->artisan('radiusone:generate-billing')->expectsOutputToContain('"created":1')->assertExitCode(0);
+        $this->artisan('radiusone:generate-billing', ['--username' => 'alice'])->expectsOutputToContain('"created":0')->assertExitCode(0);
         $this->assertSame(1, (int) Db::value('SELECT COUNT(*) FROM billing_invoices'));
         $this->assertSame('billing', Db::value('SELECT job_name FROM job_runs ORDER BY id DESC LIMIT 1'));
+        // The names from before 2.3 still work (cron lines and scripts on servers not moved yet).
         $this->artisan('frweb:job-status')->expectsOutputToContain('"job_name": "billing"')->assertExitCode(0);
+        $this->artisan('radiusone:job-status')->expectsOutputToContain('"job_name": "billing"')->assertExitCode(0);
     }
 
     public function test_workers_run_against_an_empty_queue(): void
     {
-        $this->artisan('frweb:sync-expired')->expectsOutputToContain('"reconciled"')->assertExitCode(0);
-        $this->artisan('frweb:process-customer-notifications')->assertExitCode(0);
-        $this->artisan('frweb:process-notifications')->assertExitCode(0);
-        $this->artisan('frweb:check-schema')->expectsOutputToContain('"billing": []')->assertExitCode(0);
-        $this->artisan('frweb:document-inventory')->expectsOutputToContain('missing_document_ids')->assertExitCode(0);
-        $this->artisan('frweb:encrypt-secrets')->assertExitCode(0);
+        $this->artisan('radiusone:sync-expired')->expectsOutputToContain('"reconciled"')->assertExitCode(0);
+        $this->artisan('radiusone:process-customer-notifications')->assertExitCode(0);
+        $this->artisan('radiusone:process-notifications')->assertExitCode(0);
+        $this->artisan('radiusone:check-schema')->expectsOutputToContain('"billing": []')->assertExitCode(0);
+        $this->artisan('radiusone:document-inventory')->expectsOutputToContain('missing_document_ids')->assertExitCode(0);
+        $this->artisan('radiusone:encrypt-secrets')->assertExitCode(0);
         // Every migration is already in the ledger, so a rerun applies nothing.
-        $this->artisan('frweb:migrate')->assertExitCode(0);
+        $this->artisan('radiusone:migrate')->assertExitCode(0);
         $this->assertSame(count(glob(base_path('database/sql/*.sql'))), (int) Db::value('SELECT COUNT(*) FROM schema_migrations'));
     }
 
     public function test_guarded_commands_refuse_without_their_safeguards(): void
     {
-        $this->artisan('frweb:process-network-operations')
+        $this->artisan('radiusone:process-network-operations')
             ->expectsOutputToContain('Network worker stopped: RuntimeException')->assertExitCode(1);
-        $this->artisan('frweb:mark-nas-applied', ['--id' => '1', '--revision' => '2'])
+        $this->artisan('radiusone:mark-nas-applied', ['--id' => '1', '--revision' => '2'])
             ->expectsOutputToContain('Require --id, --revision, --evidence and --verified-activation')->assertExitCode(1);
-        $this->artisan('frweb:bootstrap-operator')
+        $this->artisan('radiusone:bootstrap-operator')
             ->expectsOutputToContain('Use --create-first-superadmin')->assertExitCode(1);
-        $this->artisan('frweb:seed')->expectsOutputToContain('Explicit --demo is required')->assertExitCode(1);
-        $this->artisan('frweb:migrate', ['--baseline-through' => '010'])
+        $this->artisan('radiusone:seed')->expectsOutputToContain('Explicit --demo is required')->assertExitCode(1);
+        $this->artisan('radiusone:migrate', ['--baseline-through' => '010'])
             ->expectsOutputToContain('requires --confirm-schema-reviewed')->assertExitCode(1);
-        $this->artisan('frweb:restore', ['file' => '/nonexistent.sql.gz'])->assertExitCode(1);
+        $this->artisan('radiusone:restore', ['file' => '/nonexistent.sql.gz'])->assertExitCode(1);
     }
 
     public function test_job_history_is_pruned_but_running_jobs_and_job_health_are_kept(): void
@@ -71,7 +73,7 @@ final class CommandsTest extends TestCase
             ("customer-notifications", "succeeded", NOW() - INTERVAL 40 DAY, NOW() - INTERVAL 40 DAY),
             ("billing", "running", NOW() - INTERVAL 40 DAY, NULL),
             ("customer-notifications", "succeeded", NOW() - INTERVAL 1 MINUTE, NOW() - INTERVAL 1 MINUTE)');
-        $this->artisan('frweb:prune-job-runs')->expectsOutputToContain('"deleted":1')->assertExitCode(0);
+        $this->artisan('radiusone:prune-job-runs')->expectsOutputToContain('"deleted":1')->assertExitCode(0);
         $this->assertSame(['running', 'succeeded'], array_column(Db::select('SELECT state FROM job_runs ORDER BY id'), 'state'));
         $this->assertSame('running', JobHealth::all()['customer-notifications']['state']);
     }
@@ -86,12 +88,12 @@ final class CommandsTest extends TestCase
             ));
         };
         $active = $due();
-        $this->assertContains('frweb:process-customer-notifications', $active);
-        $this->assertContains('frweb:poll-snmp', $active);
-        $this->assertNotContains('frweb:sync-expired', $active);
-        $this->assertNotContains('frweb:process-notifications', $active);
+        $this->assertContains('radiusone:process-customer-notifications', $active);
+        $this->assertContains('radiusone:poll-snmp', $active);
+        $this->assertNotContains('radiusone:sync-expired', $active);
+        $this->assertNotContains('radiusone:process-notifications', $active);
 
         config(['app.schedule_expiry_sync' => true]);
-        $this->assertContains('frweb:sync-expired', $due());
+        $this->assertContains('radiusone:sync-expired', $due());
     }
 }

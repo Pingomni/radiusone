@@ -1,4 +1,5 @@
-@php($theme = in_array(request()->cookie('frweb_theme'), ['light', 'dark'], true) ? request()->cookie('frweb_theme') : null)
+@php($saved = request()->cookie('radiusone_theme') ?? request()->cookie('frweb_theme'))
+@php($theme = in_array($saved, ['light', 'dark'], true) ? $saved : null)
 <!doctype html>
 <html lang="en" @if($theme) data-theme="{{ $theme }}" @endif>
     <head>

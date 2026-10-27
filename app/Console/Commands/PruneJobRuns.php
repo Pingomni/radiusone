@@ -7,9 +7,12 @@ namespace App\Console\Commands;
 use App\Support\Db;
 use Throwable;
 
-final class PruneJobRuns extends FrwebCommand
+final class PruneJobRuns extends RadiusOneCommand
 {
-    protected $signature = 'frweb:prune-job-runs {--days=30 : Keep this many days of history}';
+    protected $signature = 'radiusone:prune-job-runs {--days=30 : Keep this many days of history}';
+
+    /** The name before RadiusOne 2.3, still accepted (cron lines, scripts). */
+    protected $aliases = ['frweb:prune-job-runs'];
     // Job health only needs the latest run; a minute job otherwise adds ~525k rows a year.
     protected $description = 'Delete finished job_runs history older than --days';
 

@@ -57,7 +57,7 @@ final class Branding
 
     public static function directory(): string
     {
-        return rtrim((string) App::env('BRANDING_STORAGE', '/var/lib/freeradius-web/branding'), '/');
+        return rtrim((string) App::env('BRANDING_STORAGE', Paths::data('branding')), '/');
     }
     public static function file(string $name): ?string
     {

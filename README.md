@@ -45,10 +45,10 @@ Where things are:
 
 | | |
 | --- | --- |
-| Keys and database passwords | `/etc/freeradius-web/*.env` (root only; `portal.env` also readable by the web server) |
-| Uploaded documents and logos | `/var/lib/freeradius-web/` |
-| Backups | `/var/backups/freeradius-web/` (nightly at 02:15; remote copies under Settings → Backups) |
-| Logs | `/var/log/freeradius-web/`, and `storage/logs/` in the project folder |
+| Keys and database passwords | `/etc/radiusone/*.env` (root only; `portal.env` also readable by the web server) |
+| Uploaded documents and logos | `/var/lib/radiusone/` |
+| Backups | `/var/backups/radiusone/` (nightly at 02:15; remote copies under Settings → Backups) |
+| Logs | `/var/log/radiusone/`, and `storage/logs/` in the project folder |
 | Scheduled jobs | `/etc/cron.d/radiusone` |
 
 After installing, add your routers under **NAS**, then restart FreeRADIUS from **Monitoring → RADIUS

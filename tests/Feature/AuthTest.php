@@ -20,8 +20,8 @@ final class AuthTest extends TestCase
 
     public function test_plain_http_is_redirected_to_the_canonical_https_url(): void
     {
-        config(['app.url' => 'https://frweb.test', 'app.force_https' => true]);
-        $this->withHeader('X-Forwarded-Proto', 'http')->get('/login')->assertRedirect('https://frweb.test/login');
+        config(['app.url' => 'https://radiusone.test', 'app.force_https' => true]);
+        $this->withHeader('X-Forwarded-Proto', 'http')->get('/login')->assertRedirect('https://radiusone.test/login');
         $this->withHeader('X-Forwarded-Proto', 'http')->post('/login')->assertStatus(400);
     }
 

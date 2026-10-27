@@ -12,8 +12,8 @@ final class App
 {
     /** Legacy names that map to a different key in this app. */
     private const ALIASES = [
-        'APP_KEY' => 'FRWEB_SECRETS_KEY',
-        'APP_KEY_PREVIOUS' => 'FRWEB_SECRETS_KEY_PREVIOUS',
+        'APP_KEY' => 'RADIUSONE_SECRETS_KEY',
+        'APP_KEY_PREVIOUS' => 'RADIUSONE_SECRETS_KEY_PREVIOUS',
     ];
 
     public static function env(string $key, mixed $default = null): mixed

@@ -7,10 +7,8 @@ import type { SoftwareUpdate, UpdateStatus } from '@/settings/types';
 
 type Live = { current: string; running: boolean; status: UpdateStatus | null; log: string[] };
 
-/** RadiusOne's repository: its CHANGELOG at a release tag is that release's notes. */
-const REPO = 'https://github.com/n-geraldo/radiusone';
 
-/** Settings → Overview → Software update: newer release tags from GitHub, installed by the root helper ops/frweb-update. */
+/** Settings → Overview → Software update: the latest GitHub release, installed by radiusone-update (root), as in DNSOne. */
 export function UpdateSheet({ u }: { u: SoftwareUpdate }) {
     const [live, setLive] = useState<Live>({ current: u.current, running: u.running, status: u.status, log: u.log });
 
@@ -37,8 +35,6 @@ export function UpdateSheet({ u }: { u: SoftwareUpdate }) {
     const check = u.check;
     const last = live.status;
     const available = Boolean(check?.newer && !live.running);
-    // Where a release's notes are read: the changelog at its tag (RadiusOne has no separate release pages).
-    const notesUrl = (tag: string) => `${REPO}/blob/${tag}/CHANGELOG.md`;
     const failed = !live.running && last?.state === 'failed';
     const finished = !live.running && last?.state === 'ok' && last.to === live.current && last.from !== live.current;
     const showLog = live.log.length > 0 && (live.running || failed || finished);
@@ -53,12 +49,33 @@ export function UpdateSheet({ u }: { u: SoftwareUpdate }) {
                 {live.running && (
                     <p role="status">{last?.message || `Updating RadiusOne to ${last?.to ?? check?.latest}…`} The portal is paused for a few minutes; this page reloads when it is done.</p>
                 )}
-                {available && check && <p><strong>RadiusOne {check.latest} is available</strong> (checked {check.at}).</p>}
+                {available && check && <p><strong>RadiusOne {check.latest} is available</strong>{check.published ? ` (released ${check.published})` : ''}.</p>}
+                {u.move && !live.running && (
+                    <div className="update-move">
+                        <p><strong>Finish moving to RadiusOne.</strong> This server still uses the folders and names from before RadiusOne 2.3
+                            (freeradius-web, frweb). The move puts the app in /opt/radiusone and renames its folders, settings, database
+                            accounts and server helpers; the old names keep working as links. It takes a minute or two, with a backup first.</p>
+                        {u.ready && (
+                            <div className="form-actions">
+                                <PostButton
+                                    action="/settings/update/move"
+                                    label="Finish moving to RadiusOne"
+                                    className="button primary"
+                                    confirm={{
+                                        title: 'Move this server to the RadiusOne layout?',
+                                        message: 'Everything is backed up first. The portal pauses for a minute or two; RADIUS keeps authenticating customers. If a step fails, the server is put back as it was.',
+                                        confirmLabel: 'Move now',
+                                    }}
+                                />
+                            </div>
+                        )}
+                    </div>
+                )}
                 {!live.running && check && !check.newer && <p className="success-text">RadiusOne is up to date (the latest release is {check.latest || live.current}).</p>}
                 {failed && <p className="danger-text" role="status">{last?.message} ({last?.at}): RadiusOne {live.current} runs. Its log is below.</p>}
                 {finished && <p className="success-text" role="status">{last?.message} ({last?.at})</p>}
                 {available && check?.problem && <p className="danger-text">{check.problem}</p>}
-                {!u.ready && <p className="hint">To update from here, run <code>sudo bash ops/apply-service-control.sh</code> on the server once.</p>}
+                {!u.ready && <p className="hint">To update from here, run <code>sudo radiusone-update</code> on the server once (it also installs the latest release).</p>}
                 {showLog
                     ? <pre aria-label="Update log">{live.log.join('\n')}</pre>
                     : available && check?.notes && <pre aria-label={`What is new in ${check.latest}`}>{check.notes}</pre>}
@@ -77,7 +94,7 @@ export function UpdateSheet({ u }: { u: SoftwareUpdate }) {
                         />
                     )}
                     {u.ready && <PostButton action="/settings/update/check" label="Check for updates" className="button" disabled={live.running} />}
-                    {check?.tag && <a className="button" href={notesUrl(check.tag)} target="_blank" rel="noopener noreferrer">Release notes</a>}
+                    {check?.url && <a className="button" href={check.url} target="_blank" rel="noopener noreferrer">Release notes</a>}
                 </div>
             </div>
         </Sheet>

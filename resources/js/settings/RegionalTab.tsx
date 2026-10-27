@@ -36,7 +36,7 @@ export function RegionalTab({ r }: { r: Regional }) {
                     <div className="span2 form-actions">
                         <button className="primary" disabled={zone.processing || running || !r.timezoneReady || zone.data.timezone === r.timezone}>Switch time zone</button>
                     </div>
-                    {!r.timezoneReady && <p className="span2 hint">To change it from here, run <code>sudo bash ops/apply-service-control.sh</code> on the server once.</p>}
+                    {!r.timezoneReady && <p className="span2 hint">To change it from here, run <code>sudo bash ops/radiusone-postinstall</code> on the server once.</p>}
                     {r.timezoneLog.length > 0 && (
                         <details className="span2" open={running}>
                             <summary>Last change</summary>

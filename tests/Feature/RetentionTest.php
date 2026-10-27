@@ -45,7 +45,7 @@ final class RetentionTest extends TestCase
             ->where('retention.periods.logins', 0)
             ->where('retention.options.sessions.365', '1 year')
             ->where('retention.stats.lastRun', null));
-        $this->artisan('frweb:prune-radius')->expectsOutputToContain('"sessions":0,"logins":0')->assertExitCode(0);
+        $this->artisan('radiusone:prune-radius')->expectsOutputToContain('"sessions":0,"logins":0')->assertExitCode(0);
         $this->assertSame(4, (int) Db::value('SELECT COUNT(*) FROM radacct'));
         $this->assertSame(2, (int) Db::value('SELECT COUNT(*) FROM radpostauth'));
     }
@@ -60,7 +60,7 @@ final class RetentionTest extends TestCase
         $this->assertSame(['sessions' => 0, 'logins' => 0], json_decode((string) $audit['before_json'], true));
         $this->assertSame(['sessions' => 90, 'logins' => 30], json_decode((string) $audit['after_json'], true));
 
-        $this->artisan('frweb:prune-radius')->expectsOutputToContain('"sessions":2,"logins":1')->assertExitCode(0);
+        $this->artisan('radiusone:prune-radius')->expectsOutputToContain('"sessions":2,"logins":1')->assertExitCode(0);
         $this->assertSame(['live', 'recent-closed'], array_column(Db::select('SELECT acctuniqueid FROM radacct ORDER BY acctuniqueid'), 'acctuniqueid'));
         $this->assertSame(1, (int) Db::value('SELECT COUNT(*) FROM radpostauth'));
         $this->assertSame('prune', Db::value('SELECT action FROM audit_logs WHERE entity_type="radius_records" ORDER BY id DESC LIMIT 1'));

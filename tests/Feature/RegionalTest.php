@@ -95,10 +95,10 @@ final class RegionalTest extends TestCase
 
         // Not installed yet.
         $this->post('/settings/timezone', ['timezone' => $other])->assertRedirect($back)
-            ->assertSessionHas('flash.message', fn (string $m) => str_contains($m, 'apply-service-control.sh'));
+            ->assertSessionHas('flash.message', fn (string $m) => str_contains($m, 'radiusone-postinstall'));
 
         // A stand-in helper records how it was called.
-        $dir = (string) getenv('FRWEB_TEST_DIR');
+        $dir = (string) getenv('RADIUSONE_TEST_DIR');
         file_put_contents($dir . '/tz-helper', "#!/bin/sh\necho \"\$@\" > " . escapeshellarg($dir . '/tz-called') . "\necho scheduled\n");
         chmod($dir . '/tz-helper', 0755);
         TimeZone::$command = [$dir . '/tz-helper'];

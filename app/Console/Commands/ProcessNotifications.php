@@ -8,9 +8,12 @@ use App\Support\JobRunner;
 use App\Support\NotificationService;
 use Throwable;
 
-final class ProcessNotifications extends FrwebCommand
+final class ProcessNotifications extends RadiusOneCommand
 {
-    protected $signature = 'frweb:process-notifications';
+    protected $signature = 'radiusone:process-notifications';
+
+    /** The name before RadiusOne 2.3, still accepted (cron lines, scripts). */
+    protected $aliases = ['frweb:process-notifications'];
     // There is deliberately no --force: it could not bypass a durable due time or an uncertain outcome.
     protected $description = 'Send due service-expiry notifications';
 

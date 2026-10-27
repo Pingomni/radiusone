@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+# RadiusOne's server set-up after an install or update (install.sh, radiusone-update and the move run it; it is
+# safe to run again by hand). As root:
+#   sudo bash <app>/ops/radiusone-postinstall
+# It installs:
+#   - the root helpers in /usr/local/sbin: radiusone-service-restart (Restart buttons on Monitoring → RADIUS
+#     server), radiusone-set-timezone (Settings → Regional), radiusone-backup-now (Settings → Backups → Back up
+#     now), radiusone-root-artisan (artisan as root, for the helpers and the nightly backup) and
+#     radiusone-update (the updater). The names from before 2.3 (frweb-...) become links to them.
+#   - /etc/sudoers.d/radiusone: www-data may restart exactly FreeRADIUS, MariaDB, Nginx and PHP-FPM, schedule a
+#     time zone change and start a backup; nothing else.
+#   - installing updates from the portal, as DNSOne does: the request folder www-data writes in, the status
+#     folder radiusone-update writes in, and radiusone-update.path / radiusone-update.service.
+# The helpers name the app and the server folders; they get the ones this server has: /opt/radiusone and the
+# radiusone folders, or, on a server not moved yet (ops/radiusone-upgrade-2.3), the freeradius-web ones.
+set -euo pipefail
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+[[ $EUID -eq 0 ]] || { echo 'Run as root: sudo bash ops/radiusone-postinstall' >&2; exit 2; }
+app=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+
+# The new folder once it exists, else the one from before 2.3 (as App\Support\Paths does).
+pick() { if [[ -e $1 || ! -e $2 ]]; then echo "$1"; else echo "$2"; fi; }
+etc=$(pick /etc/radiusone /etc/freeradius-web)
+data=$(pick /var/lib/radiusone /var/lib/freeradius-web)
+logs=$(pick /var/log/radiusone /var/log/freeradius-web)
+backups=$(pick /var/backups/radiusone /var/backups/freeradius-web)
+
+# Installs a file from the app with this server's paths written in.
+place() {  # $1 source, $2 target, $3 mode
+  local tmp; tmp=$(mktemp)
+  sed -e "s#/opt/radiusone#$app#g" -e "s#/etc/radiusone#$etc#g" -e "s#/var/lib/radiusone#$data#g" \
+      -e "s#/var/log/radiusone#$logs#g" -e "s#/var/backups/radiusone#$backups#g" "$1" > "$tmp"
+  install -o root -g root -m "$3" "$tmp" "$2"
+  rm -f "$tmp"
+}
+
+echo "== root helpers ($app)"
+for name in service-restart set-timezone backup-now root-artisan update; do
+  place "$app/ops/radiusone-$name" "/usr/local/sbin/radiusone-$name" 0755
+done
+# The names before 2.3 lead to the new helpers (old cron lines, scripts). frweb-update is the old, git-based
+# updater: it stays as it is until the move removes it (it may be the one running this script).
+for name in service-restart set-timezone backup-now root-artisan; do
+  [[ -e /usr/local/sbin/frweb-$name || -L /usr/local/sbin/frweb-$name ]] && ln -sfn "radiusone-$name" "/usr/local/sbin/frweb-$name"
+done
+
+# Servers installed before radiusone-root-artisan run root cron jobs in the app folder (the nightly backup) with
+# plain php artisan, which loads the cache files www-data can write in bootstrap/cache.
+for cron in /etc/cron.d/*; do
+  [[ -f $cron ]] && grep -qF " root cd $app " "$cron" || continue
+  sed -i -e "\# root cd $app #s#/usr/bin/php artisan #/usr/local/sbin/radiusone-root-artisan #" \
+         -e "\# root cd $app #s#\([ ;&]\)php artisan #\1/usr/local/sbin/radiusone-root-artisan #" "$cron"
+done
+
+echo '== sudoers'
+fpm=$(basename "$(ls /lib/systemd/system/php*-fpm.service | sort -V | tail -n 1)" .service)
+helper=/usr/local/sbin/radiusone-service-restart
+tmp=$(mktemp)
+cat > "$tmp" <<EOF
+# RadiusOne portal buttons (ops/radiusone-postinstall): Restart on Monitoring → RADIUS server, the time zone
+# switch on Settings → Regional, Back up now on Settings → Backups. Updates need no rule (radiusone-update.path).
+www-data ALL=(root) NOPASSWD: $helper freeradius, $helper mariadb, $helper nginx, $helper $fpm
+www-data ALL=(root) NOPASSWD: /usr/local/sbin/radiusone-set-timezone schedule *
+www-data ALL=(root) NOPASSWD: /usr/local/sbin/radiusone-backup-now
+EOF
+visudo -cf "$tmp" >/dev/null
+install -o root -g root -m 0440 "$tmp" /etc/sudoers.d/radiusone
+rm -f "$tmp" /etc/sudoers.d/freeradius-web-services
+
+echo "== updates from the portal ($data)"
+install -d -o www-data -g www-data -m 0750 "$data/update"
+install -d -o root -g www-data -m 0750 "$data/update-status"
+for unit in radiusone-update.path radiusone-update.service; do
+  place "$app/deploy/systemd/$unit" "/etc/systemd/system/$unit" 0644
+done
+systemctl daemon-reload
+systemctl enable --quiet radiusone-update.path
+# A request left while the units were being replaced is picked up now.
+systemctl restart radiusone-update.path
+
+echo "RadiusOne helpers, sudoers and updates are set up for $app."

@@ -29,7 +29,7 @@ $app = Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         // Trusted proxy addresses come from config/trustedproxy.php (TRUSTED_PROXIES), read per request.
         $middleware->trustProxies(headers: Request::HEADER_X_FORWARDED_FOR | Request::HEADER_X_FORWARDED_PROTO);
-        $middleware->encryptCookies(except: ['frweb_theme']);
+        $middleware->encryptCookies(except: ['radiusone_theme', 'frweb_theme']);
         // Domain code (app/Support) was written for HTML form posts: empty fields stay '' and
         // checkboxes are tested with isset(). React posts are normalised by Controller::formInput().
         $middleware->remove(ConvertEmptyStringsToNull::class);

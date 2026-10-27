@@ -99,7 +99,7 @@ final class AdminAlertsTest extends TestCase
         $this->stuckWorker();
         $this->telegram();
         $this->assertSame(['enabled' => false], AdminAlerts::run());
-        $this->artisan('frweb:admin-alerts')->expectsOutputToContain('"enabled":false')->assertExitCode(0);
+        $this->artisan('radiusone:admin-alerts')->expectsOutputToContain('"enabled":false')->assertExitCode(0);
         $this->assertSame([], $this->sent);
     }
 

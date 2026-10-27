@@ -1,0 +1,76 @@
+# Publishes a GitHub release for every vX.Y.Z tag: radiusone-X.Y.Z.tar.gz (the source with the PHP libraries
+# and the built pages, what ops/radiusone-update and install.sh install; the server needs no Composer or
+# Node.js) and its .sha256, with docs/releases/vX.Y.Z.md as the notes.
+# For a tag that is already pushed: Actions -> Release -> Run workflow, with the tag.
+name: Release
+
+on:
+  push:
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "The release tag, e.g. v2.3.0"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+          persist-credentials: false
+
+      - name: Release tag
+        env:
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "not a vX.Y.Z tag: $TAG"; exit 1; }
+          echo "TAG=$TAG" >> "$GITHUB_ENV"
+
+      - name: Check the version
+        run: |
+          version="${TAG#v}"
+          test "$(cat VERSION)" = "$version" || { echo "VERSION is $(cat VERSION), the tag is $TAG"; exit 1; }
+          test -f "docs/releases/$TAG.md" || { echo "docs/releases/$TAG.md is missing"; exit 1; }
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
+        with:
+          php-version: '8.3'
+          extensions: pdo_mysql, sodium, curl
+          tools: composer:v2
+          coverage: none
+
+      - name: Setup Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22'
+
+      - name: Package
+        run: |
+          mkdir -p out
+          git archive --prefix="radiusone-$VERSION/" HEAD | tar -x -C out
+          cd "out/radiusone-$VERSION"
+          composer install --no-dev --optimize-autoloader --no-interaction --no-progress --prefer-dist
+          npm ci --no-audit --no-fund
+          npm run build
+          rm -rf node_modules bootstrap/cache/*.php
+          test -f vendor/autoload.php && test -f public/build/manifest.json
+          cd ../..
+          tar -czf "radiusone-$VERSION.tar.gz" -C out "radiusone-$VERSION"
+          sha256sum "radiusone-$VERSION.tar.gz" > "radiusone-$VERSION.tar.gz.sha256"
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$TAG" --verify-tag --latest --title "RadiusOne $VERSION" \
+            --notes-file "docs/releases/$TAG.md" \
+            "radiusone-$VERSION.tar.gz" "radiusone-$VERSION.tar.gz.sha256"

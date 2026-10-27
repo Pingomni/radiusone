@@ -203,9 +203,7 @@ final class ServerMonitor
         return $result;
     }
 
-    public const RESTART_HELPER = '/usr/local/sbin/frweb-service-restart';
-
-    /** @return array<string, string> unit => label of the services the portal may restart (ops/apply-service-control.sh) */
+    /** @return array<string, string> unit => label of the services the portal may restart (ops/radiusone-postinstall) */
     public static function restartable(): array
     {
         return array_diff_key(array_map(static fn (array $s) => $s['label'], self::services()), ['cron' => true]);
@@ -220,14 +218,14 @@ final class ServerMonitor
         if (!array_key_exists($unit, self::restartable())) {
             throw new RuntimeException('This service cannot be restarted from the portal.');
         }
-        if (!is_executable(self::RESTART_HELPER)) {
-            throw new RuntimeException('Service restarts are not enabled on this server. Run ops/apply-service-control.sh as root first.');
+        if (!is_executable(Paths::helper('service-restart'))) {
+            throw new RuntimeException('Service restarts are not enabled on this server. Run ops/radiusone-postinstall as root first.');
         }
-        $result = BoundedProcess::run(['sudo', '-n', self::RESTART_HELPER, $unit], '', 30, 8192);
+        $result = BoundedProcess::run(['sudo', '-n', Paths::helper('service-restart'), $unit], '', 30, 8192);
         if ($result['exit'] !== 0) {
             $detail = trim($result['error']) ?: trim($result['output']);
             if (str_contains($detail, 'password is required') || str_contains($detail, 'not allowed')) {
-                $detail = 'www-data is not allowed to run the restart helper. Run ops/apply-service-control.sh as root.';
+                $detail = 'www-data is not allowed to run the restart helper. Run ops/radiusone-postinstall as root.';
             }
             throw new RuntimeException($detail !== '' ? $detail : 'The restart could not be started.');
         }

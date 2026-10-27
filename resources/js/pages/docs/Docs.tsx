@@ -172,7 +172,7 @@ const SECTIONS: Section[] = [
                     <li>FreeRADIUS: logins pause for a few seconds; connected customers normally stay online. MariaDB: the portal and RADIUS logins fail for a few seconds (you type <code>restart</code> to confirm). Nginx / PHP-FPM: the portal is unreachable for a few seconds.</li>
                     <li>Every restart and failed attempt is written to the audit log.</li>
                 </ul>
-                <Note>The installer (<code>install.sh</code>) sets this up: a small helper and a sudo rule that let the web server restart exactly these four services and nothing else. To set it up again by hand, as root: <code>sudo bash ops/apply-service-control.sh</code> from the app directory.</Note>
+                <Note>The installer (<code>install.sh</code>) sets this up: a small helper and a sudo rule that let the web server restart exactly these four services and nothing else. To set it up again by hand, as root: <code>sudo bash ops/radiusone-postinstall</code> from the app directory.</Note>
                 <h3>NAS monitor</h3>
                 <p>Each NAS has its own page with live health, the busiest interfaces, online sessions, history graphs and the SNMP OIDs used for its platform. <strong>Poll now</strong> records a sample immediately instead of waiting for the next minute.</p>
                 <h3 id="jobs">Background jobs</h3>
@@ -398,9 +398,9 @@ const SECTIONS: Section[] = [
                 />
                 <h3>On the server</h3>
                 <ul>
-                    <li>Run a backup now: <code>sudo FRWEB_OPERATOR_ENV_FILE=/etc/freeradius-web/backup.env php artisan frweb:backup</code></li>
-                    <li>Open a downloaded copy: <code>php artisan frweb:backup-decrypt &lt;file.enc&gt;</code> (asks for the passphrase).</li>
-                    <li>Restore the database: <code>php artisan frweb:restore &lt;file.sql.gz&gt;</code>. This replaces the current data; take a fresh backup first.</li>
+                    <li>Run a backup now: <code>sudo RADIUSONE_OPERATOR_ENV_FILE=/etc/radiusone/backup.env php artisan radiusone:backup</code></li>
+                    <li>Open a downloaded copy: <code>php artisan radiusone:backup-decrypt &lt;file.enc&gt;</code> (asks for the passphrase).</li>
+                    <li>Restore the database: <code>php artisan radiusone:restore &lt;file.sql.gz&gt;</code>. This replaces the current data; take a fresh backup first.</li>
                     <li>The nightly job (02:15, as root) is in <code>/etc/cron.d/radiusone</code>, set up by the installer.</li>
                 </ul>
             </>
@@ -420,20 +420,20 @@ const SECTIONS: Section[] = [
         icon: 'settings',
         body: (
             <>
-                <p>One cron line runs the Laravel scheduler every minute as the web user. Each job keeps its own lock, so a slow run is never started twice. Logs are in <code>/var/log/freeradius-web/</code>.</p>
+                <p>One cron line runs the Laravel scheduler every minute as the web user. Each job keeps its own lock, so a slow run is never started twice. Logs are in <code>/var/log/radiusone/</code>.</p>
                 <Table
                     head={['Job', 'When', 'What it does']}
                     rows={[
-                        [<code>frweb:poll-snmp</code>, 'Every minute', 'Records server and NAS samples for Monitoring.'],
-                        [<code>frweb:admin-alerts</code>, 'Every minute', 'Admin alerts and the daily report (off until enabled in Settings).'],
-                        [<code>frweb:process-customer-notifications</code>, 'Every minute', 'Sends queued customer email and SMS.'],
-                        [<code>frweb:sync-expired</code>, 'Every minute (FRWEB_SCHEDULE_EXPIRY_SYNC=true)', 'Expires services, moves expired customers to their expired plan and publishes changed access rules to RADIUS.'],
-                        [<code>frweb:process-network-operations</code>, 'Every minute (NETWORK_WORKER_ENABLED=true)', 'Applies those changes on the network: an online customer is disconnected (CoA or RouterOS API) so they reconnect with the new rules; an offline one gets them at the next login. A refused disconnect is retried five times, then shown under Network operations.'],
-                        [<code>frweb:mark-nas-applied --auto</code>, 'Every minute', 'Records NAS changes as in effect once FreeRADIUS has restarted.'],
-                        [<code>frweb:generate-billing</code>, '03:15', 'Creates recurring invoices and marks overdue ones.'],
-                        [<code>frweb:backup</code>, '02:15 (root cron)', 'Database and documents backup with encrypted remote copies.'],
-                        [<code>frweb:prune-job-runs</code>, '03:30', 'Removes old job history.'],
-                        [<code>frweb:prune-radius</code>, '03:45', 'Applies the data retention periods.'],
+                        [<code>radiusone:poll-snmp</code>, 'Every minute', 'Records server and NAS samples for Monitoring.'],
+                        [<code>radiusone:admin-alerts</code>, 'Every minute', 'Admin alerts and the daily report (off until enabled in Settings).'],
+                        [<code>radiusone:process-customer-notifications</code>, 'Every minute', 'Sends queued customer email and SMS.'],
+                        [<code>radiusone:sync-expired</code>, 'Every minute (RADIUSONE_SCHEDULE_EXPIRY_SYNC=true)', 'Expires services, moves expired customers to their expired plan and publishes changed access rules to RADIUS.'],
+                        [<code>radiusone:process-network-operations</code>, 'Every minute (NETWORK_WORKER_ENABLED=true)', 'Applies those changes on the network: an online customer is disconnected (CoA or RouterOS API) so they reconnect with the new rules; an offline one gets them at the next login. A refused disconnect is retried five times, then shown under Network operations.'],
+                        [<code>radiusone:mark-nas-applied --auto</code>, 'Every minute', 'Records NAS changes as in effect once FreeRADIUS has restarted.'],
+                        [<code>radiusone:generate-billing</code>, '03:15', 'Creates recurring invoices and marks overdue ones.'],
+                        [<code>radiusone:backup</code>, '02:15 (root cron)', 'Database and documents backup with encrypted remote copies.'],
+                        [<code>radiusone:prune-job-runs</code>, '03:30', 'Removes old job history.'],
+                        [<code>radiusone:prune-radius</code>, '03:45', 'Applies the data retention periods.'],
                     ]}
                 />
                 <h3>Useful commands</h3>
@@ -441,19 +441,20 @@ const SECTIONS: Section[] = [
                 <Table
                     head={['Command', 'Use']}
                     rows={[
-                        [<code>php artisan frweb:job-status</code>, 'Recent job runs, schema state, network lag and the notification queue.'],
-                        [<code>php artisan frweb:check-schema</code>, 'Lists database migrations a feature still needs.'],
-                        [<code>php artisan frweb:migrate</code>, 'Applies pending database migrations.'],
-                        [<code>php artisan frweb:mark-nas-applied</code>, 'Records that a NAS change is active in FreeRADIUS (see NAS devices).'],
-                        [<code>php artisan frweb:encrypt-secrets</code>, 'Encrypts or re-keys stored credentials.'],
+                        [<code>php artisan radiusone:job-status</code>, 'Recent job runs, schema state, network lag and the notification queue.'],
+                        [<code>php artisan radiusone:check-schema</code>, 'Lists database migrations a feature still needs.'],
+                        [<code>php artisan radiusone:migrate</code>, 'Applies pending database migrations.'],
+                        [<code>php artisan radiusone:mark-nas-applied</code>, 'Records that a NAS change is active in FreeRADIUS (see NAS devices).'],
+                        [<code>php artisan radiusone:encrypt-secrets</code>, 'Encrypts or re-keys stored credentials.'],
                         [<code>php artisan schedule:list</code>, 'Shows every scheduled job and when it runs next.'],
                     ]}
                 />
                 <h3>Installing and setup</h3>
                 <ul>
                     <li><code>sudo bash install.sh</code>: installs and configures everything on a fresh Ubuntu 24.04 server (see INSTALL.md). Running it again repairs the setup and keeps all data.</li>
-                    <li><code>sudo bash ops/apply-service-control.sh</code>: re-installs only the helpers behind the Restart, time zone, Back up now and Software update buttons.</li>
-                    <li><strong>Updates</strong>: <em>Settings → Overview → Software update</em> checks GitHub for a newer release and installs it (database backup first, a few minutes of maintenance, automatic roll-back if a step fails). Log: <code>/var/log/freeradius-web/update.log</code>.</li>
+                    <li><code>sudo bash ops/radiusone-postinstall</code>: re-installs only the helpers behind the Restart, time zone, Back up now and Software update buttons.</li>
+                    <li><strong>Updates</strong>: <em>Settings → Overview → Software update</em> checks GitHub for a newer release and installs it (database backup first, a few minutes of maintenance, automatic roll-back if a step fails). On the server: <code>sudo radiusone-update</code>. Log: <code>/var/lib/radiusone/update-status/update.log</code>.</li>
+                    <li><strong>Servers installed before 2.3</strong> (the app in <code>/opt/freeradius-web-laravel</code>): after installing 2.3, <em>Finish moving to RadiusOne</em> moves the app to <code>/opt/radiusone</code> and renames the folders, database accounts and server files; the old paths stay as links. Preview without changing anything: <code>sudo bash ops/radiusone-upgrade-2.3 --dry-run</code>.</li>
                 </ul>
             </>
         ),
@@ -471,7 +472,7 @@ const SECTIONS: Section[] = [
                     ['A NAS shows "waiting for FreeRADIUS restart"', 'Restart FreeRADIUS (Monitoring → RADIUS server); the NAS shows Up to date within a minute.'],
                     ['Disconnect fails or times out', 'NAS → Device: CoA on and the right port; on MikroTik /radius incoming set accept=yes; the shared secret matches; the router clock is correct. With the API on: the API user and certificate.'],
                     ['Speed changes do nothing', 'Network operations: the router\'s answer.'],
-                    ['Restart button says restarts are not enabled', 'Run sudo bash ops/apply-service-control.sh from the app directory (install.sh does this).'],
+                    ['Restart button says restarts are not enabled', 'Run sudo bash ops/radiusone-postinstall from the app directory (install.sh does this).'],
                     ['Messages are not arriving', 'Gateways: send a test. History / Recent alerts: the provider\'s reason.'],
                     ['Monitoring graphs are empty', 'Background jobs: is the Monitoring poller running? Is SNMP set up on the NAS?'],
                 ]}

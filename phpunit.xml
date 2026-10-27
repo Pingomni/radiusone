@@ -21,16 +21,16 @@
         <!-- tests/run.sh starts a private MariaDB (no networking) and sets DB_SOCKET. -->
         <env name="APP_ENV" value="testing" force="true"/>
         <env name="APP_DEBUG" value="false" force="true"/>
-        <env name="APP_URL" value="https://frweb.test" force="true"/>
+        <env name="APP_URL" value="https://radiusone.test" force="true"/>
         <env name="APP_KEY" value="base64:dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHQ=" force="true"/>
         <env name="FORCE_HTTPS" value="false" force="true"/>
-        <env name="FRWEB_SHARED_ENV" value="" force="true"/>
-        <env name="FRWEB_SECRETS_KEY" value="frweb-test-only-key-not-for-production-use" force="true"/>
+        <env name="RADIUSONE_SHARED_ENV" value="" force="true"/>
+        <env name="RADIUSONE_SECRETS_KEY" value="radiusone-test-only-key-not-for-production-use" force="true"/>
         <env name="TRUSTED_PROXIES" value="127.0.0.1" force="true"/>
         <env name="BCRYPT_ROUNDS" value="4"/>
         <env name="CACHE_STORE" value="array" force="true"/>
         <env name="DB_CONNECTION" value="mysql" force="true"/>
-        <env name="DB_DATABASE" value="frweb_test" force="true"/>
+        <env name="DB_DATABASE" value="radiusone_test" force="true"/>
         <env name="DB_USERNAME" value="root" force="true"/>
         <env name="DB_PASSWORD" value="" force="true"/>
         <env name="DB_HOST" value="localhost" force="true"/>
@@ -40,8 +40,8 @@
         <env name="SESSION_DRIVER" value="array" force="true"/>
         <env name="SESSION_SECURE_COOKIE" value="false" force="true"/>
         <!-- Production switches: off in tests, whatever .env says; tests that need them turn them on. -->
-        <env name="FRWEB_SCHEDULE_EXPIRY_SYNC" value="false" force="true"/>
-        <env name="FRWEB_SCHEDULE_EXPIRY_NOTIFICATIONS" value="false" force="true"/>
+        <env name="RADIUSONE_SCHEDULE_EXPIRY_SYNC" value="false" force="true"/>
+        <env name="RADIUSONE_SCHEDULE_EXPIRY_NOTIFICATIONS" value="false" force="true"/>
         <env name="NETWORK_WORKER_ENABLED" value="false" force="true"/>
     </php>
 </phpunit>

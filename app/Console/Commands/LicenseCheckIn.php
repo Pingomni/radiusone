@@ -8,7 +8,7 @@ use App\Support\Activation;
 use Throwable;
 
 /** Registers the licence's server with the PingOmni account, or checks in, when due (Activation). */
-final class LicenseCheckIn extends FrwebCommand
+final class LicenseCheckIn extends RadiusOneCommand
 {
     protected $signature = 'license:check-in {--force : Register or check in now, even if not due}';
 

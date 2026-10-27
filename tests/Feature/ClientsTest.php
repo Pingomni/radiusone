@@ -133,7 +133,7 @@ final class ClientsTest extends TestCase
 
     public function test_documents_upload_and_download(): void
     {
-        $dir = getenv('FRWEB_TEST_DIR') . '/documents';
+        $dir = getenv('RADIUSONE_TEST_DIR') . '/documents';
         @mkdir($dir, 0750, true);
         putenv('DOCUMENT_STORAGE=' . $dir);
         $_ENV['DOCUMENT_STORAGE'] = $_SERVER['DOCUMENT_STORAGE'] = $dir;

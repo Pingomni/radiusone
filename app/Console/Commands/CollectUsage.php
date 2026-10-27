@@ -8,9 +8,12 @@ use App\Support\JobRunner;
 use App\Support\UsageCaps;
 use Throwable;
 
-final class CollectUsage extends FrwebCommand
+final class CollectUsage extends RadiusOneCommand
 {
-    protected $signature = 'frweb:collect-usage';
+    protected $signature = 'radiusone:collect-usage';
+
+    /** The name before RadiusOne 2.3, still accepted (cron lines, scripts). */
+    protected $aliases = ['frweb:collect-usage'];
     protected $description = 'Record daily download/upload from RADIUS sessions and apply data caps';
 
     public function handle(): int

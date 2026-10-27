@@ -1,0 +1,252 @@
+#!/usr/bin/env bash
+# RadiusOne updater: installs a newer RadiusOne release from GitHub, by itself, as DNSOne's does. As root:
+#
+#     sudo radiusone-update             # update to the latest release
+#     sudo radiusone-update --check     # only say whether a newer release exists (no root needed)
+#     sudo radiusone-update v2.3.1      # update to that release
+#     sudo radiusone-update --move      # move a server from before 2.3 to the RadiusOne layout (ops/radiusone-upgrade-2.3)
+#     radiusone-update --console        # what radiusone-update.service runs when an admin clicks Install in the portal
+#
+# The first time, run it from the app folder: sudo bash ops/radiusone-update. It installs itself as
+# /usr/local/sbin/radiusone-update and sets up installing from the portal (ops/radiusone-postinstall).
+#
+# Each release on GitHub carries radiusone-X.Y.Z.tar.gz (the source with the web pages built and the PHP
+# libraries installed, so the server needs no Node.js or Composer) and its .sha256. The updater:
+#   1. finds the release, downloads it and checks its checksum and contents
+#   2. a release with its own ops/radiusone-upgrade-X.Y (a newer minor version that changes the server, as 2.3
+#      did) runs that script, which backs up, does the work and verifies; on failure it puts the server back
+#   3. otherwise: database backup, rollback archive of the app folder, maintenance mode, installs the release
+#      (.env, storage and the documents are kept), migrates, sets up the server (ops/radiusone-postinstall),
+#      verifies, and leaves maintenance mode; on failure it puts the old version back
+# RADIUS keeps authenticating customers throughout: FreeRADIUS and MariaDB are not restarted.
+# From the portal: Settings → Overview → Software update leaves a request in /var/lib/radiusone/update,
+# radiusone-update.path starts radiusone-update.service, and --console writes its progress to
+# /var/lib/radiusone/update-status (status.json, update.log), which the portal shows.
+set -euo pipefail
+umask 022
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+# radiusone-postinstall writes in this server's folders when it installs this script as /usr/local/sbin/radiusone-update.
+APP=/opt/radiusone
+DATA=/var/lib/radiusone
+ETC=/etc/radiusone
+BACKUPS=/var/backups/radiusone
+# Run from an app folder (the first time, or by hand): that folder.
+here=$(cd "$(dirname "${BASH_SOURCE[0]:-.}")/.." 2>/dev/null && pwd || true)
+[[ -f "$here/artisan" && -f "$here/VERSION" ]] && APP=$here
+# A server from before 2.3 (also when this script is piped from GitHub there): the freeradius-web names.
+[[ -f "$APP/VERSION" ]] || APP=/opt/freeradius-web-laravel
+[[ -e "$DATA" ]] || DATA=/var/lib/freeradius-web
+[[ -e "$ETC" ]] || ETC=/etc/freeradius-web
+[[ -e "$BACKUPS" ]] || BACKUPS=/var/backups/freeradius-web
+REPO=${RADIUSONE_UPDATE_REPO:-n-geraldo/radiusone}
+REQUEST_DIR=$DATA/update
+STATUS_DIR=$DATA/update-status
+WORK=$DATA/updates
+
+log() { printf '\n== %s\n' "$*"; }
+fail() { printf '\nUPDATE STOPPED: %s\n' "$*" >&2; exit 1; }
+newer() { [ "$1" != "$2" ] && [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -1)" = "$1" ]; }  # is $1 newer than $2
+
+check=0
+console=0
+move=0
+want=""
+case "${1:-}" in
+    --check) check=1 ;;
+    --console) console=1 ;;
+    --move) move=1 ;;
+    v[0-9]*) want="$1" ;;
+    "") ;;
+    *) fail "usage: radiusone-update [--check | --move | --console | vX.Y.Z]" ;;
+esac
+
+current="$(cat "$APP/VERSION")"
+version=""
+action=install
+started_at="$(date -Is)"
+step=start
+
+# --console: the output goes to update.log and the outcome to status.json, both in a folder only root writes
+# (www-data reads them), so the portal cannot point them elsewhere.
+status() {
+    [ "$console" = 1 ] || return 0
+    printf '{"state": "%s", "action": "%s", "step": "%s", "from": "%s", "to": "%s", "started": "%s", "finished": "%s"}\n' \
+        "$1" "$action" "$step" "$current" "$version" "$started_at" "${2:-}" > "$STATUS_DIR/status.json.new"
+    chgrp www-data "$STATUS_DIR/status.json.new"
+    chmod 0640 "$STATUS_DIR/status.json.new"
+    mv -f "$STATUS_DIR/status.json.new" "$STATUS_DIR/status.json"
+}
+if [ "$console" = 1 ]; then
+    [ "$(id -u)" = 0 ] || fail "--console runs as root, from radiusone-update.service"
+    request="$(cat "$REQUEST_DIR/request" 2>/dev/null || true)"
+    rm -f "$REQUEST_DIR/request" "$REQUEST_DIR/request.new"
+    install -d -o root -g www-data -m 0750 "$STATUS_DIR"
+    rm -f "$STATUS_DIR/update.log"
+    install -o root -g www-data -m 0640 /dev/null "$STATUS_DIR/update.log"
+    exec >> "$STATUS_DIR/update.log" 2>&1
+    # The request is JSON written by the portal: {"action": "install", "tag": "v2.3.1"} or {"action": "move"}.
+    req_action="$(printf '%s' "$request" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("action",""))' 2>/dev/null || true)"
+    req_tag="$(printf '%s' "$request" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("tag",""))' 2>/dev/null || true)"
+    case "$req_action" in
+        move) move=1 ;;
+        install) [[ "$req_tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] && want="$req_tag" ;;
+    esac
+    [ "$move" = 1 ] && action=move && version="$current"
+    status running
+    trap 'rc=$?; if [ "$rc" = 0 ]; then status done "$(date -Is)"; else status failed "$(date -Is)"; fi' EXIT
+    echo "Update asked for in the portal ($req_action), $started_at"
+fi
+
+finish() {
+    # The installed app's own set-up: its helpers (this script included), sudoers and the portal's update units.
+    bash "$APP/ops/radiusone-postinstall"
+    echo
+    echo "RadiusOne $(cat "$APP/VERSION") is installed. What changed: https://github.com/$REPO/releases"
+}
+
+# Before 2.3 the app lived elsewhere: the move puts it in /opt/radiusone and renames everything (its own script).
+if [ "$move" = 1 ]; then
+    [ "$(id -u)" = 0 ] || fail "run as root (sudo radiusone-update --move)"
+    [ -f "$APP/ops/radiusone-upgrade-2.3" ] || fail "$APP has no ops/radiusone-upgrade-2.3"
+    step=moving
+    log "Moving this server to the RadiusOne layout (ops/radiusone-upgrade-2.3)"
+    bash "$APP/ops/radiusone-upgrade-2.3"
+    exit 0
+fi
+
+if [ -n "$want" ]; then
+    tag="$want"
+else
+    tag="$(curl -fsSL --max-time 20 "https://api.github.com/repos/$REPO/releases/latest" \
+           | python3 -c 'import json, sys; print(json.load(sys.stdin)["tag_name"])')" \
+        || fail "cannot read the latest release from https://github.com/$REPO/releases"
+fi
+version="${tag#v}"
+[[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail "release $tag is not a vX.Y.Z version"
+status running
+
+if ! newer "$version" "$current"; then
+    echo "RadiusOne $current is installed; release $tag is not newer. Nothing to do."
+    [ "$check" = 0 ] && [ "$(id -u)" = 0 ] && finish
+    exit 0
+fi
+if [ "$check" = 1 ]; then
+    echo "RadiusOne $current is installed; $version is available: https://github.com/$REPO/releases/tag/$tag"
+    echo "Update: sudo radiusone-update"
+    exit 0
+fi
+[ "$(id -u)" = 0 ] || fail "run as root (sudo radiusone-update)"
+
+step=downloading
+log "1. Downloading RadiusOne $version"
+dir="$WORK/$version"
+rm -rf "$dir"
+mkdir -p "$dir"
+url="https://github.com/$REPO/releases/download/$tag/radiusone-$version.tar.gz"
+curl -fsSL --max-time 300 -o "$dir/radiusone-$version.tar.gz" "$url" || fail "cannot download $url"
+curl -fsSL --max-time 30 -o "$dir/radiusone-$version.tar.gz.sha256" "$url.sha256" || fail "cannot download $url.sha256"
+(cd "$dir" && sha256sum --quiet -c "radiusone-$version.tar.gz.sha256") || fail "the download does not match its checksum"
+tar -xzf "$dir/radiusone-$version.tar.gz" -C "$dir"
+src="$dir/radiusone-$version"
+[ "$(cat "$src/VERSION")" = "$version" ] || fail "the archive is not RadiusOne $version"
+[ -f "$src/public/build/manifest.json" ] || fail "the archive has no built web pages"
+[ -f "$src/vendor/autoload.php" ] || fail "the archive has no PHP libraries"
+echo "Downloaded and checked: $src"
+
+# A release that changes the server brings its own upgrade script (2.3: the move to the RadiusOne layout).
+script="$src/ops/radiusone-upgrade-${version%.*}"
+if [ "${version%.*}" != "${current%.*}" ] && [ -f "$script" ]; then
+    step=upgrading
+    log "2. Upgrading $current -> $version with ops/radiusone-upgrade-${version%.*}"
+    bash "$script" "$src"
+    APP=/opt/radiusone
+    finish
+    exit 0
+fi
+
+# Root runs artisan without the cache files www-data can write in bootstrap/cache (as radiusone-root-artisan).
+root_cache=$(mktemp -d /run/radiusone-update.XXXXXX)
+artisan() {
+    (cd "$APP" && env LOG_CHANNEL=stderr APP_CONFIG_CACHE="$root_cache/config.php" APP_SERVICES_CACHE="$root_cache/services.php" \
+        APP_PACKAGES_CACHE="$root_cache/packages.php" APP_ROUTES_CACHE="$root_cache/routes.php" APP_EVENTS_CACHE="$root_cache/events.php" \
+        php artisan "$@")
+}
+as_web() { (cd "$APP" && sudo -u www-data env LOG_CHANNEL=stderr php artisan "$@"); }
+# This server's database identities: radiusone_* once moved, frweb_* before.
+identity() { if [ -f "$ETC/$1.env" ]; then echo "$ETC/$1.env"; fi; }
+
+step=checks
+log "2. Checks"
+for unit in mariadb nginx; do
+    systemctl is-active --quiet "$unit" || fail "$unit is not running; fix that first"
+done
+fpm=$(basename "$(ls /lib/systemd/system/php*-fpm.service | sort -V | tail -n 1)" .service)
+systemctl is-active --quiet "$fpm" || fail "$fpm is not running; fix that first"
+owner=$(stat -c %U "$APP")
+group=$(stat -c %G "$APP")
+
+step=backup
+log "3. Backups"
+if [ -n "$(identity backup)" ]; then
+    RADIUSONE_OPERATOR_ENV_FILE="$(identity backup)" artisan radiusone:backup --no-upload
+else
+    echo "No backup identity ($ETC/backup.env): skipping the database backup."
+fi
+install -d -m 0700 "$BACKUPS"
+archive="$BACKUPS/pre-$version-$(date +%Y%m%d-%H%M%S).tar.gz"
+tar -czpf "$archive" -C / --exclude="${APP#/}/storage/framework/cache" --exclude="${APP#/}/storage/framework/sessions" \
+    --exclude="${APP#/}/storage/framework/views" --exclude="${APP#/}/node_modules" "${APP#/}"
+chmod 0600 "$archive"
+echo "Rollback archive: $archive"
+
+rollback() {
+    step="$(cat "$dir/step" 2>/dev/null || echo installing)"
+    log "Putting RadiusOne $current back"
+    rm -rf "$APP"
+    tar -xzpf "$archive" -C /
+    bash "$APP/ops/radiusone-postinstall" >/dev/null 2>&1 || true
+    as_web optimize:clear >/dev/null 2>&1 || true
+    systemctl reload "$fpm" || true
+    as_web up || true
+    rm -rf "$root_cache"
+    fail "the update to $version failed at: $step; RadiusOne $current runs again. The database keeps $version's (additive) changes; the backup taken first is in $BACKUPS."
+}
+
+log "4. Installing RadiusOne $version"
+set +e
+(
+    set -e
+    echo maintenance > "$dir/step"
+    as_web down --retry=20
+    echo files > "$dir/step"
+    rsync -a --delete --exclude '/.env' --exclude '/storage' --exclude '/bootstrap/cache' --exclude '/public/storage' \
+          --exclude '/.git' --exclude '/node_modules' "$src/" "$APP/"
+    chown -R "$owner:$group" "$APP"
+    chown -R www-data:www-data "$APP/storage" "$APP/bootstrap/cache"
+    echo database > "$dir/step"
+    RADIUSONE_OPERATOR_ENV_FILE="$(identity migration)" artisan radiusone:migrate
+    if mariadb -N -e "SELECT 1 FROM mysql.user WHERE user='radiusone_portal'" | grep -q 1; then
+        mariadb < "$APP/ops/install/radiusone-grants.sql"
+    else
+        sed 's/radiusone_/frweb_/g' "$APP/ops/install/radiusone-grants.sql" | mariadb
+    fi
+    echo 'server set-up' > "$dir/step"
+    bash "$APP/ops/radiusone-postinstall"
+    as_web optimize:clear
+    systemctl reload "$fpm"
+    echo verification > "$dir/step"
+    as_web radiusone:check-schema
+    as_web up
+)
+[ $? = 0 ] || rollback
+set -e
+rm -rf "$root_cache"
+
+log "5. Verification"
+code=$(curl -sk -o /dev/null -w '%{http_code}' --max-time 20 http://127.0.0.1/login || true)
+echo "Login page: HTTP $code"
+case "$code" in 200|301|302|303|503) ;; *) echo "WARNING: the login page answered HTTP $code; check the portal." ;; esac
+step=done
+echo
+echo "RadiusOne $(cat "$APP/VERSION") is installed. What changed: https://github.com/$REPO/releases/tag/$tag"

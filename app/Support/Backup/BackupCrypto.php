@@ -52,7 +52,7 @@ final class BackupCrypto
         try {
             $head = fread($in, 8 + SODIUM_CRYPTO_PWHASH_SALTBYTES + 4 + 8 + SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_HEADERBYTES);
             if ($head === false || !str_starts_with($head, self::MAGIC) || strlen($head) < 60) {
-                throw new RuntimeException('Not a freeradius-web encrypted backup.');
+                throw new RuntimeException('Not a RadiusOne encrypted backup.');
             }
             $salt = substr($head, 8, SODIUM_CRYPTO_PWHASH_SALTBYTES);
             ['ops' => $ops, 'mem' => $mem] = unpack('Nops/Jmem', substr($head, 24, 12)) ?: throw new RuntimeException('Backup header is damaged.');

@@ -1,0 +1,302 @@
+#!/usr/bin/env bash
+# RadiusOne 2.3: moves a server from the layout before 2.3 (the freeradius-web / frweb names) to the RadiusOne
+# one. As root:
+#
+#     sudo bash ops/radiusone-upgrade-2.3 --dry-run        # what it would change, changing nothing
+#     sudo bash ops/radiusone-upgrade-2.3                  # move this app (RadiusOne 2.3, still in its old folder)
+#     sudo bash ops/radiusone-upgrade-2.3 <release folder> # install that release in /opt/radiusone while moving
+#                                                          # (radiusone-update does this for 2.2 -> 2.3)
+#
+# Usually run for you: Settings → Overview → Software update → Finish moving to RadiusOne, or radiusone-update.
+#
+#   app folder         /opt/freeradius-web-laravel   -> /opt/radiusone
+#   configuration      /etc/freeradius-web           -> /etc/radiusone (portal.env: the portal's secrets, copied
+#                                                       from the shared env file it named, e.g. /opt/freeradius-web/.env)
+#   data, logs, backups /var/{lib,log,backups}/freeradius-web -> /var/{lib,log,backups}/radiusone
+#   database accounts  frweb_portal, frweb_radius, frweb_migration, frweb_backup -> radiusone_* (RENAME USER keeps
+#                       passwords and rights)
+#   settings (.env)    FRWEB_* -> RADIUSONE_*, the paths above, DB_USERNAME, the app name and the session cookie
+#   server files       cron, logrotate, nginx sites, the PHP ini, sudoers and the root helpers get radiusone names
+#                       and paths; FreeRADIUS's SQL login when it uses frweb_radius (it is restarted only then)
+# Each old folder and the old app path stay as links to the new ones, so anything outside RadiusOne that names
+# them keeps working. Customers keep authenticating: FreeRADIUS and MariaDB keep running (see above).
+#
+# Safety: a database backup and an archive of every file it changes come first; the portal is in maintenance
+# and cron is stopped meanwhile. Every change is written to an undo journal: if a step fails, the journal runs
+# backwards, the archived files come back, and the portal runs as before. Running it again is safe: each step
+# checks whether it is done.
+set -Eeuo pipefail
+umask 022
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+DRY=0
+SRC=''
+for arg in "$@"; do
+  case "$arg" in
+    --dry-run) DRY=1 ;;
+    -*) echo "usage: radiusone-upgrade-2.3 [--dry-run] [release folder]" >&2; exit 2 ;;
+    *) SRC=$(cd "$arg" && pwd) ;;
+  esac
+done
+[[ $EUID -eq 0 ]] || { echo 'Run as root.' >&2; exit 2; }
+
+NEW_APP=/opt/radiusone
+here=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
+# The app being moved: the classic folder, or the one this script came from (a server that kept another path).
+OLD_APP=''
+for candidate in /opt/freeradius-web-laravel "$here"; do
+  if [[ -d $candidate && ! -L $candidate && -f $candidate/artisan && -f $candidate/.env && $candidate != "$NEW_APP" ]]; then OLD_APP=$candidate; break; fi
+done
+STAMP=$(date +%Y%m%d-%H%M%S)
+WORK=/var/backups/radiusone-move-$STAMP
+UNDO=$WORK/undo.sh
+fpm=$(basename "$(ls /lib/systemd/system/php*-fpm.service | sort -V | tail -n 1)" .service)
+
+say() { printf '%s\n' "$*"; }
+step() { printf '\n== %s\n' "$*"; }
+# Runs a change, or only shows it with --dry-run.
+run() { if [[ $DRY == 1 ]]; then say "   would: $*"; else "$@"; fi; }
+# The command that undoes the change just made; the journal runs newest first.
+undo() { [[ $DRY == 1 ]] || printf '%s\n' "$*" >> "$UNDO.lines"; }
+
+dirs=(etc lib log backups)
+declare -A OLD=([etc]=/etc/freeradius-web [lib]=/var/lib/freeradius-web [log]=/var/log/freeradius-web [backups]=/var/backups/freeradius-web)
+declare -A NEW=([etc]=/etc/radiusone [lib]=/var/lib/radiusone [log]=/var/log/radiusone [backups]=/var/backups/radiusone)
+roles=(portal radius migration backup)
+
+# Rewrites the old names in a file: paths, settings, helpers, commands and the database accounts.
+translate() {  # $1 file
+  local app_from=${OLD_APP:-/opt/freeradius-web-laravel}
+  sed -i -e "s#$app_from#$NEW_APP#g" -e 's#/opt/freeradius-web-laravel#/opt/radiusone#g' \
+         -e 's#/var/log/freeradius-web-backup\.log#/var/log/radiusone/backup.log#g' \
+         -e 's#/etc/freeradius-web#/etc/radiusone#g' -e 's#/var/lib/freeradius-web#/var/lib/radiusone#g' \
+         -e 's#/var/log/freeradius-web#/var/log/radiusone#g' -e 's#/var/backups/freeradius-web#/var/backups/radiusone#g' \
+         -e 's#frweb-maintenance#radiusone-maintenance#g' -e 's#\bFRWEB_#RADIUSONE_#g' \
+         -e 's#/usr/local/sbin/frweb-#/usr/local/sbin/radiusone-#g' -e 's#\bfrweb:\([a-z-]\+\)#radiusone:\1#g' \
+         -e 's#\bfrweb_\(portal\|radius\|migration\|backup\)\b#radiusone_\1#g' "$1"
+}
+mentions_old() { grep -qE "freeradius-web|frweb|FRWEB_|${OLD_APP:-/opt/freeradius-web-laravel}" "$1" 2>/dev/null; }
+
+# ------------------------------------------------------------------------------------------------------------
+step "RadiusOne 2.3: moving to the RadiusOne layout$([[ $DRY == 1 ]] && echo ' (dry run: nothing is changed)')"
+say "   app:      ${OLD_APP:-none to move} -> $NEW_APP${SRC:+ (installing $SRC)}"
+for d in "${dirs[@]}"; do
+  if [[ -d ${OLD[$d]} && ! -L ${OLD[$d]} ]]; then say "   folder:   ${OLD[$d]} -> ${NEW[$d]}"; fi
+done
+users=()
+for r in "${roles[@]}"; do
+  if mariadb -N -e "SELECT 1 FROM mysql.user WHERE user='frweb_$r' AND host='localhost'" | grep -q 1; then
+    users+=("$r"); say "   account:  frweb_$r -> radiusone_$r"
+  fi
+done
+if [[ -z $OLD_APP && ${#users[@]} == 0 ]] && ! [[ -d ${OLD[etc]} && ! -L ${OLD[etc]} ]]; then
+  say '   This server already uses the RadiusOne layout. Nothing to do.'
+  [[ $DRY == 1 ]] || bash "$NEW_APP/ops/radiusone-postinstall"
+  exit 0
+fi
+app_now=${OLD_APP:-$NEW_APP}
+[[ -f $app_now/.env ]] || { say "   $app_now/.env is missing: this is not a RadiusOne app folder."; exit 1; }
+owner=$(stat -c %U "$app_now"); group=$(stat -c %G "$app_now")
+shared=$(sed -n 's/^\(RADIUSONE\|FRWEB\)_SHARED_ENV=//p' "$app_now/.env" | tail -n 1 | tr -d '"')
+say "   secrets:  ${shared:-none} -> /etc/radiusone/portal.env"
+for unit in mariadb nginx "$fpm"; do systemctl is-active --quiet "$unit" || { say "   $unit is not running: fix that first."; exit 1; }; done
+if [[ -n $SRC ]]; then
+  [[ -f $SRC/vendor/autoload.php && -f $SRC/public/build/manifest.json ]] || { say "   $SRC is not a built RadiusOne release."; exit 1; }
+fi
+[[ -e $NEW_APP && -n $OLD_APP ]] && { say "   $NEW_APP exists already, and $OLD_APP too: move one of them away first."; exit 1; }
+
+# The files this changes, archived first (and listed with --dry-run).
+files=()
+for f in /etc/cron.d/* /etc/logrotate.d/* /etc/nginx/sites-available/* /etc/sudoers.d/* /etc/php/*/fpm/conf.d/99-frweb.ini \
+         /etc/freeradius/3.0/mods-available/sql /etc/freeradius/3.0/mods-enabled/sql /usr/local/sbin/frweb-*; do
+  [[ -e $f ]] && { [[ $f == /usr/local/sbin/frweb-* || $f == */99-frweb.ini ]] || mentions_old "$f"; } && files+=("$f")
+done
+[[ -n $shared && -f $shared ]] && files+=("$shared")
+files+=("$app_now/.env")
+step 'Files that change'
+printf '   %s\n' "${files[@]}"
+for f in /etc/nginx/sites-enabled/*; do [[ -L $f ]] && mentions_old "$(readlink -f "$f")" && say "   $f (link)"; done
+
+if [[ $DRY == 1 ]]; then
+  step 'Steps'
+  say '   1. database backup; archive of the files above; maintenance mode; cron stopped'
+  say '   2. database accounts renamed; FreeRADIUS updated (restarted only if its active SQL login changes)'
+  say '   3. folders moved (old names left as links); portal.env written; the app moved or the release installed'
+  say '   4. .env, cron, logrotate, nginx, PHP ini and helpers rewritten with the RadiusOne names; nginx checked and reloaded'
+  say '   5. database migrations and permissions; ops/radiusone-postinstall; caches cleared; cron started; maintenance off; checks'
+  say ''
+  say 'Dry run: nothing was changed.'
+  exit 0
+fi
+
+# ------------------------------------------------------------------------------------------------------------
+install -d -m 0700 "$WORK"
+: > "$UNDO.lines"
+artisan_root() {
+  local cache; cache=$(mktemp -d /run/radiusone-move.XXXXXX)
+  (cd "$1" && shift && env LOG_CHANNEL=stderr APP_CONFIG_CACHE="$cache/c.php" APP_SERVICES_CACHE="$cache/s.php" APP_PACKAGES_CACHE="$cache/p.php" \
+    APP_ROUTES_CACHE="$cache/r.php" APP_EVENTS_CACHE="$cache/e.php" php artisan "$@"); local rc=$?
+  rm -rf "$cache"; return $rc
+}
+as_web() { local dir=$1; shift; (cd "$dir" && sudo -u www-data env LOG_CHANNEL=stderr php artisan "$@"); }
+
+restore() {
+  trap - ERR
+  step "Something failed: putting the server back"
+  if [[ -s $UNDO.lines ]]; then tac "$UNDO.lines" > "$UNDO"; bash "$UNDO" || true; fi
+  tar -xzpf "$WORK/files.tar.gz" -C / 2>/dev/null || true
+  systemctl daemon-reload || true
+  nginx -t >/dev/null 2>&1 && systemctl reload nginx || true
+  systemctl reload "$fpm" || true
+  systemctl start cron || true
+  as_web "$app_now" up >/dev/null 2>&1 || true
+  say "The server runs as before the move (RadiusOne in $app_now). The database backup and the archive are in $WORK."
+  exit 1
+}
+trap restore ERR
+
+step '1. Backups'
+backup_env=''
+for f in "${OLD[etc]}/backup.env" "${NEW[etc]}/backup.env"; do [[ -f $f ]] && backup_env=$f; done
+if [[ -n $backup_env ]]; then
+  RADIUSONE_OPERATOR_ENV_FILE=$backup_env artisan_root "$app_now" radiusone:backup --no-upload
+else
+  say '   No backup identity: skipping the database backup.'
+fi
+tar -czpf "$WORK/files.tar.gz" -P -C / "${files[@]}" /etc/nginx/sites-enabled 2>/dev/null
+say "   Archive of the changed files: $WORK/files.tar.gz"
+as_web "$app_now" down --retry=20
+undo "systemctl start cron"
+systemctl stop cron
+
+step '2. Database accounts'
+for r in "${users[@]}"; do
+  if mariadb -N -e "SELECT 1 FROM mysql.user WHERE user='radiusone_$r' AND host='localhost'" | grep -q 1; then
+    say "   radiusone_$r exists already: frweb_$r is kept as it is."
+    continue
+  fi
+  mariadb -e "RENAME USER 'frweb_$r'@'localhost' TO 'radiusone_$r'@'localhost'"
+  undo "mariadb -e \"RENAME USER 'radiusone_$r'@'localhost' TO 'frweb_$r'@'localhost'\""
+  say "   frweb_$r -> radiusone_$r"
+done
+radius_restart=0
+active_sql=$(readlink -f /etc/freeradius/3.0/mods-enabled/sql 2>/dev/null || true)
+for f in /etc/freeradius/3.0/mods-available/sql /etc/freeradius/3.0/mods-enabled/sql; do
+  [[ -f $f && ! -L $f ]] && grep -qE '^\s*login\s*=\s*"frweb_radius"' "$f" || continue
+  sed -i -E 's/^(\s*login\s*=\s*)"frweb_radius"/\1"radiusone_radius"/' "$f"
+  say "   FreeRADIUS: $f now logs in as radiusone_radius"
+  [[ $(readlink -f "$f") == "$active_sql" ]] && radius_restart=1
+done
+for f in /etc/freeradius/3.0/mods-config/sql/main/mysql/queries.conf /etc/freeradius/3.0/sites-available/default; do
+  [[ -f $f.frweb-orig && ! -e $f.radiusone-orig ]] && mv "$f.frweb-orig" "$f.radiusone-orig" && undo "mv '$f.radiusone-orig' '$f.frweb-orig'"
+done
+if [[ $radius_restart == 1 ]]; then
+  freeradius -C >/dev/null 2>&1 || { freeradius -C 2>&1 | tail -n 5; false; }
+  systemctl restart freeradius
+  undo "systemctl restart freeradius"
+  say '   FreeRADIUS restarted with the renamed account.'
+fi
+
+step '3. Folders, secrets and the app'
+for d in "${dirs[@]}"; do
+  o=${OLD[$d]} n=${NEW[$d]}
+  [[ -d $o && ! -L $o ]] || continue
+  if [[ -e $n ]]; then
+    # Already there (made by a newer install): move the old contents in.
+    cp -a "$o/." "$n/"; mv "$o" "$WORK/old-$(basename "$o")-$d"
+    undo "rm -f '$o'; mv '$WORK/old-$(basename "$o")-$d' '$o'"
+  else
+    mv "$o" "$n"
+    undo "rm -f '$o'; mv '$n' '$o'"
+  fi
+  ln -sfn "$n" "$o"
+  say "   $o -> $n"
+done
+[[ -f /var/log/freeradius-web-backup.log && ! -L /var/log/freeradius-web-backup.log ]] && mv /var/log/freeradius-web-backup.log /var/log/radiusone/backup.log \
+  && ln -sfn radiusone/backup.log /var/log/freeradius-web-backup.log
+chmod 0711 /etc/radiusone
+for f in /etc/radiusone/*.env; do [[ -f $f ]] && translate "$f"; done
+if [[ -n $shared && -f $shared && $shared != /etc/radiusone/portal.env ]]; then
+  tmp=$(mktemp); cp "$shared" "$tmp"; translate "$tmp"
+  install -o root -g www-data -m 0640 "$tmp" /etc/radiusone/portal.env; rm -f "$tmp"
+  say "   /etc/radiusone/portal.env written from $shared (which is kept)"
+fi
+if [[ -n $OLD_APP ]]; then
+  if [[ -n $SRC ]]; then
+    rsync -a --exclude '/.env' --exclude '/storage' --exclude '/bootstrap/cache' --exclude '/.git' --exclude '/node_modules' "$SRC/" "$NEW_APP/"
+    cp -a "$OLD_APP/.env" "$NEW_APP/.env"
+    rsync -a "$OLD_APP/storage/" "$NEW_APP/storage/"
+    mkdir -p "$NEW_APP/bootstrap/cache"
+    [[ -L $OLD_APP/public/storage ]] && cp -a "$OLD_APP/public/storage" "$NEW_APP/public/storage"
+    chown -R "$owner:$group" "$NEW_APP"
+    mv "$OLD_APP" "$WORK/app-before-2.3"
+    undo "rm -f '$OLD_APP'; rm -rf '$NEW_APP'; mv '$WORK/app-before-2.3' '$OLD_APP'"
+    say "   RadiusOne $(cat "$NEW_APP/VERSION") installed in $NEW_APP; the old app is kept in $WORK/app-before-2.3"
+  else
+    mv "$OLD_APP" "$NEW_APP"
+    undo "rm -f '$OLD_APP'; mv '$NEW_APP' '$OLD_APP'"
+    say "   $OLD_APP -> $NEW_APP"
+  fi
+  ln -sfn "$NEW_APP" "$OLD_APP"
+  chown -R www-data:www-data "$NEW_APP/storage" "$NEW_APP/bootstrap/cache"
+fi
+
+step '4. Settings and server files'
+env=$NEW_APP/.env
+translate "$env"
+[[ -f /etc/radiusone/portal.env ]] && sed -i 's#^RADIUSONE_SHARED_ENV=.*#RADIUSONE_SHARED_ENV=/etc/radiusone/portal.env#' "$env"
+sed -i -E -e 's/^APP_NAME=("FreeRADIUS Web"|FreeRADIUS Web|"freeradius-web"|freeradius-web)$/APP_NAME=RadiusOne/' \
+          -e 's/^SESSION_COOKIE=frweb_session$/SESSION_COOKIE=radiusone_session/' "$env"
+say "   $env: RADIUSONE_* settings, /opt/radiusone and /etc/radiusone paths, radiusone_portal"
+for f in /etc/cron.d/* /etc/logrotate.d/*; do
+  [[ -f $f ]] && mentions_old "$f" || continue
+  translate "$f"
+  name=$(basename "$f"); target=$(dirname "$f")/${name/freeradius-web/radiusone}
+  if [[ $target != "$f" && ! -e $target ]]; then
+    mv "$f" "$target"; undo "mv '$target' '$f'"; say "   $f -> $target"
+  else
+    say "   $f updated"
+  fi
+done
+for f in /etc/nginx/sites-available/*; do
+  [[ -f $f ]] && mentions_old "$f" || continue
+  translate "$f"
+  name=$(basename "$f")
+  case "$name" in freeradius-web) new=radiusone ;; freeradius-web-laravel) new=radiusone-local ;; *) new=${name/freeradius-web/radiusone} ;; esac
+  if [[ $new != "$name" && ! -e /etc/nginx/sites-available/$new ]]; then
+    mv "$f" "/etc/nginx/sites-available/$new"
+    undo "rm -f '/etc/nginx/sites-enabled/$new'; mv '/etc/nginx/sites-available/$new' '$f'"
+    if [[ -L /etc/nginx/sites-enabled/$name ]]; then rm -f "/etc/nginx/sites-enabled/$name"; ln -sfn "/etc/nginx/sites-available/$new" "/etc/nginx/sites-enabled/$new"; fi
+    say "   nginx: $name -> $new"
+  else
+    say "   nginx: $name updated"
+  fi
+done
+nginx -t >/dev/null 2>&1 || { nginx -t; false; }
+systemctl reload nginx
+for f in /etc/php/*/fpm/conf.d/99-frweb.ini; do
+  [[ -f $f ]] || continue
+  mv "$f" "${f%99-frweb.ini}99-radiusone.ini"; undo "mv '${f%99-frweb.ini}99-radiusone.ini' '$f'"
+done
+rm -f /etc/sudoers.d/freeradius-web-services
+[[ -f /usr/local/sbin/frweb-update && ! -L /usr/local/sbin/frweb-update ]] && rm -f /usr/local/sbin/frweb-update
+say '   cron, logrotate, nginx, PHP ini and sudoers done'
+
+step '5. Set-up and checks'
+if [[ -f /etc/radiusone/migration.env ]]; then
+  RADIUSONE_OPERATOR_ENV_FILE=/etc/radiusone/migration.env artisan_root "$NEW_APP" radiusone:migrate
+fi
+mariadb < "$NEW_APP/ops/install/radiusone-grants.sql"
+bash "$NEW_APP/ops/radiusone-postinstall"
+as_web "$NEW_APP" optimize:clear >/dev/null
+systemctl reload "$fpm"
+as_web "$NEW_APP" radiusone:check-schema
+systemctl start cron
+as_web "$NEW_APP" up
+trap - ERR
+code=$(curl -sk -o /dev/null -w '%{http_code}' --max-time 20 http://127.0.0.1/login || true)
+say "   login page: HTTP $code"
+for unit in freeradius mariadb nginx "$fpm" cron; do systemctl is-active --quiet "$unit" && say "   $unit: running" || say "   $unit: NOT RUNNING"; done
+step "Done: RadiusOne $(cat "$NEW_APP/VERSION") runs in $NEW_APP with the RadiusOne names"
+say "   Backup and archive of the old files: $WORK"
+say "   Operators sign in once more (the session cookie is now radiusone_session)."

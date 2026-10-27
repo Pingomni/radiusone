@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Root helper behind the Restart buttons on Monitoring → RADIUS server. www-data may run it through
-# sudo only with one of the unit names listed in /etc/sudoers.d/freeradius-web-services.
+# sudo only with one of the unit names listed in /etc/sudoers.d/radiusone.
 # The restart starts two seconds later in a transient systemd unit, so the web request that asked for
 # it (served by nginx and PHP-FPM, talking to MariaDB) can still answer first.
-# Installed by ops/apply-service-control.sh as /usr/local/sbin/frweb-service-restart.
+# Installed by ops/radiusone-postinstall as /usr/local/sbin/radiusone-service-restart.
 set -euo pipefail
 PATH=/usr/sbin:/usr/bin:/sbin:/bin
 
@@ -22,5 +22,5 @@ case "$unit" in
             out=$("php-fpm$version" -t 2>&1) || { echo "PHP-FPM configuration check failed:" >&2; tail -n 5 <<<"$out" >&2; exit 3; } ;;
 esac
 
-systemd-run --quiet --collect --on-active=2 --unit="frweb-restart-$unit-$(date +%s)" systemctl restart "$unit.service"
+systemd-run --quiet --collect --on-active=2 --unit="radiusone-restart-$unit-$(date +%s)" systemctl restart "$unit.service"
 echo "Restart of $unit scheduled."

@@ -7,9 +7,12 @@ namespace App\Console\Commands;
 use App\Support\DemoSeeder;
 use Throwable;
 
-final class Seed extends FrwebCommand
+final class Seed extends RadiusOneCommand
 {
-    protected $signature = 'frweb:seed {--demo : Required; inserts demo records and keeps existing ones}';
+    protected $signature = 'radiusone:seed {--demo : Required; inserts demo records and keeps existing ones}';
+
+    /** The name before RadiusOne 2.3, still accepted (cron lines, scripts). */
+    protected $aliases = ['frweb:seed'];
     protected $description = 'Insert-only demo data for a test install';
 
     public function handle(): int

@@ -26,8 +26,8 @@ abstract class TestCase extends BaseTestCase
 
     protected function setUp(): void
     {
-        $dir = getenv('FRWEB_TEST_DIR');
-        if (!is_string($dir) || !preg_match('#^/tmp/frweb-laravel-test\.[A-Za-z0-9]+$#D', $dir)) {
+        $dir = getenv('RADIUSONE_TEST_DIR');
+        if (!is_string($dir) || !preg_match('#^/tmp/radiusone-test\.[A-Za-z0-9]+$#D', $dir)) {
             throw new RuntimeException('Run the suite with tests/run.sh (private database required).');
         }
         parent::setUp();
@@ -41,10 +41,13 @@ abstract class TestCase extends BaseTestCase
         BackupNow::$command = [$dir . '/no-backup-helper'];
         BackupNow::$isActive = ['false'];
         // Nor the update helper: a test must not update this server.
-        SoftwareUpdate::$command = [$dir . '/no-update-helper'];
-        SoftwareUpdate::$isActive = ['false'];
-        SoftwareUpdate::$statusFile = $dir . '/update-status.json';
-        SoftwareUpdate::$logFile = $dir . '/update.log';
+        SoftwareUpdate::$requestDir = $dir . '/update';
+        SoftwareUpdate::$statusDir = $dir . '/update-status';
+        SoftwareUpdate::$legacyStatusFile = $dir . '/update-status.json';
+        SoftwareUpdate::$legacyLogFile = $dir . '/update.log';
+        // This checkout counts as moved to the RadiusOne layout unless a test says otherwise.
+        SoftwareUpdate::$home = (string) realpath(base_path());
+        SoftwareUpdate::$legacyEtc = $dir . '/no-freeradius-web';
         // RadiusOne Pro for every test (EditionsTest removes it): a key signed with a test-only key pair.
         License::save(self::licenceKey(['all'], date('Y-m-d', strtotime('+1 year')), clients: 0));
     }
@@ -84,9 +87,9 @@ abstract class TestCase extends BaseTestCase
         if ((int) $pdo->query('SELECT @@skip_networking')->fetchColumn() !== 1) {
             throw new RuntimeException('Refusing to build the schema on a networked database server.');
         }
-        $pdo->exec('DROP DATABASE IF EXISTS frweb_test');
-        $pdo->exec('CREATE DATABASE frweb_test');
-        $pdo->exec('USE frweb_test');
+        $pdo->exec('DROP DATABASE IF EXISTS radiusone_test');
+        $pdo->exec('CREATE DATABASE radiusone_test');
+        $pdo->exec('USE radiusone_test');
         // Synthetic, minimal FreeRADIUS tables (no daemon or NAS involved).
         foreach (['radcheck', 'radreply', 'radgroupcheck', 'radgroupreply'] as $table) {
             $owner = str_contains($table, 'group') ? 'groupname' : 'username';

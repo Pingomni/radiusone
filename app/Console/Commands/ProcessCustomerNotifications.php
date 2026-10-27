@@ -8,9 +8,12 @@ use App\Support\CustomerNotifications;
 use App\Support\JobRunner;
 use Throwable;
 
-final class ProcessCustomerNotifications extends FrwebCommand
+final class ProcessCustomerNotifications extends RadiusOneCommand
 {
-    protected $signature = 'frweb:process-customer-notifications';
+    protected $signature = 'radiusone:process-customer-notifications';
+
+    /** The name before RadiusOne 2.3, still accepted (cron lines, scripts). */
+    protected $aliases = ['frweb:process-customer-notifications'];
     protected $description = 'Deliver queued customer notifications (SMS/email)';
 
     public function handle(): int

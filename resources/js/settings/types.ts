@@ -7,9 +7,11 @@ export type SoftwareUpdate = {
     current: string;
     ready: boolean;
     running: boolean;
-    check: { at: string; current: string; latest: string; newer: boolean; tag: string; notes: string; problem: string } | null;
+    check: { at: string; current: string; latest: string; newer: boolean; tag: string; notes: string; url: string; published: string; problem: string } | null;
     status: UpdateStatus | null;
     log: string[];
+    /** The server still uses the layout from before 2.3: offer "Finish moving to RadiusOne". */
+    move: boolean;
 };
 
 export type Operator = { id: number; name: string; email: string; username: string; role: string; enabled: boolean; twoFactor: TagData; lastLogin: string; self: boolean };

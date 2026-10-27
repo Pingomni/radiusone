@@ -32,7 +32,7 @@ function BackupStatus({ b }: { b: Backups }) {
                     disabled={b.running || !b.manualReady}
                     confirm={{ title: 'Back up now?', message: 'Backs up the database and customer documents now, encrypts them and uploads them to each enabled destination, like the nightly backup. It takes about a minute.', confirmLabel: 'Back up now' }}
                 />
-                {!b.manualReady && <span className="hint">To start backups from here, run <code>sudo bash ops/apply-service-control.sh</code> on the server once.</span>}
+                {!b.manualReady && <span className="hint">To start backups from here, run <code>sudo bash ops/radiusone-postinstall</code> on the server once.</span>}
             </div>
             {run ? (
                 <>
@@ -67,7 +67,7 @@ function BackupPassphrase({ set }: { set: boolean }) {
             <form className="form-grid" onSubmit={(e) => { e.preventDefault(); form.post('/settings/backups/passphrase', { preserveScroll: true, onFinish: () => form.reset() }); }}>
                 <p className="span2 hint">
                     Write the passphrase down and keep it somewhere safe outside this server. If this server is lost, you need it to restore a remote backup
-                    (artisan frweb:backup-decrypt). Changing it only affects new backups; older copies still need the old passphrase.
+                    (artisan radiusone:backup-decrypt). Changing it only affects new backups; older copies still need the old passphrase.
                 </p>
                 <Field label={set ? 'New passphrase' : 'Passphrase'} type="password" autoComplete="new-password" minLength={12} required error={form.errors.passphrase} hint="At least 12 characters; a few random words work well." value={form.data.passphrase} onChange={(e) => form.setData('passphrase', e.target.value)} />
                 <Field label="Repeat passphrase" type="password" autoComplete="new-password" required value={form.data.passphrase_confirmation} onChange={(e) => form.setData('passphrase_confirmation', e.target.value)} />
@@ -88,7 +88,7 @@ function DestinationForm({ d, b, onDone }: { d: BackupDestination | null; b: Bac
         id: d?.id ?? '', type: d?.type ?? 's3', provider: d?.provider ?? 'b2',
         url: d?.type === 's3' && d.endpoint ? `https://${d.endpoint}/${d.bucket}` : '', access_key: d?.access_key ?? '', secret_key: '',
         server: d?.type === 'sftp' ? `${d.user}@${d.host}${d.port && d.port !== '22' ? `:${d.port}` : ''}` : '',
-        name: d?.name ?? '', prefix: d?.prefix ?? 'freeradius-web', path: d?.path ?? 'backups/freeradius-web', keep: String(d?.keep ?? 7), enabled: d?.enabled ?? true, rescan_host_key: false,
+        name: d?.name ?? '', prefix: d?.prefix ?? 'radiusone', path: d?.path ?? 'backups/radiusone', keep: String(d?.keep ?? 7), enabled: d?.enabled ?? true, rescan_host_key: false,
     });
     const type = form.data.type;
     const help = S3_HELP[form.data.provider] ?? S3_HELP.b2;

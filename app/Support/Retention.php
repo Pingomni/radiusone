@@ -9,7 +9,7 @@ use RuntimeException;
 /**
  * How long RADIUS session (radacct) and login (radpostauth) records are kept, chosen under
  * Settings → Data retention. "Keep forever" (0) is the default: nothing is deleted until an operator
- * picks a period. frweb:prune-radius applies the periods nightly in small batches.
+ * picks a period. radiusone:prune-radius applies the periods nightly in small batches.
  */
 final class Retention
 {

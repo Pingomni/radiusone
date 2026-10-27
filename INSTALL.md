@@ -20,7 +20,7 @@ database and FreeRADIUS, connected and secured. Nothing needs to be installed be
 | --- | --- |
 | Operating system | **Ubuntu 24.04 LTS** (server or minimal). The script stops on any other version. |
 | Access | `root`, or a user who can run `sudo` |
-| Internet | Needed during the install (Ubuntu packages, Node.js, PHP and JavaScript libraries) |
+| Internet | Needed during the install (Ubuntu packages; from the source also Node.js and the PHP and JavaScript libraries) |
 | Server | A fresh server is best. 2 CPU cores, 4 GB RAM and 20 GB disk are enough to start; give the database more memory for thousands of clients. |
 | Domain (optional) | A DNS name pointing at the server, if you want a trusted Let's Encrypt certificate |
 
@@ -29,6 +29,19 @@ that it did not create, so it cannot overwrite an existing system by accident (s
 
 ## Install
 
+From a release (`radiusone-X.Y.Z.tar.gz` on the GitHub releases page: the libraries and web pages are
+included, so the server needs no Node.js or Composer):
+
+```bash
+sudo mkdir /opt/radiusone
+curl -fsSL https://github.com/n-geraldo/radiusone/releases/download/vX.Y.Z/radiusone-X.Y.Z.tar.gz \
+  | sudo tar -xz -C /opt/radiusone --strip-components=1
+cd /opt/radiusone
+sudo bash install.sh
+```
+
+Or from the source, which the installer builds:
+
 ```bash
 sudo apt-get install -y git          # if git is not there yet
 git clone <repository URL> /opt/radiusone
@@ -36,7 +49,7 @@ cd /opt/radiusone
 sudo bash install.sh
 ```
 
-The project can live in any folder; `/opt/radiusone` is only a suggestion. The install takes a few
+Use `/opt/radiusone`: the updater (`radiusone-update`) installs new releases there. The install takes a few
 minutes. Each stage is printed as it runs (`==> Installing packages ...`). If a stage fails, the script
 stops there and says which one.
 
@@ -104,12 +117,12 @@ sudo bash install.sh --domain radius.example.com --admin-user jane --admin-email
 
    | Database user | Used by | Can do |
    | --- | --- | --- |
-   | `frweb_portal` | the web portal and its scheduled jobs | read and write the tables it manages, nothing else |
-   | `frweb_radius` | FreeRADIUS | read users, groups and the NAS list; write accounting and login records |
-   | `frweb_migration` | database upgrades (`frweb:migrate`) | change the schema |
-   | `frweb_backup` | the nightly backup | read only |
+   | `radiusone_portal` | the web portal and its scheduled jobs | read and write the tables it manages, nothing else |
+   | `radiusone_radius` | FreeRADIUS | read users, groups and the NAS list; write accounting and login records |
+   | `radiusone_migration` | database upgrades (`radiusone:migrate`) | change the schema |
+   | `radiusone_backup` | the nightly backup | read only |
 
-   They are saved in `/etc/freeradius-web/` and readable only by root (the portal's file also by the web
+   They are saved in `/etc/radiusone/` and readable only by root (the portal's file also by the web
    server). None of them is shown, because you never need to type them.
 4. **Creates the database.** A `radius` database (UTF-8), the four users, FreeRADIUS's standard tables, then
    the application's tables through its own migrations. The exact permissions are in
@@ -123,7 +136,7 @@ sudo bash install.sh --domain radius.example.com --admin-user jane --admin-email
    - Passwords are never written to the login log.
    - Simultaneous-Use (the per-customer session limit) is enforced.
 
-   The original files are kept next to the changed ones as `*.frweb-orig`. The configuration is checked
+   The original files are kept next to the changed ones as `*.radiusone-orig`. The configuration is checked
    (`freeradius -C`) before FreeRADIUS is restarted.
 7. **Configures HTTPS and the web server.** HTTP redirects to HTTPS. A self-signed certificate is created
    (valid 10 years), or a Let's Encrypt one with `--email`, which renews by itself. Uploads are allowed up to
@@ -171,18 +184,18 @@ but has not been tested on a real router yet. DHCP (MAC) login is not finished y
 
 | What | Where |
 | --- | --- |
-| Project (code, `.env`) | the folder you cloned, e.g. `/opt/radiusone` |
-| Keys and database passwords | `/etc/freeradius-web/portal.env`, `radius.env`, `migration.env`, `backup.env` |
-| Customer documents, logos | `/var/lib/freeradius-web/` |
-| Backups | `/var/backups/freeradius-web/` (status in `status.json`; remote copies under *Settings → Backups*) |
-| Job logs | `/var/log/freeradius-web/` (scheduler, billing, SNMP, alerts...) |
-| Backup log | `/var/log/freeradius-web-backup.log` |
+| Project (code, `.env`) | `/opt/radiusone` |
+| Keys and database passwords | `/etc/radiusone/portal.env`, `radius.env`, `migration.env`, `backup.env` |
+| Customer documents, logos | `/var/lib/radiusone/` |
+| Backups | `/var/backups/radiusone/` (status in `status.json`; remote copies under *Settings → Backups*) |
+| Job logs | `/var/log/radiusone/` (scheduler, billing, SNMP, alerts, `backup.log`...) |
+| Updates | `/usr/local/sbin/radiusone-update`; progress and log in `/var/lib/radiusone/update-status/` |
 | App log | `storage/logs/` in the project folder |
 | Scheduled jobs | `/etc/cron.d/radiusone` |
 | Web server | `/etc/nginx/sites-available/radiusone` |
 | Certificate | `/etc/ssl/radiusone/` (self-signed) or `/etc/letsencrypt/live/<domain>/` |
 | FreeRADIUS | `/etc/freeradius/3.0/mods-available/sql`, `mods-config/sql/main/mysql/queries.conf`, `sites-available/default` |
-| Portal helpers | `/usr/local/sbin/frweb-*`, `/etc/sudoers.d/freeradius-web-services` |
+| Portal helpers | `/usr/local/sbin/radiusone-*`, `/etc/sudoers.d/radiusone`, `radiusone-update.path` |
 
 ## Ports
 
@@ -208,38 +221,52 @@ sudo bash install.sh --domain radius.example.com --email it@example.com
 
 ### Updating from the portal
 
-*Settings → Overview → Software update* shows the installed version. **Check for updates** looks for a
-newer release on GitHub and shows what changed; **Update to x.y.z** installs it:
+*Settings → Overview → Software update* shows the installed version. **Check for updates** reads the latest
+release on GitHub and shows what changed; **Install RadiusOne x.y.z** installs it. The portal only leaves a
+request; `radiusone-update` installs it as root (started by `radiusone-update.path`, as DNSOne does):
 
-1. The database is backed up.
-2. The portal pauses (maintenance mode) for a few minutes. RADIUS keeps authenticating customers.
-3. The new release is downloaded, its libraries installed and the web pages rebuilt.
-4. Database migrations and permissions are applied, and the portal comes back.
+1. The release (`radiusone-x.y.z.tar.gz`) is downloaded and its checksum checked.
+2. The database is backed up and the app folder archived.
+3. The portal pauses (maintenance mode) for a few minutes. RADIUS keeps authenticating customers.
+4. The new files are copied in (`.env`, `storage` and uploads stay), database migrations and permissions are
+   applied, the helpers are refreshed and the portal comes back.
 
 The page shows the progress and reloads when it is done. If a step fails, the previous version comes back
-and the page says where it stopped; the full log is in `/var/log/freeradius-web/update.log`.
+and the page says where it stopped; the full log is in `/var/lib/radiusone/update-status/update.log`.
 
-Only **releases** are installed: version tags such as `v2.1.0` (see [CHANGELOG.md](CHANGELOG.md)). Commits on
-`main` without a new tag are not. A server whose files were changed by hand is not updated automatically.
-
-**Private repository:** the server needs read access to it. Add a read-only *deploy key* for the root user:
-
-```bash
-sudo ssh-keygen -t ed25519 -N '' -f /root/.ssh/id_ed25519 -C radiusone-updates
-sudo cat /root/.ssh/id_ed25519.pub   # GitHub → repository → Settings → Deploy keys → Add (read-only)
-cd /opt/radiusone && sudo git remote set-url origin git@github.com:<owner>/radiusone.git
-```
+Only **releases** are installed: version tags such as `v2.3.0` with their download (see
+[CHANGELOG.md](CHANGELOG.md)). The server needs no git, Node.js or Composer, and no access to the repository
+beyond the public releases.
 
 ### Updating by hand
 
 ```bash
-cd /opt/radiusone
-sudo FRWEB_OPERATOR_ENV_FILE=/etc/freeradius-web/backup.env LOG_CHANNEL=stderr /usr/local/sbin/frweb-root-artisan frweb:backup --no-upload
-sudo git pull
-sudo bash install.sh
+sudo radiusone-update --check     # what is installed and what is available
+sudo radiusone-update             # install the latest release
+sudo radiusone-update v2.3.0      # install that release
 ```
 
-The installer applies new database migrations and rebuilds the web pages.
+### Servers installed before 2.3
+
+Before 2.3 RadiusOne used the names of the project it grew from: the app in `/opt/freeradius-web-laravel`,
+the folders `/etc/freeradius-web`, `/var/lib/freeradius-web`..., the database accounts `frweb_*` and the
+`frweb-*` helpers. 2.3 moves such a server to the RadiusOne names in two steps:
+
+1. **Install 2.3** with the update button as usual. It still installs in the old folder.
+2. **Finish moving to RadiusOne** appears under *Software update*: it moves the app to `/opt/radiusone` and
+   the folders to their `radiusone` names, renames the database accounts (`RENAME USER` keeps their passwords
+   and rights), and rewrites `.env`, cron, logrotate, nginx, sudoers and FreeRADIUS's SQL login. The old paths
+   stay as links, so scripts that name them keep working. Operators sign in once more afterwards.
+
+Or both steps in one go, on the server:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/n-geraldo/radiusone/v2.3.0/ops/radiusone-update | sudo bash -s v2.3.0
+```
+
+To see first what the move changes, without changing anything (from the 2.3 app folder):
+`sudo bash ops/radiusone-upgrade-2.3 --dry-run`. It backs up the database and archives every file it changes
+in `/var/backups/radiusone-move-<date>/`; if a step fails it puts everything back.
 
 ## Troubleshooting
 
@@ -251,5 +278,5 @@ The installer applies new database migrations and rebuilds the web pages.
 | The login page does not open | `systemctl status nginx php8.3-fpm`, then `tail /var/log/nginx/error.log` and `storage/logs/` |
 | Routers are rejected | `systemctl status freeradius`; is the NAS saved in the portal and FreeRADIUS restarted since? Check the shared secret, and watch live with `sudo systemctl stop freeradius && sudo freeradius -X` (start the service again afterwards). |
 | Lost the administrator password | Another superadmin can reset it under *Settings → Users*. |
-| *Check for updates* says it cannot reach the update server | The server needs read access to the repository: see *Private repository* above. Test with `cd /opt/radiusone && sudo git fetch`. |
-| Scheduled jobs do not run | `cat /etc/cron.d/radiusone` and `tail /var/log/freeradius-web/scheduler.log`; *Monitoring* shows when each job last ran. |
+| *Check for updates* says GitHub could not be reached | The server needs HTTPS access to `api.github.com` and `github.com`. Test with `sudo radiusone-update --check`. |
+| Scheduled jobs do not run | `cat /etc/cron.d/radiusone` and `tail /var/log/radiusone/scheduler.log`; *Monitoring* shows when each job last ran. |

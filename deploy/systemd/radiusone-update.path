@@ -1,0 +1,10 @@
+[Unit]
+Description=RadiusOne: watch for an update asked for in the portal (Settings → Overview)
+
+[Path]
+# The portal (www-data) creates this file; radiusone-update removes it as it starts.
+PathExists=/var/lib/radiusone/update/request
+Unit=radiusone-update.service
+
+[Install]
+WantedBy=multi-user.target

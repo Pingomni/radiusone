@@ -10,9 +10,12 @@ use RuntimeException;
 use Throwable;
 
 /** Fresh-install bootstrap only. Credentials arrive over stdin, never argv or a default demo secret. */
-final class BootstrapOperator extends FrwebCommand
+final class BootstrapOperator extends RadiusOneCommand
 {
-    protected $signature = 'frweb:bootstrap-operator {--create-first-superadmin : Read JSON {username,name,email,password} from stdin}';
+    protected $signature = 'radiusone:bootstrap-operator {--create-first-superadmin : Read JSON {username,name,email,password} from stdin}';
+
+    /** The name before RadiusOne 2.3, still accepted (cron lines, scripts). */
+    protected $aliases = ['frweb:bootstrap-operator'];
     protected $description = 'Create the first superadmin on an empty install';
 
     public function handle(): int

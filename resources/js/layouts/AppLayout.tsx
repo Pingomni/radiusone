@@ -86,7 +86,8 @@ function ThemeToggle() {
                 const next = dark ? 'light' : 'dark';
                 document.documentElement.dataset.theme = next;
                 // A cookie so the server renders the chosen theme on first paint.
-                document.cookie = `frweb_theme=${next}; path=/; max-age=31536000; SameSite=Lax`;
+                document.cookie = `radiusone_theme=${next}; path=/; max-age=31536000; SameSite=Lax`;
+                document.cookie = 'frweb_theme=; path=/; max-age=0; SameSite=Lax';
                 setDark(!dark);
             }}
         >

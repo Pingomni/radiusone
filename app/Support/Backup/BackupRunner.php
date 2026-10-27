@@ -8,11 +8,12 @@ use App\Support\App;
 use App\Support\BoundedProcess;
 use App\Support\DatabaseBackup;
 use App\Support\License;
+use App\Support\Paths;
 use RuntimeException;
 use Throwable;
 
 /**
- * The nightly backup (artisan frweb:backup, root cron with the read-only backup identity): database
+ * The nightly backup (artisan radiusone:backup, root cron with the read-only backup identity): database
  * dump and customer documents archive, both encrypted with the backup passphrase and uploaded to every
  * enabled destination; older copies are then removed remotely (per destination, only after its upload
  * succeeded) and locally. The result goes to status.json in the backup folder, which Settings → Backups
@@ -40,10 +41,10 @@ final class BackupRunner
                 if ($passphrase === '') {
                     throw new RuntimeException('Set a backup passphrase under Settings → Backups; nothing is uploaded unencrypted.');
                 }
-                $stamp = preg_replace('/^freeradius-web-|\.sql\.gz$/', '', basename($dbFile));
+                $stamp = preg_replace('/^(radiusone|freeradius-web)-|\.sql\.gz$/', '', basename($dbFile));
                 $staged = [
-                    'frweb-db-' . $stamp . '.sql.gz' . BackupCrypto::EXTENSION => $dbFile,
-                    'frweb-docs-' . $stamp . '.tar.gz' . BackupCrypto::EXTENSION => $docsFile,
+                    'radiusone-db-' . $stamp . '.sql.gz' . BackupCrypto::EXTENSION => $dbFile,
+                    'radiusone-docs-' . $stamp . '.tar.gz' . BackupCrypto::EXTENSION => $docsFile,
                 ];
                 foreach ($staged as $name => $source) {
                     BackupCrypto::encrypt($source, $dir . '/.' . $name, $passphrase);
@@ -91,10 +92,18 @@ final class BackupRunner
     {
         $removed = 0;
         $files = $target->list();
-        foreach (['frweb-db-', 'frweb-docs-'] as $kind) {
-            $names = array_values(array_filter(array_keys($files), static fn ($n) => str_starts_with($n, $kind) && str_ends_with($n, BackupCrypto::EXTENSION)));
-            rsort($names);
-            foreach (array_slice($names, max(1, $keep)) as $name) {
+        // Each kind under its 2.3 name and the one before, newest first by the date in the name.
+        foreach ([['radiusone-db-', 'frweb-db-'], ['radiusone-docs-', 'frweb-docs-']] as $kind) {
+            $stamped = [];
+            foreach (array_keys($files) as $n) {
+                foreach ($kind as $prefix) {
+                    if (str_starts_with($n, $prefix) && str_ends_with($n, BackupCrypto::EXTENSION)) {
+                        $stamped[$n] = substr($n, strlen($prefix));
+                    }
+                }
+            }
+            arsort($stamped);
+            foreach (array_slice(array_keys($stamped), max(1, $keep)) as $name) {
                 $target->delete($files[$name]);
                 $removed++;
             }
@@ -106,8 +115,8 @@ final class BackupRunner
     private static function pruneLocal(string $dir, int $days): int
     {
         $removed = 0;
-        foreach (['freeradius-web-*.sql.gz', 'documents-*.tar.gz'] as $pattern) {
-            $files = glob($dir . '/' . $pattern) ?: [];
+        foreach ([['radiusone-*.sql.gz', 'freeradius-web-*.sql.gz'], ['documents-*.tar.gz']] as $patterns) {
+            $files = array_merge(...array_map(static fn ($p) => glob($dir . '/' . $p) ?: [], $patterns));
             usort($files, static fn ($a, $b) => filemtime($b) <=> filemtime($a));
             foreach (array_slice($files, 3) as $file) {
                 if (filemtime($file) < time() - $days * 86400 && unlink($file)) {
@@ -120,7 +129,7 @@ final class BackupRunner
 
     private static function documents(string $dir): string
     {
-        $source = rtrim((string) App::env('DOCUMENT_STORAGE', '/var/lib/freeradius-web/documents'), '/');
+        $source = rtrim((string) App::env('DOCUMENT_STORAGE', Paths::data('documents')), '/');
         $file = $dir . '/documents-' . date('Ymd-His') . '.tar.gz';
         $args = is_dir($source) ? ['-C', dirname($source), basename($source)] : ['--files-from', '/dev/null'];
         $result = BoundedProcess::run(['tar', '-czf', $file, ...$args], '', 600);

@@ -123,7 +123,7 @@ final class SettingsTest extends TestCase
     public function test_branding_upload_url_and_reset(): void
     {
         $this->actingAsOperator();
-        $dir = getenv('FRWEB_TEST_DIR') . '/branding';
+        $dir = getenv('RADIUSONE_TEST_DIR') . '/branding';
         putenv('BRANDING_STORAGE=' . $dir);
         $_ENV['BRANDING_STORAGE'] = $_SERVER['BRANDING_STORAGE'] = $dir;
 

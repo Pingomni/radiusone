@@ -131,7 +131,7 @@ final class UsageCapsTest extends TestCase
     public function test_usage_job_runs_from_the_scheduler_command(): void
     {
         $this->insertRow('radacct', ['username' => 'bob', 'acctstarttime' => date('Y-m-d H:i:s'), 'acctupdatetime' => date('Y-m-d H:i:s'), 'acctoutputoctets' => 5, 'acctinputoctets' => 1]);
-        $this->artisan('frweb:collect-usage')->assertSuccessful();
+        $this->artisan('radiusone:collect-usage')->assertSuccessful();
         $this->assertSame('succeeded', Db::value('SELECT state FROM job_runs WHERE job_name="usage" ORDER BY id DESC LIMIT 1'));
         $this->assertSame([5, 1], $this->day('bob', date('Y-m-d')));
     }

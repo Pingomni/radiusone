@@ -7,10 +7,13 @@ namespace App\Console\Commands;
 use App\Support\Backup\BackupCrypto;
 use Throwable;
 
-/** Turns a downloaded *.enc backup back into the .sql.gz / .tar.gz it came from (then: frweb:restore). */
-final class BackupDecrypt extends FrwebCommand
+/** Turns a downloaded *.enc backup back into the .sql.gz / .tar.gz it came from (then: radiusone:restore). */
+final class BackupDecrypt extends RadiusOneCommand
 {
-    protected $signature = 'frweb:backup-decrypt {file : The downloaded .enc file} {--out= : Where to write (default: the same name without .enc)}';
+    protected $signature = 'radiusone:backup-decrypt {file : The downloaded .enc file} {--out= : Where to write (default: the same name without .enc)}';
+
+    /** The name before RadiusOne 2.3, still accepted (cron lines, scripts). */
+    protected $aliases = ['frweb:backup-decrypt'];
     protected $description = 'Decrypt a backup downloaded from a remote destination (asks for the backup passphrase)';
 
     public function handle(): int

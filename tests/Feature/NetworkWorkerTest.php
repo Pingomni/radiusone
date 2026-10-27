@@ -18,7 +18,7 @@ final class NetworkWorkerTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->dir = getenv('FRWEB_TEST_DIR') . '/network-' . bin2hex(random_bytes(4));
+        $this->dir = getenv('RADIUSONE_TEST_DIR') . '/network-' . bin2hex(random_bytes(4));
         mkdir($this->dir, 0700, true);
         $this->env('SECURITY_STORAGE', $this->dir);
         $this->env('RADCLIENT_BIN', $this->dir . '/radclient');

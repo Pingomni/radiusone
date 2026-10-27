@@ -168,9 +168,19 @@ final class S3Target implements BackupTarget
     public function list(): array
     {
         $files = [];
+        foreach (self::PREFIXES as $prefix) {
+            $files += $this->listPrefix($prefix);
+        }
+        return $files;
+    }
+
+    /** @return array<string, string> */
+    private function listPrefix(string $prefix): array
+    {
+        $files = [];
         $token = null;
         do {
-            $query = ['list-type' => '2', 'prefix' => $this->key('frweb-')] + ($token !== null ? ['continuation-token' => $token] : []);
+            $query = ['list-type' => '2', 'prefix' => $this->key($prefix)] + ($token !== null ? ['continuation-token' => $token] : []);
             [$status, $body] = $this->call('GET', '', $query);
             if ($status !== 200) {
                 throw new RuntimeException('Listing failed (HTTP ' . $status . '): ' . $this->explain($body));
