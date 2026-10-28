@@ -47,6 +47,8 @@ sql() { mariadb -N "$@"; }
 
 # Root runs artisan through radiusone-root-artisan: never with the cache files www-data can write in bootstrap/cache.
 artisan() { LOG_CHANNEL=stderr /usr/local/sbin/radiusone-root-artisan "$@"; }
+# Maintenance mode writes storage/framework/down, which www-data owns: root would write through a link planted there.
+as_web() { sudo -u www-data env LOG_CHANNEL=stderr php artisan "$@"; }
 
 echo '== backup'
 RADIUSONE_OPERATOR_ENV_FILE=/etc/radiusone/backup.env artisan radiusone:backup --no-upload
@@ -58,14 +60,14 @@ mariadb-tzinfo-to-sql /usr/share/zoneinfo 2>/dev/null | mariadb mysql
 radius_stopped=0
 resume() {
   [[ $radius_stopped == 1 ]] && systemctl start freeradius
-  artisan up >/dev/null 2>&1 || true
+  as_web up >/dev/null 2>&1 || true
   systemctl start cron
 }
 trap 'resume; echo "$(date "+%F %T %Z") failed: see the lines above. Stored times may be partly converted: restore the backup."' ERR
 
 echo '== pause the portal and scheduled jobs'
 systemctl stop cron
-artisan down --retry=30
+as_web down --retry=30
 sleep 5   # let running requests and jobs finish
 
 echo "== switch to $zone"
