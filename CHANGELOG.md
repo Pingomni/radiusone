@@ -4,6 +4,26 @@ RadiusOne follows [semantic versioning](https://semver.org): **major** for chang
 upgrading, **minor** for new features, **patch** for fixes. The version is in the `VERSION` file and shows in
 the portal's sidebar and under Settings → System information.
 
+## 2.3.1 (2026-10-28)
+
+Security fixes from a full audit. Install it on every server.
+
+- **Root never acts in www-data's folders.** The data, backup and root-log folders are now root's
+  (`/var/lib/radiusone`, `/var/backups/radiusone`, `/var/log/radiusone-root`); www-data keeps only its own
+  subfolders. The nightly backup, *Back up now*, the time zone change, the updater and the 2.3 move no longer
+  write, copy or extract through names the web user could change, and copies of www-data's files are made as
+  www-data.
+- **`php artisan` as root goes through `radiusone-root-artisan`.** The in-app docs show it for every root command,
+  and `artisan` refuses to start as root otherwise (it would load cache files the web user can write).
+- **Restore runs the database client in sandbox mode** and, as root, accepts only a backup file root owns in a folder
+  only root can write.
+- **Backup destinations are checked again when the backup runs**, not only when they are saved.
+- **Sign-in throttling counts per account**, whatever spelling of the user name is typed.
+- **Licence keys must be for RadiusOne** (the product named in the key, or a client limit for older keys).
+- **Suspensions, expiry and data caps reach online customers.** A session whose router reports rarely, or not at
+  all, is shown under *Operations* for a check instead of being taken as offline.
+- **Usernames compare the same everywhere** (migration 030; circuit and DHCP identifiers stay exact).
+
 ## 2.3.0 (2026-10-27)
 
 - **Updates work like DNSOne's.** Every release is published on GitHub as `radiusone-X.Y.Z.tar.gz` with the
