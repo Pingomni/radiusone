@@ -177,7 +177,10 @@ fi
 
 # --- application -------------------------------------------------------------------------------------
 step 'Setting up the application'
-install -d -o www-data -g www-data -m 0750 "$DATA" "$DATA/documents" "$DATA/branding" "$DATA/security" "$BACKUPS"
+# Root's folders (data, backups, root's own logs) are root-owned: root never writes where www-data could plant a link.
+install -d -o root -g root -m 0755 "$DATA"
+install -d -o www-data -g www-data -m 0750 "$DATA/documents" "$DATA/branding" "$DATA/security"
+install -d -o root -g www-data -m 0750 "$BACKUPS" "$LOGS-root"
 install -d -o www-data -g adm -m 0750 "$LOGS"
 if [[ ! -f "$APP/.env" ]]; then
   cat > "$APP/.env" <<EOF
@@ -418,7 +421,7 @@ PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 # (routes/console.php); the nightly backup runs as root with the read-only backup identity, through
 # radiusone-root-artisan (installed below), so root never loads the cache files www-data writes in bootstrap/cache.
 * * * * * www-data cd $APP && /usr/bin/php artisan schedule:run >>$LOGS/scheduler.log 2>&1
-15 2 * * * root cd $APP && RADIUSONE_OPERATOR_ENV_FILE=$ETC/backup.env LOG_CHANNEL=stderr /usr/local/sbin/radiusone-root-artisan radiusone:backup >$LOGS/backup.log 2>&1
+15 2 * * * root cd $APP && RADIUSONE_OPERATOR_ENV_FILE=$ETC/backup.env LOG_CHANNEL=stderr /usr/local/sbin/radiusone-root-artisan radiusone:backup >$LOGS-root/backup.log 2>&1
 EOF
 chmod 0644 /etc/cron.d/radiusone
 cat > /etc/logrotate.d/radiusone <<EOF
@@ -431,6 +434,15 @@ $LOGS/*.log {
     notifempty
     create 0640 www-data adm
     su www-data adm
+}
+$LOGS-root/*.log {
+    weekly
+    rotate 8
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 0640 root www-data
 }
 EOF
 systemctl enable --now cron >/dev/null

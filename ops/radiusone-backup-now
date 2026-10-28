@@ -16,5 +16,5 @@ systemctl reset-failed radiusone-backup-now.service 2>/dev/null || true
 # radiusone-root-artisan: root must not load the cache files www-data can write in bootstrap/cache.
 systemd-run --quiet --collect --unit=radiusone-backup-now --working-directory=/opt/radiusone \
   --setenv=RADIUSONE_OPERATOR_ENV_FILE=/etc/radiusone/backup.env --setenv=LOG_CHANNEL=stderr \
-  /bin/sh -c '/usr/local/sbin/radiusone-root-artisan radiusone:backup >/var/log/radiusone/backup.log 2>&1'
+  /bin/sh -c '/usr/local/sbin/radiusone-root-artisan radiusone:backup >/var/log/radiusone-root/backup.log 2>&1'
 echo 'Backup started.'

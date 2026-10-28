@@ -6,7 +6,7 @@
 #                                             unit, so the web request that asked for it can answer first
 #   radiusone-set-timezone apply <Zone/Name>      the change itself (as root, to change the zone from the shell)
 # Installed by ops/radiusone-postinstall as /usr/local/sbin/radiusone-set-timezone. Progress and the result
-# go to /var/log/radiusone/timezone.log, which the Settings page shows.
+# go to /var/log/radiusone-root/timezone.log, which the Settings page shows.
 #
 # Every DATETIME column in the radius database holds server-local time; each is converted with CONVERT_TZ
 # (old zone → new zone), which follows both zones' summer/winter time history. radpostauth.authdate is a
@@ -16,7 +16,7 @@
 set -Eeuo pipefail
 PATH=/usr/sbin:/usr/bin:/sbin:/bin
 app=/opt/radiusone
-log=/var/log/radiusone/timezone.log
+log=/var/log/radiusone-root/timezone.log
 
 mode=${1:-}
 zone=${2:-}

@@ -28,6 +28,12 @@ final class Paths
         return self::join(self::first('/var/log/radiusone', '/var/log/freeradius-web'), $file);
     }
 
+    /** Logs root writes (backup, time zone): a root-owned folder, so a planted link cannot redirect them. */
+    public static function rootLogs(string $file = ''): string
+    {
+        return self::join(self::first('/var/log/radiusone-root', '/var/log/freeradius-web-root'), $file);
+    }
+
     public static function backups(): string
     {
         return self::first('/var/backups/radiusone', '/var/backups/freeradius-web');

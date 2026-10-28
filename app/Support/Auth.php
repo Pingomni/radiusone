@@ -52,15 +52,21 @@ final class Auth
 
     public static function attempt(string $username, string $password): bool
     {
-        $key = 'login:' . hash_hmac('sha256', Security::clientIp() . '|' . strtolower(trim($username)), (string) config('app.key'));
         $max = max(1, (int) App::env('LOGIN_MAX_ATTEMPTS', 5));
-        if (RateLimiter::tooManyAttempts($key, $max)) {
+        $decay = max(60, (int) App::env('LOGIN_DECAY_MINUTES', 15) * 60);
+        $user = Db::row('SELECT * FROM portal_users WHERE username = ? AND enabled = 1', [$username]);
+        // The limit counts per client and account: the database matches usernames case-, accent- and width-
+        // insensitively, so every spelling of one account shares the account's counter. Unknown names share one per
+        // client, and every client also has an overall limit.
+        $identity = $user ? 'id:' . (int) $user['id'] : 'unknown';
+        $key = 'login:' . hash_hmac('sha256', Security::clientIp() . '|' . $identity, (string) config('app.key'));
+        $ipKey = 'login-ip:' . hash_hmac('sha256', Security::clientIp(), (string) config('app.key'));
+        if (RateLimiter::tooManyAttempts($key, $max) || RateLimiter::tooManyAttempts($ipKey, $max * 6)) {
             return false;
         }
-
-        $user = Db::row('SELECT * FROM portal_users WHERE username = ? AND enabled = 1', [$username]);
         if (!$user || !password_verify($password, $user['password_hash'])) {
-            RateLimiter::hit($key, max(60, (int) App::env('LOGIN_DECAY_MINUTES', 15) * 60));
+            RateLimiter::hit($key, $decay);
+            RateLimiter::hit($ipKey, $decay);
             return false;
         }
 

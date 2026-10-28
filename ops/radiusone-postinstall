@@ -67,6 +67,21 @@ visudo -cf "$tmp" >/dev/null
 install -o root -g root -m 0440 "$tmp" /etc/sudoers.d/radiusone
 rm -f "$tmp" /etc/sudoers.d/freeradius-web-services
 
+echo "== folder ownership"
+# Root writes in the data and backup folders and in its own log folder: they are root's, so www-data (which owns
+# the folders inside: documents, branding, security, update) cannot plant a link where root writes. Servers
+# installed before 2.4 had them www-data's.
+chown root:root "$data" && chmod 0755 "$data"
+[[ -d $backups ]] && chown root:www-data "$backups" && chmod 0750 "$backups"
+install -d -o root -g www-data -m 0750 "$logs-root"
+for d in "$data/updates" "$data/update-status"; do
+  if [[ -L $d ]] || { [[ -e $d ]] && [[ $(stat -c %u "$d") != 0 ]]; }; then rm -rf -- "$d"; fi
+done
+# Root's logs (nightly backup, time zone) go to the root-owned folder.
+for f in /etc/cron.d/*; do
+  [[ -f $f ]] && grep -qF "$logs/backup.log" "$f" && sed -i "s#$logs/backup.log#$logs-root/backup.log#g" "$f"
+done
+
 echo "== updates from the portal ($data)"
 install -d -o www-data -g www-data -m 0750 "$data/update"
 install -d -o root -g www-data -m 0750 "$data/update-status"

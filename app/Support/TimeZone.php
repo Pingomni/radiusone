@@ -29,7 +29,7 @@ final class TimeZone
 
     private static function logFile(): string
     {
-        return Paths::logs('timezone.log');
+        return is_file(Paths::rootLogs('timezone.log')) ? Paths::rootLogs('timezone.log') : Paths::logs('timezone.log');
     }
 
     public static function current(): string

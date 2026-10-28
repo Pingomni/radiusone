@@ -17,4 +17,5 @@ for name in config services packages routes events; do
   export "APP_${name^^}_CACHE=$cache/$name.php"
 done
 cd "$app"
-php artisan "$@"
+# Root logs to the terminal (or the cron/journal redirect), never to storage/logs, which www-data owns.
+LOG_CHANNEL=stderr php artisan "$@"

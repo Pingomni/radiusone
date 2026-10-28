@@ -29,9 +29,23 @@ final class BackupDestinations
     public static function all(): array
     {
         $saved = json_decode(Settings::value('backup_destinations', '[]'), true);
-        // Retired types and providers (Google Drive, Amazon-only S3, Wasabi, Hetzner, DigitalOcean) are dropped.
-        return is_array($saved) ? array_values(array_filter($saved, static fn ($d) => isset(self::TYPES[$d['type'] ?? ''])
-            && ($d['type'] !== 's3' || (($d['endpoint'] ?? '') !== '' && isset(S3Target::PROVIDERS[$d['provider'] ?? '']))))) : [];
+        // Retired types and providers (Google Drive, Amazon-only S3, Wasabi, Hetzner, DigitalOcean) are dropped, and so is
+        // a record that would not pass the checks it had to pass when saved: root's nightly backup reads this table,
+        // which the web server's database account can also write.
+        return is_array($saved) ? array_values(array_filter($saved, static fn ($d) => is_array($d) && isset(self::TYPES[$d['type'] ?? ''])
+            && ($d['type'] !== 's3' || (($d['endpoint'] ?? '') !== '' && isset(S3Target::PROVIDERS[$d['provider'] ?? ''])))
+            && self::valid($d))) : [];
+    }
+
+    /** @param array<string, mixed> $destination */
+    private static function valid(array $destination): bool
+    {
+        try {
+            $destination['type'] === 'sftp' ? SftpTarget::validate($destination) : S3Target::validate($destination);
+            return true;
+        } catch (\Throwable) {
+            return false;
+        }
     }
 
     public static function find(string $id): ?array

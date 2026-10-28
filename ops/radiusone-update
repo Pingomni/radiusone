@@ -77,8 +77,19 @@ status() {
     chmod 0640 "$STATUS_DIR/status.json.new"
     mv -f "$STATUS_DIR/status.json.new" "$STATUS_DIR/status.json"
 }
+# Root works and reports in $DATA: it must be root's, and so must updates/ and update-status/ (servers before 2.4 made
+# $DATA www-data's, so www-data could have swapped either for its own folder or a link). Anything not root's goes.
+secure_dirs() {
+    [ "$(id -u)" = 0 ] || return 0
+    chown root:root "$DATA" && chmod 0755 "$DATA"
+    for d in "$WORK" "$STATUS_DIR"; do
+        if [ -L "$d" ] || { [ -e "$d" ] && [ "$(stat -c %u "$d")" != 0 ]; }; then rm -rf -- "$d"; fi
+    done
+    install -d -o root -g root -m 0700 "$WORK"
+}
 if [ "$console" = 1 ]; then
     [ "$(id -u)" = 0 ] || fail "--console runs as root, from radiusone-update.service"
+    secure_dirs
     request="$(cat "$REQUEST_DIR/request" 2>/dev/null || true)"
     rm -f "$REQUEST_DIR/request" "$REQUEST_DIR/request.new"
     install -d -o root -g www-data -m 0750 "$STATUS_DIR"
@@ -139,6 +150,7 @@ fi
 [ "$(id -u)" = 0 ] || fail "run as root (sudo radiusone-update)"
 
 step=downloading
+secure_dirs
 log "1. Downloading RadiusOne $version"
 dir="$WORK/$version"
 rm -rf "$dir"

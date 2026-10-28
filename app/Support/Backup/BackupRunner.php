@@ -63,9 +63,13 @@ final class BackupRunner
                 @unlink($dir . '/.' . $name);
             }
         }
-        $old = umask(0022);
-        file_put_contents($dir . '/' . self::STATUS, json_encode($status, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
-        umask($old);
+        // A new file renamed over the old one: never written through whatever sits at status.json.
+        $tmp = tempnam($dir, '.status-');
+        if ($tmp !== false) {
+            file_put_contents($tmp, json_encode($status, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+            chmod($tmp, 0644);
+            rename($tmp, $dir . '/' . self::STATUS);
+        }
         return $status;
     }
 
@@ -131,13 +135,18 @@ final class BackupRunner
     {
         $source = rtrim((string) App::env('DOCUMENT_STORAGE', Paths::data('documents')), '/');
         $file = $dir . '/documents-' . date('Ymd-His') . '.tar.gz';
+        // tar writes into a file this run created (tempnam: new, exclusive), then it takes its name by rename.
+        $tmp = tempnam($dir, '.documents-');
+        if ($tmp === false) {
+            throw new RuntimeException('Documents archive failed: cannot create a file in ' . $dir . '.');
+        }
+        chmod($tmp, 0640);
         $args = is_dir($source) ? ['-C', dirname($source), basename($source)] : ['--files-from', '/dev/null'];
-        $result = BoundedProcess::run(['tar', '-czf', $file, ...$args], '', 600);
-        if ($result['exit'] !== 0) {
-            @unlink($file);
+        $result = BoundedProcess::run(['tar', '-czf', $tmp, ...$args], '', 600);
+        if ($result['exit'] !== 0 || !rename($tmp, $file)) {
+            @unlink($tmp);
             throw new RuntimeException('Documents archive failed: ' . mb_substr(trim($result['error']), 0, 200));
         }
-        chmod($file, 0640);
         return $file;
     }
 

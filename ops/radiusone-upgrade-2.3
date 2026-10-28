@@ -202,8 +202,10 @@ for d in "${dirs[@]}"; do
   o=${OLD[$d]} n=${NEW[$d]}
   [[ -d $o && ! -L $o ]] || continue
   if [[ -e $n ]]; then
-    # Already there (made by a newer install): move the old contents in.
-    cp -a "$o/." "$n/"; mv "$o" "$WORK/old-$(basename "$o")-$d"
+    # Already there (made by a newer install): move the old contents in. A link in the new folder is removed first,
+    # so cp never writes through it (both folders may be www-data's).
+    find "$n" -mindepth 1 -type l -delete
+    cp -a --remove-destination "$o/." "$n/"; mv "$o" "$WORK/old-$(basename "$o")-$d"
     undo "rm -f '$o'; mv '$WORK/old-$(basename "$o")-$d' '$o'"
   else
     mv "$o" "$n"
