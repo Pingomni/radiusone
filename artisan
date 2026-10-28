@@ -6,6 +6,17 @@ use Symfony\Component\Console\Input\ArgvInput;
 
 define('LARAVEL_START', microtime(true));
 
+// Root never loads Laravel's cache files from bootstrap/cache: www-data owns that folder and Laravel runs them
+// as PHP code. Root uses radiusone-root-artisan, which points them to a private folder.
+if (function_exists('posix_geteuid') && posix_geteuid() === 0) {
+    foreach (['CONFIG', 'SERVICES', 'PACKAGES', 'ROUTES', 'EVENTS'] as $name) {
+        if ((string) getenv("APP_{$name}_CACHE") === '') {
+            fwrite(STDERR, "As root, run: radiusone-root-artisan <command> (or sudo -u www-data php artisan <command>).\n");
+            exit(2);
+        }
+    }
+}
+
 // Register the Composer autoloader...
 require __DIR__.'/vendor/autoload.php';
 

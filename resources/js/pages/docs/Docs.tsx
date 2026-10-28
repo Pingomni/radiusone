@@ -399,7 +399,7 @@ const SECTIONS: Section[] = [
                 <h3>On the server</h3>
                 <ul>
                     <li>Run a backup now: <code>sudo RADIUSONE_OPERATOR_ENV_FILE=/etc/radiusone/backup.env radiusone-root-artisan radiusone:backup</code></li>
-                    <li>Open a downloaded copy: <code>php artisan radiusone:backup-decrypt &lt;file.enc&gt;</code> (asks for the passphrase).</li>
+                    <li>Open a downloaded copy: <code>sudo radiusone-root-artisan radiusone:backup-decrypt &lt;file.enc&gt;</code> (asks for the passphrase).</li>
                     <li>Restore the database: <code>sudo RADIUSONE_OPERATOR_ENV_FILE=/etc/radiusone/migration.env radiusone-root-artisan radiusone:restore &lt;file.sql.gz&gt;</code>. This replaces the current data; take a fresh backup first. As root it restores only a root-owned file from a folder only root can write.</li>
                     <li>The nightly job (02:15, as root) is in <code>/etc/cron.d/radiusone</code>, set up by the installer.</li>
                 </ul>
@@ -437,16 +437,16 @@ const SECTIONS: Section[] = [
                     ]}
                 />
                 <h3>Useful commands</h3>
-                <p>Run from the app directory.</p>
+                <p>Run as root through <code>radiusone-root-artisan</code>, never as <code>sudo php artisan</code>: that would load cache files www-data can write.</p>
                 <Table
                     head={['Command', 'Use']}
                     rows={[
-                        [<code>php artisan radiusone:job-status</code>, 'Recent job runs, schema state, network lag and the notification queue.'],
-                        [<code>php artisan radiusone:check-schema</code>, 'Lists database migrations a feature still needs.'],
-                        [<code>php artisan radiusone:migrate</code>, 'Applies pending database migrations.'],
-                        [<code>php artisan radiusone:mark-nas-applied</code>, 'Records that a NAS change is active in FreeRADIUS (see NAS devices).'],
-                        [<code>php artisan radiusone:encrypt-secrets</code>, 'Encrypts or re-keys stored credentials.'],
-                        [<code>php artisan schedule:list</code>, 'Shows every scheduled job and when it runs next.'],
+                        [<code>sudo radiusone-root-artisan radiusone:job-status</code>, 'Recent job runs, schema state, network lag and the notification queue.'],
+                        [<code>sudo radiusone-root-artisan radiusone:check-schema</code>, 'Lists database migrations a feature still needs.'],
+                        [<code>sudo radiusone-root-artisan radiusone:migrate</code>, 'Applies pending database migrations.'],
+                        [<code>sudo radiusone-root-artisan radiusone:mark-nas-applied</code>, 'Records that a NAS change is active in FreeRADIUS (see NAS devices).'],
+                        [<code>sudo radiusone-root-artisan radiusone:encrypt-secrets</code>, 'Encrypts or re-keys stored credentials.'],
+                        [<code>sudo radiusone-root-artisan schedule:list</code>, 'Shows every scheduled job and when it runs next.'],
                     ]}
                 />
                 <h3>Installing and setup</h3>
