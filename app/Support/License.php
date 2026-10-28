@@ -171,11 +171,23 @@ final class License
                 $data = json_decode($payload, true);
 
                 return is_array($data) && ($data['v'] ?? null) === 1 && is_string($data['expires'] ?? null)
-                    && preg_match('/^\d{4}-\d{2}-\d{2}$/D', $data['expires']) ? $data : null;
+                    && preg_match('/^\d{4}-\d{2}-\d{2}$/D', $data['expires']) && self::forRadiusOne($data) ? $data : null;
             }
         }
 
         return null;
+    }
+
+    /**
+     * The key was issued for RadiusOne: PingOmni signs every product's keys with one key, and the prefix is not
+     * signed. Keys name their product since 29 October 2026; older RadiusOne keys always carry a client limit
+     * ("clients"), which DNSOne keys never have.
+     *
+     * @param array<string, mixed> $data
+     */
+    private static function forRadiusOne(array $data): bool
+    {
+        return array_key_exists('product', $data) ? $data['product'] === 'radiusone' : array_key_exists('clients', $data);
     }
 
     private static function b64(string $text): ?string

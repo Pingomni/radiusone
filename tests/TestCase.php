@@ -53,7 +53,7 @@ abstract class TestCase extends BaseTestCase
     }
 
     /** A RadiusOne key signed with this process's test key pair, which License then trusts. $clients: the limit (0 none, null left out). */
-    protected static function licenceKey(array $features, string $expires, string $customer = 'Test ISP', ?int $clients = null): string
+    protected static function licenceKey(array $features, string $expires, string $customer = 'Test ISP', ?int $clients = null, ?string $product = 'radiusone'): string
     {
         static $pair = null;
         if ($pair === null) {
@@ -62,7 +62,7 @@ abstract class TestCase extends BaseTestCase
         }
         $b64 = static fn (string $s): string => rtrim(strtr(base64_encode($s), '+/', '-_'), '=');
         $payload = json_encode(['v' => 1, 'id' => bin2hex(random_bytes(6)), 'customer' => $customer, 'issued' => date('Y-m-d'), 'expires' => $expires, 'features' => $features]
-            + ($clients === null ? [] : ['clients' => $clients]), JSON_THROW_ON_ERROR);
+            + ($clients === null ? [] : ['clients' => $clients]) + ($product === null ? [] : ['product' => $product]), JSON_THROW_ON_ERROR);
 
         return License::PREFIX . '.' . $b64($payload) . '.' . $b64(sodium_crypto_sign_detached($payload, sodium_crypto_sign_secretkey($pair)));
     }

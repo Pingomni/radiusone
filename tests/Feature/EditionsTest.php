@@ -143,4 +143,14 @@ final class EditionsTest extends TestCase
         License::save(self::licenceKey(['all'], date('Y-m-d', strtotime('+1 year'))));
         $this->post('/clients/save', $client('number151'))->assertSessionHas('flash.type', 'success');
     }
+
+    public function test_a_key_for_another_product_is_refused(): void
+    {
+        // PingOmni signs every product's keys with one key and the prefix is not signed: the product inside counts.
+        $this->assertSame('invalid', License::describe(self::licenceKey(['all'], date('Y-m-d', strtotime('+1 year')), product: 'dnsone'))['state']);
+        // Keys from before products were named: a DNSOne key never has a client limit, a RadiusOne key always has one.
+        $this->assertSame('invalid', License::describe(self::licenceKey(['all'], date('Y-m-d', strtotime('+1 year')), product: null))['state']);
+        $this->assertSame('active', License::describe(self::licenceKey(['all'], date('Y-m-d', strtotime('+1 year')), clients: 999, product: null))['state']);
+    }
+
 }
