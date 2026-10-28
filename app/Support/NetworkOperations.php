@@ -212,17 +212,28 @@ final class NetworkOperations
         Db::exec('UPDATE network_operations SET state="running",session_json=?,claimed_at=NOW(),attempts=attempts+1,updated_at=NOW() WHERE id=?', [json_encode($sessions, JSON_THROW_ON_ERROR), $op['id']]);
         $failed = null;
         $sent = 0;
+        $quiet = 0;
         foreach ($sessions as $session) {
             try {
                 SessionDisconnect::disconnectUser((string) $session['username'], null, (int) $session['radacctid']);
                 $sent++;
             } catch (\Throwable $e) {
-                // A session whose accounting went quiet is not online any more: the new policy applies at its next login.
-                if (str_contains($e->getMessage(), 'stale') || str_contains($e->getMessage(), 'No identified active session')) {
+                if (str_contains($e->getMessage(), 'No identified active session')) {
+                    continue;
+                }
+                // Accounting went quiet: the session may have ended, or the router may simply send updates rarely
+                // (or never). For a suspension that is not proof the customer is offline: it is shown for a check.
+                if (str_contains($e->getMessage(), 'stale')) {
+                    // Quiet for a day or more (a NAS that never sent the stop): not online any more.
+                    $recent = Db::value('SELECT COALESCE(acctupdatetime, acctstarttime) > NOW() - INTERVAL 1 DAY FROM radacct WHERE radacctid=?', [(int) $session['radacctid']]);
+                    $quiet += (int) $recent;
                     continue;
                 }
                 $failed = $e->getMessage();
             }
+        }
+        if ($failed === null && $quiet > 0 && $op['action'] === 'suspend') {
+            return self::finish($op, 'blocked', 'quiet_session_check_router');
         }
         if ($failed === null) {
             return self::finish($op, 'verified', $sent ? 'disconnected_for_new_policy' : 'no_session_next_login');

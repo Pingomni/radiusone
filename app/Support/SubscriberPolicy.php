@@ -102,6 +102,11 @@ final class SubscriberPolicy
             [$hash, $revision, (int) ($selected['policy_revision'] ?? 0), $until ? date('Y-m-d H:i:s', $until) : null, $source, (int) $changed, (int) $changed, $gate, $sub['id']]);
         // Renames remove only authorization publication; raw events/identity history are untouched.
         Db::exec('DELETE FROM access_policies WHERE subscription_id=? AND username<>?', [$sub['id'], $client['username']]);
+        // Never take over the row of a customer whose username only compares equal to this one ('straße', 'strase').
+        $owner = Db::value('SELECT username FROM access_policies WHERE username=? FOR UPDATE', [$client['username']]);
+        if ($owner !== null && $owner !== $client['username'] && Db::value('SELECT 1 FROM customer_profiles WHERE BINARY username=BINARY ?', [$owner])) {
+            throw new \RuntimeException('The username ' . $client['username'] . ' is published for another customer.');
+        }
         Db::exec('INSERT INTO access_policies (username,subscription_id,revision,adapter,source_ip,listener_key,circuit_id,dhcp_server,dhcp_client_id,mac_address,allowed,valid_until,reason) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE subscription_id=VALUES(subscription_id),revision=VALUES(revision),adapter=VALUES(adapter),source_ip=VALUES(source_ip),listener_key=VALUES(listener_key),circuit_id=VALUES(circuit_id),dhcp_server=VALUES(dhcp_server),dhcp_client_id=VALUES(dhcp_client_id),mac_address=VALUES(mac_address),allowed=VALUES(allowed),valid_until=VALUES(valid_until),reason=VALUES(reason)',
             [$client['username'], $sub['id'], $revision, $key, $policy['source_ip'], $policy['listener_key'], $policy['circuit_id'], $policy['dhcp_server'], $policy['dhcp_client_id'], $policy['mac_address'], (int) $policy['allowed'], $until, $reason]);
         if ($profile || $client['auth_method'] === 'dhcp') {
