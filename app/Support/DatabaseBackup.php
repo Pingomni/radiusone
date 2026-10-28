@@ -58,7 +58,9 @@ final class DatabaseBackup
             $sql = self::temporary(sys_get_temp_dir());
             // Complete decompression before allowing any SQL to reach the database.
             self::run(['gzip', '-dc', $file], '/dev/null', $sql, 'Decompression');
-            self::run(['mysql', '--defaults-file=' . $defaults, $settings['DB_DATABASE']], $sql, '/dev/null', 'Database restore');
+            // --sandbox: the dump is data. A client command in it (\! runs a shell command) is refused, not run as
+            // whoever restores (root, in practice).
+            self::run(['mysql', '--defaults-file=' . $defaults, '--sandbox', '--batch', $settings['DB_DATABASE']], $sql, '/dev/null', 'Database restore');
         } finally {
             foreach ([$defaults, $sql] as $path) {
                 if ($path !== null && is_file($path)) {

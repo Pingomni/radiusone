@@ -398,9 +398,9 @@ const SECTIONS: Section[] = [
                 />
                 <h3>On the server</h3>
                 <ul>
-                    <li>Run a backup now: <code>sudo RADIUSONE_OPERATOR_ENV_FILE=/etc/radiusone/backup.env php artisan radiusone:backup</code></li>
+                    <li>Run a backup now: <code>sudo RADIUSONE_OPERATOR_ENV_FILE=/etc/radiusone/backup.env radiusone-root-artisan radiusone:backup</code></li>
                     <li>Open a downloaded copy: <code>php artisan radiusone:backup-decrypt &lt;file.enc&gt;</code> (asks for the passphrase).</li>
-                    <li>Restore the database: <code>php artisan radiusone:restore &lt;file.sql.gz&gt;</code>. This replaces the current data; take a fresh backup first.</li>
+                    <li>Restore the database: <code>sudo RADIUSONE_OPERATOR_ENV_FILE=/etc/radiusone/migration.env radiusone-root-artisan radiusone:restore &lt;file.sql.gz&gt;</code>. This replaces the current data; take a fresh backup first. As root it restores only a root-owned file from a folder only root can write.</li>
                     <li>The nightly job (02:15, as root) is in <code>/etc/cron.d/radiusone</code>, set up by the installer.</li>
                 </ul>
             </>
