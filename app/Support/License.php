@@ -183,7 +183,7 @@ final class License
      * signed. Keys name their product since 29 October 2026; older RadiusOne keys always carry a client limit
      * ("clients"), which DNSOne keys never have.
      *
-     * @param array<string, mixed> $data
+     * @param  array<string, mixed>  $data
      */
     private static function forRadiusOne(array $data): bool
     {
