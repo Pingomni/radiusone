@@ -3,6 +3,10 @@
 -- could be one key here and two customers there (access_policies), or a username could not be stored at all
 -- (usage_daily on a database whose default is latin1).
 ALTER TABLE access_policies CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+-- The access-circuit identities stay exact (as in 018): the conversion above must not make them case-insensitive.
+ALTER TABLE access_policies MODIFY circuit_id VARCHAR(190) COLLATE utf8mb4_bin NOT NULL DEFAULT '',
+  MODIFY dhcp_server VARCHAR(120) COLLATE utf8mb4_bin NOT NULL DEFAULT '',
+  MODIFY dhcp_client_id VARCHAR(253) COLLATE utf8mb4_bin NULL;
 ALTER TABLE usage_daily CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 ALTER TABLE usage_session_marks CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 ALTER TABLE usage_cycles CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;

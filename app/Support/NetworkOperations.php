@@ -224,15 +224,20 @@ final class NetworkOperations
                 // Accounting went quiet: the session may have ended, or the router may simply send updates rarely
                 // (or never). For a suspension that is not proof the customer is offline: it is shown for a check.
                 if (str_contains($e->getMessage(), 'stale')) {
-                    // Quiet for a day or more (a NAS that never sent the stop): not online any more.
-                    $recent = Db::value('SELECT COALESCE(acctupdatetime, acctstarttime) > NOW() - INTERVAL 1 DAY FROM radacct WHERE radacctid=?', [(int) $session['radacctid']]);
-                    $quiet += (int) $recent;
+                    // Possibly online: quiet for less than a day, or a router that sends no interim updates at all
+                    // (the update time never moved past the start), however old. A session whose updates stopped
+                    // a day or more ago is one the NAS never closed: not online any more.
+                    $live = Db::value('SELECT COALESCE(acctupdatetime, acctstarttime) > NOW() - INTERVAL 1 DAY
+                        OR acctupdatetime IS NULL OR acctupdatetime <= acctstarttime FROM radacct WHERE radacctid=?', [(int) $session['radacctid']]);
+                    $quiet += (int) $live;
                     continue;
                 }
                 $failed = $e->getMessage();
             }
         }
-        if ($failed === null && $quiet > 0 && $op['action'] === 'suspend') {
+        // Any change that narrows service (suspension, expiry to a restricted plan, a data-cap slow-down) needs the
+        // session gone; only lifting a restriction may wait for the next login.
+        if ($failed === null && $quiet > 0 && $op['action'] !== 'restore') {
             return self::finish($op, 'blocked', 'quiet_session_check_router');
         }
         if ($failed === null) {

@@ -123,6 +123,45 @@ final class NetworkWorkerTest extends TestCase
         $this->assertSame([], $this->calls());
     }
 
+    /** @return array{0: string, 1: string} */
+    private function outcome(array $op): array
+    {
+        return array_values(Db::row('SELECT state, result_code FROM network_operations WHERE id=?', [$op['id']]));
+    }
+
+    public function test_a_quiet_session_is_left_for_a_router_check_not_called_offline(): void
+    {
+        $this->setUpCustomer();
+        // Last interim update 6 minutes ago: the router may just report rarely, so this is no proof of offline.
+        Db::exec('INSERT INTO radacct (acctuniqueid, acctsessionid, username, nasipaddress, acctstarttime, acctupdatetime) VALUES ("q", "81000010", "alice", "192.0.2.10", NOW() - INTERVAL 1 HOUR, NOW() - INTERVAL 6 MINUTE)');
+        $op = $this->suspend();
+        $this->work();
+        $this->assertSame(['blocked', 'quiet_session_check_router'], $this->outcome($op));
+        $this->assertSame([], $this->calls());
+    }
+
+    public function test_a_router_without_interim_updates_keeps_old_sessions_in_doubt(): void
+    {
+        $this->setUpCustomer();
+        // No interim updates ever (the update time is the start): a 26-hour session may well still be online.
+        Db::exec('INSERT INTO radacct (acctuniqueid, acctsessionid, username, nasipaddress, acctstarttime, acctupdatetime) VALUES ("n", "81000011", "alice", "192.0.2.10", NOW() - INTERVAL 26 HOUR, NOW() - INTERVAL 26 HOUR)');
+        $op = $this->suspend();
+        $this->work();
+        $this->assertSame(['blocked', 'quiet_session_check_router'], $this->outcome($op));
+    }
+
+    public function test_a_narrower_plan_on_a_quiet_session_is_also_left_for_a_check(): void
+    {
+        $this->setUpCustomer();
+        Db::exec('INSERT INTO radacct (acctuniqueid, acctsessionid, username, nasipaddress, acctstarttime, acctupdatetime) VALUES ("p", "81000012", "alice", "192.0.2.10", NOW() - INTERVAL 1 HOUR, NOW() - INTERVAL 6 MINUTE)');
+        $op = ['subscription_id' => (int) Db::value('SELECT s.id FROM subscriptions s JOIN customer_profiles c ON c.id=s.customer_id WHERE c.username="alice"')];
+        // An "apply" (a plan change, an expiry to a restricted plan or a data-cap slow-down) needs the session gone too.
+        Db::exec('INSERT INTO network_operations (subscription_id, policy_revision, action, dedupe_key, available_at, created_at, updated_at) SELECT id, policy_revision, "apply", CONCAT(id, ":test:apply"), NOW(), NOW(), NOW() FROM subscriptions WHERE id=?', [$op['subscription_id']]);
+        $op['id'] = (int) Db::value('SELECT MAX(id) FROM network_operations');
+        $this->work();
+        $this->assertSame(['blocked', 'quiet_session_check_router'], $this->outcome($op));
+    }
+
     public function test_a_refused_disconnect_is_retried_then_left_for_review(): void
     {
         $this->setUpCustomer();

@@ -77,11 +77,14 @@ status() {
     chmod 0640 "$STATUS_DIR/status.json.new"
     mv -f "$STATUS_DIR/status.json.new" "$STATUS_DIR/status.json"
 }
-# Root works and reports in $DATA: it must be root's, and so must updates/ and update-status/ (servers before 2.4 made
-# $DATA www-data's, so www-data could have swapped either for its own folder or a link). Anything not root's goes.
+# Root works and reports in $DATA and keeps its rollback archive in $BACKUPS: both must be root's, and so must
+# updates/ and update-status/ (servers before 2.4 made $DATA and $BACKUPS www-data's, so www-data could have swapped
+# any of them for its own folder or a link). Anything not root's goes.
 secure_dirs() {
     [ "$(id -u)" = 0 ] || return 0
     chown root:root "$DATA" && chmod 0755 "$DATA"
+    [ -L "$BACKUPS" ] && fail "$BACKUPS is a link; make it a folder owned by root"
+    install -d "$BACKUPS" && chown root:www-data "$BACKUPS" && chmod 0750 "$BACKUPS"
     for d in "$WORK" "$STATUS_DIR"; do
         if [ -L "$d" ] || { [ -e "$d" ] && [ "$(stat -c %u "$d")" != 0 ]; }; then rm -rf -- "$d"; fi
     done
@@ -205,8 +208,9 @@ if [ -n "$(identity backup)" ]; then
 else
     echo "No backup identity ($ETC/backup.env): skipping the database backup."
 fi
-install -d -m 0700 "$BACKUPS"
-archive="$BACKUPS/pre-$version-$(date +%Y%m%d-%H%M%S).tar.gz"
+secure_dirs
+# A new name nobody could have planted a link at (mktemp creates it exclusively, mode 0600).
+archive="$(mktemp "$BACKUPS/pre-$version-$(date +%Y%m%d-%H%M%S)-XXXXXX.tar.gz")"
 tar -czpf "$archive" -C / --exclude="${APP#/}/storage/framework/cache" --exclude="${APP#/}/storage/framework/sessions" \
     --exclude="${APP#/}/storage/framework/views" --exclude="${APP#/}/node_modules" "${APP#/}"
 chmod 0600 "$archive"

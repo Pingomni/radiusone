@@ -139,6 +139,30 @@ artisan_root() {
   rm -rf "$cache"; return $rc
 }
 as_web() { local dir=$1; shift; (cd "$dir" && sudo -u www-data env LOG_CHANNEL=stderr php artisan "$@"); }
+# Only root can write the folder (and nothing in it is a link)?
+root_only() { [[ ! -L $1 && $(stat -c %u "$1") == 0 && $(( 8#$(stat -c %a "$1") & 8#022 )) == 0 ]]; }
+# Copies the contents of folder $1 into folder $2. Root copies only into folders root alone can write; anything
+# deeper is copied as the user who owns it, so a folder that user swaps for a link during the copy can only take
+# the copy where that user could write anyway. Files that user cannot read stay in the old folder (kept in $WORK).
+merge() {
+  local o=$1 n=$2 e t who
+  if ! root_only "$n"; then
+    who=$(stat -c %U "$n")
+    sudo -u "$who" cp -a --remove-destination "$o/." "$n/" 2>/dev/null || say "   $n: some files $who cannot read were left in the old folder"
+    return 0
+  fi
+  for e in "$o"/* "$o"/.[!.]*; do
+    [[ -e $e || -L $e ]] || continue
+    t=$n/${e##*/}
+    if [[ -d $e && ! -L $e ]]; then
+      [[ -L $t || ( -e $t && ! -d $t ) ]] && rm -f "$t"
+      [[ -d $t ]] || install -d -o "$(stat -c %u "$e")" -g "$(stat -c %g "$e")" -m "$(stat -c %a "$e")" "$t"
+      merge "$e" "$t"
+    else
+      cp -a --remove-destination "$e" "$t"
+    fi
+  done
+}
 
 restore() {
   trap - ERR
@@ -202,10 +226,9 @@ for d in "${dirs[@]}"; do
   o=${OLD[$d]} n=${NEW[$d]}
   [[ -d $o && ! -L $o ]] || continue
   if [[ -e $n ]]; then
-    # Already there (made by a newer install): move the old contents in. A link in the new folder is removed first,
-    # so cp never writes through it (both folders may be www-data's).
-    find "$n" -mindepth 1 -type l -delete
-    cp -a --remove-destination "$o/." "$n/"; mv "$o" "$WORK/old-$(basename "$o")-$d"
+    # Already there (made by a newer install): copy the old contents in (merge: never as root into a folder
+    # www-data can change).
+    merge "$o" "$n"; mv "$o" "$WORK/old-$(basename "$o")-$d"
     undo "rm -f '$o'; mv '$WORK/old-$(basename "$o")-$d' '$o'"
   else
     mv "$o" "$n"
@@ -227,7 +250,10 @@ if [[ -n $OLD_APP ]]; then
   if [[ -n $SRC ]]; then
     rsync -a --exclude '/.env' --exclude '/storage' --exclude '/bootstrap/cache' --exclude '/.git' --exclude '/node_modules' "$SRC/" "$NEW_APP/"
     cp -a "$OLD_APP/.env" "$NEW_APP/.env"
-    rsync -a "$OLD_APP/storage/" "$NEW_APP/storage/"
+    # storage is www-data's: copied as www-data into a new folder it owns, never by root through it.
+    [[ -L $NEW_APP/storage ]] && rm -f "$NEW_APP/storage"
+    install -d -o www-data -g www-data -m 0755 "$NEW_APP/storage"
+    sudo -u www-data rsync -a "$OLD_APP/storage/" "$NEW_APP/storage/"
     mkdir -p "$NEW_APP/bootstrap/cache"
     [[ -L $OLD_APP/public/storage ]] && cp -a "$OLD_APP/public/storage" "$NEW_APP/public/storage"
     chown -R "$owner:$group" "$NEW_APP"
