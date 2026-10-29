@@ -6,9 +6,9 @@
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width,initial-scale=1">
         <meta name="color-scheme" content="light dark">
-        <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=3">
-        <link rel="icon" href="/favicon.ico?v=3" sizes="16x16 32x32 48x48">
-        <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=3">
+        <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=4">
+        <link rel="icon" href="/favicon.ico?v=4" sizes="16x16 32x32 48x48">
+        <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=4">
         <link rel="manifest" href="/manifest.json?v=3">
         <meta name="theme-color" content="#0d7f78">
         @viteReactRefresh

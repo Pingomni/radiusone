@@ -1,5 +1,5 @@
 import { Head, Link, router, usePage } from '@inertiajs/react';
-import { Fragment, useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
 import Icon from '@/components/Icon';
 import { FlashMessage } from '@/components/ui';
 import { useCan, useShared } from '@/lib/auth';
@@ -53,19 +53,14 @@ export function BrandLogo({ className = 'brand-logo' }: { className?: string }) 
     return <span className={`mark ${className}`}><BrandMark /></span>;
 }
 
-/** The RadiusOne mark (public/brand/logo-mark.svg): an R whose leg runs out as a network link to a node. */
+/** The RadiusOne mark, the Key, from the PingOmni family (Monitor's Pulse, DNSOne's Tree): a ring open where the line
+ * leaves, one stroke, the teal ping at (57,32). The key lets the subscriber in. Ink follows the text colour. */
 export function BrandMark() {
-    const id = `rw-${useId().replace(/:/g, '')}`;
-    const line = { stroke: '#fff', strokeWidth: 6.5, strokeLinecap: 'round', strokeLinejoin: 'round', fill: 'none' } as const;
     return (
-        <svg viewBox="0 0 64 64" aria-hidden="true" focusable="false">
-            <defs>
-                <linearGradient id={id} x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stopColor="#0d7f78" /><stop offset="1" stopColor="#155e75" /></linearGradient>
-            </defs>
-            <rect width="64" height="64" rx="15" fill={`url(#${id})`} />
-            <path d="M22 47V17h10.5a8.75 8.75 0 0 1 0 17.5H22" {...line} />
-            <path d="M32 34.5L40.5 43" {...line} />
-            <circle cx="44.5" cy="47" r="5.5" fill="#5eead4" />
+        <svg className="po-mark" viewBox="0 0 64 64" aria-hidden="true" focusable="false">
+            <path d="M47.98 40.77A20 20 0 1 1 47.98 23.23M29 32H57M38 32V39" fill="none" stroke="currentColor" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" />
+            <circle cx="24" cy="32" r="5" fill="none" stroke="currentColor" strokeWidth="5" />
+            <circle className="po-mark-dot" cx="57" cy="32" r="5.5" />
         </svg>
     );
 }
