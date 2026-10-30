@@ -188,6 +188,18 @@ artisan() {
         php artisan "$@")
 }
 as_web() { (cd "$APP" && sudo -u www-data env LOG_CHANNEL=stderr php artisan "$@"); }
+# The lists of installed packages and providers that artisan keeps (root's in $root_cache, www-data's in bootstrap/cache)
+# describe the code they were made with: after the code changes, they go, or artisan looks for a package that is gone
+# (2.3.1 failed so on a server whose 2.3.0 had Laravel Pail, a development package releases leave out).
+forget_caches() {
+    rm -f "$root_cache"/*.php "$APP"/bootstrap/cache/packages.php "$APP"/bootstrap/cache/services.php \
+          "$APP"/bootstrap/cache/config.php "$APP"/bootstrap/cache/events.php "$APP"/bootstrap/cache/routes*.php
+}
+# The folders the rollback archive leaves out (sessions, cache and compiled views): without them every page fails.
+framework_dirs() {
+    install -d -o www-data -g www-data -m 0775 "$APP/storage/framework/cache" "$APP/storage/framework/cache/data" \
+        "$APP/storage/framework/sessions" "$APP/storage/framework/views"
+}
 # This server's database identities: radiusone_* once moved, frweb_* before.
 identity() { if [ -f "$ETC/$1.env" ]; then echo "$ETC/$1.env"; fi; }
 
@@ -221,6 +233,8 @@ rollback() {
     log "Putting RadiusOne $current back"
     rm -rf "$APP"
     tar -xzpf "$archive" -C /
+    forget_caches
+    framework_dirs
     bash "$APP/ops/radiusone-postinstall" >/dev/null 2>&1 || true
     as_web optimize:clear >/dev/null 2>&1 || true
     systemctl reload "$fpm" || true
@@ -240,6 +254,8 @@ set +e
           --exclude '/.git' --exclude '/node_modules' "$src/" "$APP/"
     chown -R "$owner:$group" "$APP"
     chown -R www-data:www-data "$APP/storage" "$APP/bootstrap/cache"
+    forget_caches
+    framework_dirs
     echo database > "$dir/step"
     RADIUSONE_OPERATOR_ENV_FILE="$(identity migration)" artisan radiusone:migrate
     if mariadb -N -e "SELECT 1 FROM mysql.user WHERE user='radiusone_portal'" | grep -q 1; then

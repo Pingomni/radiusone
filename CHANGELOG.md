@@ -4,6 +4,19 @@ RadiusOne follows [semantic versioning](https://semver.org): **major** for chang
 upgrading, **minor** for new features, **patch** for fixes. The version is in the `VERSION` file and shows in
 the portal's sidebar and under Settings → System information.
 
+## 2.3.2 (2026-10-30)
+
+Fixes the updater. Update with `sudo radiusone-update` as usual.
+
+- **An update no longer stops on a package the new release leaves out.** The updater kept artisan's list of
+  installed packages from before the new files were copied; when a package was gone (Laravel Pail, on a server
+  installed from the source), the update stopped before the database step and rolled back. The lists are now made
+  again after the copy.
+- **The portal works after a rollback.** The rollback archive leaves out the session, cache and compiled-view
+  folders, and putting the old version back did not create them again, so every page answered with an error until
+  they were made by hand. The rollback now creates them.
+- **RadiusOne's new mark**, the Key, from the PingOmni family: favicon, home-screen icon, sign-in page and invoices.
+
 ## 2.3.1 (2026-10-28)
 
 Security fixes from a full audit. Install it on every server.
