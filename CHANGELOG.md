@@ -4,9 +4,10 @@ RadiusOne follows [semantic versioning](https://semver.org): **major** for chang
 upgrading, **minor** for new features, **patch** for fixes. The version is in the `VERSION` file and shows in
 the portal's sidebar and under Settings → System information.
 
-## 2.3.2 (2026-10-30)
+## 2.3.3 (2026-10-30)
 
-Fixes the updater. Update with `sudo radiusone-update` as usual.
+Fixes the updater. Update with `sudo radiusone-update` as usual. (The 2.3.2 tag was never published: its
+release notes were missing, so it ships as 2.3.3.)
 
 - **An update no longer stops on a package the new release leaves out.** The updater kept artisan's list of
   installed packages from before the new files were copied; when a package was gone (Laravel Pail, on a server
