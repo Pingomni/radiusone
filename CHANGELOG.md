@@ -4,6 +4,15 @@ RadiusOne follows [semantic versioning](https://semver.org): **major** for chang
 upgrading, **minor** for new features, **patch** for fixes. The version is in the `VERSION` file and shows in
 the portal's sidebar and under Settings → System information.
 
+## 2.3.4 (2026-10-30)
+
+The updater keeps the web user's access to `.env`. Update with `sudo radiusone-update` as usual.
+
+- **The portal reads its settings after an update.** Copying a release made the whole app folder its owner's,
+  `.env` included, so the web user lost access to `.env` (installed as root:www-data, 0640). A cached copy of the
+  settings hid it until 2.3.3 rightly cleared that cache, and the update to 2.3.3 stopped at the server set-up and
+  rolled back. `.env` now keeps its owner and mode.
+
 ## 2.3.3 (2026-10-30)
 
 Fixes the updater. Update with `sudo radiusone-update` as usual. (The 2.3.2 tag was never published: its

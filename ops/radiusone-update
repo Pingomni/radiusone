@@ -252,7 +252,11 @@ set +e
     echo files > "$dir/step"
     rsync -a --delete --exclude '/.env' --exclude '/storage' --exclude '/bootstrap/cache' --exclude '/public/storage' \
           --exclude '/.git' --exclude '/node_modules' "$src/" "$APP/"
+    # .env keeps its own owner and mode (root:www-data 0640 from install.sh): the web user must read it, and the
+    # folder's owner may not be www-data's group.
+    env_owner=$(stat -c '%u:%g' "$APP/.env"); env_mode=$(stat -c '%a' "$APP/.env")
     chown -R "$owner:$group" "$APP"
+    chown "$env_owner" "$APP/.env" && chmod "$env_mode" "$APP/.env"
     chown -R www-data:www-data "$APP/storage" "$APP/bootstrap/cache"
     forget_caches
     framework_dirs
