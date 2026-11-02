@@ -37,9 +37,9 @@ final class SoftwareUpdateTest extends TestCase
     {
         // A fresh client each time: the first matching fake would otherwise keep answering.
         Http::swap(new Factory);
-        Http::fake(['api.github.com/repos/n-geraldo/radiusone/releases/latest' => Http::response([
+        Http::fake(['api.github.com/repos/Pingomni/radiusone/releases/latest' => Http::response([
             'tag_name' => 'v' . $version,
-            'html_url' => 'https://github.com/n-geraldo/radiusone/releases/tag/v' . $version,
+            'html_url' => 'https://github.com/Pingomni/radiusone/releases/tag/v' . $version,
             'published_at' => '2026-10-27T10:00:00Z',
             'body' => "## {$version}\n- New things",
             'assets' => $asset ? [['name' => "radiusone-{$version}.tar.gz"], ['name' => "radiusone-{$version}.tar.gz.sha256"]] : [],
@@ -94,7 +94,7 @@ final class SoftwareUpdateTest extends TestCase
             ->where('update.check.newer', true)
             ->where('update.check.latest', '9.1.0')
             ->where('update.check.published', '2026-10-27')
-            ->where('update.check.url', 'https://github.com/n-geraldo/radiusone/releases/tag/v9.1.0')
+            ->where('update.check.url', 'https://github.com/Pingomni/radiusone/releases/tag/v9.1.0')
             ->where('update.check.notes', "## 9.1.0\n- New things"));
 
         $this->post('/settings/update/start')->assertRedirect('/settings')

@@ -19,7 +19,7 @@ return [
     'version' => is_file(base_path('VERSION')) ? trim((string) file_get_contents(base_path('VERSION'))) : 'dev',
 
     // Where Settings → Software update looks for releases (a fork can set its own).
-    'update_repo' => env('RADIUSONE_UPDATE_REPO', 'n-geraldo/radiusone'),
+    'update_repo' => env('RADIUSONE_UPDATE_REPO', 'Pingomni/radiusone'),
 
     /*
     |--------------------------------------------------------------------------

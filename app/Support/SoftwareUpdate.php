@@ -22,7 +22,7 @@ use Throwable;
 final class SoftwareUpdate
 {
     /** Where the releases are; RADIUSONE_UPDATE_REPO overrides it (a fork). */
-    public const REPO = 'n-geraldo/radiusone';
+    public const REPO = 'Pingomni/radiusone';
 
     /** Where the app lives once moved (ops/radiusone-upgrade-2.3). */
     public const HOME = '/opt/radiusone';

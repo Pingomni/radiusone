@@ -34,7 +34,7 @@ included, so the server needs no Node.js or Composer):
 
 ```bash
 sudo mkdir /opt/radiusone
-curl -fsSL https://github.com/n-geraldo/radiusone/releases/download/vX.Y.Z/radiusone-X.Y.Z.tar.gz \
+curl -fsSL https://github.com/Pingomni/radiusone/releases/download/vX.Y.Z/radiusone-X.Y.Z.tar.gz \
   | sudo tar -xz -C /opt/radiusone --strip-components=1
 cd /opt/radiusone
 sudo bash install.sh
@@ -261,7 +261,7 @@ the folders `/etc/freeradius-web`, `/var/lib/freeradius-web`..., the database ac
 Or both steps in one go, on the server:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/n-geraldo/radiusone/v2.3.0/ops/radiusone-update | sudo bash -s v2.3.0
+curl -fsSL https://raw.githubusercontent.com/Pingomni/radiusone/v2.3.0/ops/radiusone-update | sudo bash -s v2.3.0
 ```
 
 To see first what the move changes, without changing anything (from the 2.3 app folder):
