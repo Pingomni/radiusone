@@ -4,6 +4,16 @@ RadiusOne follows [semantic versioning](https://semver.org): **major** for chang
 upgrading, **minor** for new features, **patch** for fixes. The version is in the `VERSION` file and shows in
 the portal's sidebar and under Settings → System information.
 
+## 2.5.0 (2026-11-02)
+
+See why a router can't connect. Update with **Settings → Overview → Software update** or `sudo radiusone-update`.
+
+- **Diagnostics tab on each NAS:** a connection checklist, a 60-second packet test that also checks the shared secret
+  on signed requests, and recent errors and rejected logins in plain words.
+- **Unknown routers on the NAS list:** addresses sending RADIUS requests that aren't in your list, with **Add as NAS**.
+- **On the server:** FreeRADIUS login logging is switched on, without passwords, from its next restart. `tcpdump` is
+  installed if missing. If the firewall is on, its rules reload once with a new line logging dropped RADIUS requests.
+
 ## 2.4.0 (2026-11-02)
 
 A firewall in the portal. Update with **Settings → Overview → Software update** or `sudo radiusone-update`. The
