@@ -11,11 +11,13 @@ use App\Support\Accounting;
 use App\Support\Audit;
 use App\Support\Auth;
 use App\Support\Db;
+use App\Support\NasDiagnostics;
 use App\Support\NasMonitor;
 use App\Support\NasRepository;
 use App\Support\Secrets;
 use App\Support\SessionDisconnect;
 use App\Support\Snmp;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -79,7 +81,7 @@ final class NasController extends Controller
         return redirect('/monitoring');
     }
 
-    public function form(?string $id = null): Response
+    public function form(Request $request, ?string $id = null): Response
     {
         $stored = $id ? Db::row(self::rowSql() . ' WHERE n.id=?', [$id]) : null;
         abort_if($id && !$stored, 404, 'NAS device not found.');
@@ -94,7 +96,8 @@ final class NasController extends Controller
             'section' => 'device',
             'vendor' => $vendor,
             'shortname' => (string) ($stored['shortname'] ?? ''),
-            'nasname' => (string) ($stored['nasname'] ?? ''),
+            // The address suggested by NAS → Diagnostics ("Add as NAS", "Use for this NAS"); nothing is saved until Save.
+            'nasname' => filter_var($request->query('nasname'), FILTER_VALIDATE_IP) ?: (string) ($stored['nasname'] ?? ''),
             'secret' => '',
             'description' => (string) ($stored['description'] ?? ''),
             'enabled' => $stored ? (bool) ($stored['enabled'] ?? true) : true,
@@ -142,6 +145,44 @@ final class NasController extends Controller
                 'state' => Accounting::state($x),
             ], $online),
         ]);
+    }
+
+    /** NAS → Diagnostics: the checklist, the recent errors and the packet test's state, as the tab refreshes them. */
+    public function diagnostics(string $id): JsonResponse
+    {
+        $nas = Db::row(self::rowSql() . ' WHERE n.id=?', [$id]);
+        abort_if(!$nas, 404, 'NAS device not found.');
+        $nas['updated_at'] = Db::value('SELECT updated_at FROM nas_metadata WHERE nas_id=?', [$id]);
+        $log = NasDiagnostics::log();
+
+        return response()->json([
+            'checks' => NasDiagnostics::checks($nas, $log),
+            'errors' => NasDiagnostics::recentErrors($nas, $log),
+            'unknown' => NasDiagnostics::unknownRouters($log),
+            'capture' => NasDiagnostics::captureResult($nas, $log),
+            'canTest' => Auth::can('nas.manage'),
+        ]);
+    }
+
+    /** The warning on the NAS list. */
+    public function unknownRouters(): JsonResponse
+    {
+        return response()->json(NasDiagnostics::unknownRouters());
+    }
+
+    public function startCapture(string $id): RedirectResponse
+    {
+        Auth::requireCan('nas.manage');
+        abort_if(!Db::value('SELECT id FROM nas WHERE id=?', [$id]), 404, 'NAS device not found.');
+        $back = '/nas/' . (int) $id . '/edit?tab=diagnostics';
+        try {
+            NasDiagnostics::startCapture();
+        } catch (RuntimeException $e) {
+            return $this->fail($e->getMessage(), $back);
+        }
+        Audit::log('nas.packet_test', 'nas', $id);
+
+        return redirect($back);
     }
 
     /** Identity and the four things an operator checks first. */

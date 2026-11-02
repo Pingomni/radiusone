@@ -209,6 +209,33 @@ but has not been tested on a real router yet. DHCP (MAC) login is not finished y
 Outgoing, the server reaches your routers on UDP 3799 (disconnect/CoA), UDP 161 (SNMP, if set up) and
 TCP 8729 (RouterOS API, if switched on). MariaDB (3306) listens only on the server itself.
 
+## Debugging a router
+
+Open the router under *NAS*, then the **Diagnostics** tab:
+
+- **Connection checklist:** whether the NAS is on and loaded, FreeRADIUS is running and listening, the firewall allows
+  it, and whether logins and accounting are arriving.
+- **60-second packet test:** press **Start** and try a login on the router. It says whether requests arrive and whether
+  the server answers, and checks signed requests against the saved shared secret. The packets stay in memory, readable
+  only by root and the web server, and are deleted after 15 minutes.
+- **Recent errors:** FreeRADIUS's errors and rejected logins in plain words, with how to fix them.
+
+The *NAS* list also warns about addresses that send RADIUS requests but aren't routers here, with **Add as NAS**. That
+is often a router behind NAT. Addresses you don't recognise may be scanners on the internet, so don't add those.
+
+Per-router login counts need FreeRADIUS's login logging. New installs have it on. On an updated server it starts after
+the next FreeRADIUS restart (*Monitoring → RADIUS server → Restart*).
+
+For the full detail, stop the service and run it in debug mode. **RADIUS is down for all customers while it runs**, so
+use it in a quiet period:
+
+```bash
+sudo systemctl stop freeradius
+sudo freeradius -X
+# Ctrl+C when done, then:
+sudo systemctl start freeradius
+```
+
 ## Firewall
 
 **Settings → Firewall** manages this server's firewall from the portal, using nftables. It starts **off**. The
@@ -305,7 +332,7 @@ in `/var/backups/radiusone-move-<date>/`; if a step fails it puts everything bac
 | *this server already has a 'radius' database* | The server was used before. Use a fresh server, or `--force` if you are sure the database can stay as it is. |
 | *Let's Encrypt failed* | The domain must point at this server and port 80 must be open from the internet. The self-signed certificate stays in place; run the installer again once DNS is right. |
 | The login page does not open | `systemctl status nginx php8.3-fpm`, then `tail /var/log/nginx/error.log` and `storage/logs/` |
-| Routers are rejected | `systemctl status freeradius`; is the NAS saved in the portal and FreeRADIUS restarted since? Check the shared secret, and watch live with `sudo systemctl stop freeradius && sudo freeradius -X` (start the service again afterwards). |
+| Routers are rejected or time out | Open the router under *NAS* → *Diagnostics*: see [Debugging a router](#debugging-a-router). |
 | Lost the administrator password | Another superadmin can reset it under *Settings → Users*. |
 | *Check for updates* says GitHub could not be reached | The server needs HTTPS access to `api.github.com` and `github.com`. Test with `sudo radiusone-update --check`. |
 | Scheduled jobs do not run | `cat /etc/cron.d/radiusone` and `tail /var/log/radiusone/scheduler.log`; *Monitoring* shows when each job last ran. |

@@ -6,7 +6,7 @@
 #   - the root helpers in /usr/local/sbin: radiusone-service-restart (Restart buttons on Monitoring → RADIUS
 #     server), radiusone-set-timezone (Settings → Regional), radiusone-backup-now (Settings → Backups → Back up
 #     now), radiusone-root-artisan (artisan as root, for the helpers and the nightly backup) and
-#     radiusone-update (the updater), radiusone-firewall (Settings → Firewall). The names from before 2.3 (frweb-...) become links to them.
+#     radiusone-update (the updater), radiusone-firewall (Settings → Firewall), radiusone-nas-diag (NAS → Diagnostics). The names from before 2.3 (frweb-...) become links to them.
 #   - /etc/sudoers.d/radiusone: www-data may restart exactly FreeRADIUS, MariaDB, Nginx and PHP-FPM, schedule a
 #     time zone change and start a backup; nothing else.
 #   - installing updates from the portal, as DNSOne does: the request folder www-data writes in, the status
@@ -35,7 +35,7 @@ place() {  # $1 source, $2 target, $3 mode
 }
 
 echo "== root helpers ($app)"
-for name in service-restart set-timezone backup-now root-artisan update firewall; do
+for name in service-restart set-timezone backup-now root-artisan update firewall nas-diag; do
   place "$app/ops/radiusone-$name" "/usr/local/sbin/radiusone-$name" 0755
 done
 # The names before 2.3 lead to the new helpers (old cron lines, scripts). frweb-update is the old, git-based
@@ -58,10 +58,12 @@ helper=/usr/local/sbin/radiusone-service-restart
 tmp=$(mktemp)
 cat > "$tmp" <<EOF
 # RadiusOne portal buttons (ops/radiusone-postinstall): Restart on Monitoring → RADIUS server, the time zone
-# switch on Settings → Regional, Back up now on Settings → Backups. Updates need no rule (radiusone-update.path).
+# switch on Settings → Regional, Back up now on Settings → Backups, the log and packet test on NAS → Diagnostics.
+# Updates need no rule (radiusone-update.path).
 www-data ALL=(root) NOPASSWD: $helper freeradius, $helper mariadb, $helper nginx, $helper $fpm
 www-data ALL=(root) NOPASSWD: /usr/local/sbin/radiusone-set-timezone schedule *
 www-data ALL=(root) NOPASSWD: /usr/local/sbin/radiusone-backup-now
+www-data ALL=(root) NOPASSWD: /usr/local/sbin/radiusone-nas-diag log, /usr/local/sbin/radiusone-nas-diag capture
 EOF
 visudo -cf "$tmp" >/dev/null
 install -o root -g root -m 0440 "$tmp" /etc/sudoers.d/radiusone
@@ -105,4 +107,21 @@ systemctl enable --quiet radiusone-firewall.service radiusone-firewall.path
 systemctl restart radiusone-firewall.path
 /usr/local/sbin/radiusone-firewall detect || true
 
-echo "RadiusOne helpers, sudoers, updates and the firewall are set up for $app."
+echo "== NAS diagnostics"
+command -v tcpdump >/dev/null || apt-get install -y -q --no-install-recommends tcpdump >/dev/null 2>&1 \
+  || echo 'Could not install tcpdump, so the packet test will not work until you run: sudo apt install tcpdump' >&2
+# Login results in FreeRADIUS's log, per router. Never passwords (auth_badpass stays as it is). It takes effect at the
+# next FreeRADIUS restart, which this script does not do: customers stay connected.
+radconf=/etc/freeradius/3.0/radiusd.conf
+if [[ -f $radconf ]] && grep -qE '^[[:space:]]*auth = no' "$radconf"; then
+  cp -p "$radconf" "$radconf.radiusone-tmp"
+  sed -i -E 's/^([[:space:]]*)auth = no/\1auth = yes/' "$radconf"
+  if freeradius -C >/dev/null 2>&1; then
+    rm -f "$radconf.radiusone-tmp"
+  else
+    mv -f "$radconf.radiusone-tmp" "$radconf"
+    echo 'FreeRADIUS did not accept login logging, so it stays off.' >&2
+  fi
+fi
+
+echo "RadiusOne helpers, sudoers, updates, the firewall and NAS diagnostics are set up for $app."

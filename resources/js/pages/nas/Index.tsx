@@ -1,6 +1,7 @@
 import { Link } from '@inertiajs/react';
 import { DeleteButton } from '@/components/confirm';
 import Icon from '@/components/Icon';
+import { UnknownRouters } from '@/components/NasDiagnostics';
 import { DataTable } from '@/components/table';
 import { Badge, Panel, Tag, type TagData } from '@/components/ui';
 import AppLayout from '@/layouts/AppLayout';
@@ -16,6 +17,7 @@ export default function NasIndex({ devices }: { devices: Device[] }) {
                 <Link className="button" href="/monitoring"><Icon name="activity" />Monitoring</Link>
                 {can('nas.manage') && <Link className="button primary" href="/nas/create">New NAS device</Link>}
             </div>
+            <UnknownRouters canAdd={can('nas.manage')} />
             <Panel title="BRAS / NAS Devices">
                 <DataTable
                     rows={devices}

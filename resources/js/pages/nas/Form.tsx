@@ -1,5 +1,6 @@
 import { Link, useForm } from '@inertiajs/react';
 import Icon from '@/components/Icon';
+import NasDiagnostics from '@/components/NasDiagnostics';
 import { DataTable } from '@/components/table';
 import { Tabs } from '@/components/tabs';
 import { Badge, Check, ConnectionState, Empty, ErrorSummary, Field, Panel, Select } from '@/components/ui';
@@ -222,6 +223,7 @@ export default function NasForm({ device, vendors, setupSteps, canManage, nas, a
                             </>
                         ),
                     },
+                    { key: 'diagnostics', title: 'Diagnostics', icon: 'activity', content: <NasDiagnostics nasId={nas.id} /> },
                     { key: 'setup', title: 'Router setup', icon: 'settings', content: <><SetupGuide steps={setupSteps[nas.vendor]} /></> },
                 ]}
             />

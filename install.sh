@@ -98,7 +98,7 @@ step 'Installing packages (nginx, PHP 8.3, MariaDB, FreeRADIUS)'
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -q
 apt-get install -y -q --no-install-recommends \
-  ca-certificates curl git unzip openssl sudo cron logrotate iputils-ping xz-utils nftables \
+  ca-certificates curl git unzip openssl sudo cron logrotate iputils-ping xz-utils nftables tcpdump \
   nginx mariadb-server mariadb-client \
   freeradius freeradius-mysql freeradius-utils \
   "php$PHP-fpm" "php$PHP-cli" "php$PHP-mysql" "php$PHP-mbstring" "php$PHP-xml" "php$PHP-curl" \
@@ -321,6 +321,9 @@ cp -a "$site.radiusone-orig" "$site"
 # Simultaneous-Use (per-customer session limit) is checked against radacct.
 [[ $(grep -cP '^#\tsql$' "$site") == 1 ]] || fail "could not enable the session check in $site (FreeRADIUS version changed?)."
 sed -i -E 's/^#\tsql$/\tsql/' "$site"
+
+# Login results per router in radius.log, for NAS → Diagnostics. Never passwords (auth_badpass stays off).
+sed -i -E 's/^([[:space:]]*)auth = no/\1auth = yes/' "$RADDB/radiusd.conf"
 
 freeradius -C >/dev/null 2>&1 || { freeradius -C 2>&1 | tail -n 15; fail 'the FreeRADIUS configuration check failed.'; }
 systemctl enable freeradius >/dev/null

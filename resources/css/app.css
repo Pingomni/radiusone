@@ -1527,6 +1527,18 @@ td .list-menu > summary:hover { border-color: var(--line); background: var(--sur
 .overview .button, .overview button:not(.link) { width: 100%; margin-top: var(--sp-2); }
 .overview form { margin: 0; }
 .overview-note { margin-top: var(--sp-1); color: var(--text-muted); font-size: var(--fs-sm); }
+.nas-diagnostics { display: grid; gap: var(--sp-3); min-width: 0; }
+.nas-diagnostics > * { min-width: 0; }
+.nas-diagnostics-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--sp-2); margin-top: var(--sp-3); }
+.nas-diagnostics-head:first-child { margin-top: 0; }
+.nas-diagnostics-head h3 { margin: 0; }
+.nas-diagnostics .kv > strong { min-width: 0; overflow-wrap: anywhere; }
+.nas-verdict { padding: var(--sp-3); border: 1px solid var(--line); border-radius: var(--radius); }
+.nas-verdict strong { display: block; color: var(--text-strong); }
+.nas-verdict p { margin: var(--sp-1) 0 0; color: var(--text); }
+.nas-verdict.success { border-color: var(--success-line); background: var(--success-bg); }
+.nas-verdict.warning { border-color: var(--warning-line); background: var(--warning-bg); }
+.nas-verdict.danger { border-color: var(--danger-line); background: var(--danger-bg); }
 .setup-guide { display: grid; gap: var(--sp-3); margin-top: var(--sp-3); padding-left: 20px; }
 .setup-guide li { padding-left: 2px; }
 .setup-guide li::marker { color: var(--accent); font-weight: 600; }

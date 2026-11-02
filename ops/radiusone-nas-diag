@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+# Root helper behind NAS → Diagnostics (App\Support\NasDiagnostics). Installed by ops/radiusone-postinstall as
+# /usr/local/sbin/radiusone-nas-diag. www-data may run exactly "log" and "capture" through sudo; neither takes input.
+#   radiusone-nas-diag log          print FreeRADIUS's connection errors and login results, and firewall RADIUS drops
+#   radiusone-nas-diag capture      start the 60-second packet test in the background
+# The log output has no usernames or passwords. The packet test keeps whole RADIUS packets, so the portal can check them
+# against the saved shared secret: only root and the web server can read them, and they are deleted after 15 minutes.
+set -euo pipefail
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+# Memory only, so packets never reach the disk and a reboot clears them.
+dir=/run/radiusone-nas-diag
+unit=radiusone-nas-capture
+seconds=60
+[[ $EUID -eq 0 ]] || { echo 'Run as root.' >&2; exit 2; }
+
+case "${1:-}" in
+  log)
+    conf=/etc/freeradius/3.0/radiusd.conf
+    state=no
+    [[ -r $conf ]] && grep -qE '^[[:space:]]*auth[[:space:]]*=[[:space:]]*yes' "$conf" && state=yes
+    printf '#auth-log %s %s\n' "$state" "$(stat -c %Y "$conf" 2>/dev/null || echo 0)"
+    # Yesterday's log too, so the list does not empty at midnight. The brackets of a login line hold the username,
+    # and the password if a server has auth_badpass on: they never leave this script.
+    for file in /var/log/freeradius/radius.log.1 /var/log/freeradius/radius.log; do
+      [[ -r $file ]] && tail -c 16777216 "$file"
+    done | grep -aE 'unknown client|Login OK|Login incorrect|Invalid user' \
+      | sed -E 's/\[[^]]*\]/[]/g' | tail -n 5000 || true
+    # The firewall drops an unknown address before FreeRADIUS can log it (Firewall::render logs those drops).
+    journalctl -k -q --since=-24h -o short-unix --no-pager 2>/dev/null | grep -a 'radiusone-radius-drop:' | tail -n 1000 || true
+    ;;
+  capture)
+    command -v tcpdump >/dev/null || { echo 'tcpdump is not installed on this server. Run: sudo apt install tcpdump' >&2; exit 3; }
+    if systemctl is-active --quiet "$unit.service" && [[ ! -f $dir/capture.done ]]; then
+      echo 'A packet test is already running. Wait for it to finish.' >&2
+      exit 4
+    fi
+    systemctl stop "$unit.service" 2>/dev/null || true
+    install -d -o root -g www-data -m 0750 "$dir"
+    rm -f -- "$dir/capture.txt" "$dir/capture.started" "$dir/capture.done"
+    install -o root -g www-data -m 0640 /dev/null "$dir/capture.txt"
+    date +%s > "$dir/capture.started"
+    chgrp www-data "$dir/capture.started"
+    chmod 0640 "$dir/capture.started"
+    systemd-run --quiet --collect --unit="$unit" --description='RadiusOne: 60-second RADIUS packet test' \
+      /usr/local/sbin/radiusone-nas-diag run-capture
+    echo 'Packet test started.'
+    ;;
+  run-capture)
+    # Not in the sudoers rule: this is what the systemd unit above runs.
+    # Through a pipe, because the tcpdump AppArmor profile may refuse a file opened for it. At most 3000 packets, so a
+    # busy server cannot fill the memory.
+    (timeout "$seconds" tcpdump -nn -l -tt -x -i any -s 1500 -c 3000 'udp and (port 1812 or port 1813)' 2>/dev/null || true) \
+      | cat >> "$dir/capture.txt"
+    date +%s > "$dir/capture.done"
+    chgrp www-data "$dir/capture.done"
+    chmod 0640 "$dir/capture.done"
+    sleep 900
+    rm -f -- "$dir/capture.txt" "$dir/capture.started" "$dir/capture.done"
+    ;;
+  *) echo 'Usage: radiusone-nas-diag log|capture' >&2; exit 2 ;;
+esac

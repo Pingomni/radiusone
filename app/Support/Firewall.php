@@ -331,6 +331,79 @@ final class Firewall
         return is_array($active) ? $active : null;
     }
 
+    /**
+     * Whether the rules in force let this address reach RADIUS, walked as nft does: first match wins, then the drop policy.
+     *
+     * @return array{state: string, by: string, ports: list<int>} state: off, allowed or blocked
+     */
+    public static function radiusVerdict(string $address, ?string $now = null): array
+    {
+        $active = self::active();
+        if (empty($active['config']['enabled']) || in_array(self::status()['state'] ?? '', ['none', 'disabled'], true)) {
+            return ['state' => 'off', 'by' => '', 'ports' => []];
+        }
+        $now ??= date('Y-m-d H:i:s');
+        $blocked = [];
+        $by = '';
+        $allowed = '';
+        foreach ([1812, 1813] as $port) {
+            [$action, $rule] = self::firstMatch($address, $port, $active, $now);
+            if ($action === 'accept') {
+                $allowed = $rule;
+            } else {
+                $blocked[] = $port;
+                $by = $by !== '' ? $by : $rule;
+            }
+        }
+
+        return $blocked === [] ? ['state' => 'allowed', 'by' => $allowed, 'ports' => []] : ['state' => 'blocked', 'by' => $by, 'ports' => $blocked];
+    }
+
+    /**
+     * @param  array<string, mixed>  $active
+     * @return array{0: string, 1: string} the action, and in words what decided it
+     */
+    private static function firstMatch(string $address, int $port, array $active, string $now): array
+    {
+        foreach ((array) ($active['rules'] ?? []) as $rule) {
+            $rule = (array) $rule;
+            if (empty($rule['enabled']) || (!empty($rule['expires_at']) && (string) $rule['expires_at'] <= $now)) {
+                continue;
+            }
+            if (!in_array($rule['protocol'] ?? '', ['udp', 'tcp+udp', 'any'], true)) {
+                continue;
+            }
+            $source = (string) ($rule['source'] ?? '');
+            $matches = match ($source) {
+                '' => true,
+                self::ROUTERS => self::inside($address, array_values(array_map('strval', (array) ($active['routers'] ?? [])))),
+                default => self::inside($address, [$source]),
+            };
+            if (!$matches || !self::portListed($port, (string) ($rule['ports'] ?? ''))) {
+                continue;
+            }
+
+            return [(string) $rule['action'], 'rule ' . (int) ($rule['id'] ?? 0) . ($source === self::ROUTERS ? ' (routers)' : ($source === '' ? '' : ' (' . $source . ')'))];
+        }
+
+        return ['drop', 'the default drop rule'];
+    }
+
+    private static function portListed(int $port, string $ports): bool
+    {
+        if ($ports === '') {
+            return true;
+        }
+        foreach (explode(',', $ports) as $part) {
+            [$low, $high] = array_map('intval', explode('-', trim($part) . '-' . trim($part)));
+            if ($port >= $low && $port <= $high) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     /** Changes not in force yet (routers follow by themselves, so they do not count). */
     public static function pending(): bool
     {
@@ -525,6 +598,8 @@ final class Firewall
         foreach (array_slice((array) ($snapshot['rules'] ?? []), 0, self::MAX_RULES) as $rule) {
             array_push($chain, ...self::ruleLines((array) $rule, $sets['routers4'][1], $sets['routers6'][1], $now));
         }
+        $chain[] = '# RADIUS about to be dropped: noted for NAS → Diagnostics, which shows who is being refused.';
+        $chain[] = 'udp dport { 1812, 1813 } limit rate 12/minute log prefix "radiusone-radius-drop: " level info';
         $body[] = '    chain input {';
         foreach ($chain as $line) {
             $body[] = '        ' . $line;
