@@ -250,6 +250,8 @@ fi
 chown -R www-data:www-data storage bootstrap/cache
 
 step 'Creating the application tables'
+# The full grants name the tables, so they follow the migrations; the migration user needs its own grant first.
+mariadb -e "GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, DROP, REFERENCES, INDEX, ALTER ON \`$DB\`.* TO 'radiusone_migration'@'localhost'; FLUSH PRIVILEGES"
 RADIUSONE_OPERATOR_ENV_FILE="$ETC/migration.env" php artisan radiusone:migrate >/dev/null
 mariadb < "$APP/ops/install/radiusone-grants.sql"
 mariadb -e 'FLUSH PRIVILEGES'
