@@ -4,13 +4,17 @@ RadiusOne follows [semantic versioning](https://semver.org): **major** for chang
 upgrading, **minor** for new features, **patch** for fixes. The version is in the `VERSION` file and shows in
 the portal's sidebar and under Settings → System information.
 
-## Unreleased
+## 2.4.0 (2026-11-02)
+
+A firewall in the portal. Update with **Settings → Overview → Software update** or `sudo radiusone-update`. The
+firewall stays off until you turn it on.
 
 - **Firewall under Settings → Firewall.** Turn this server's firewall on and off, and manage its rules from the
   portal. It starts off, with a template you can change: the portal from anywhere, RADIUS from your routers, and
   SSH only from your management networks. If the portal can't reach the server within a minute of a change, the
   previous rules come back. See INSTALL.md. Runs `radiusone-postinstall` on update, which changes no rules.
 - **Fresh installs work again.** The installer gave the migration user its database rights too late.
+- **The repository moved to `Pingomni/radiusone`.** Update checks and links use the new address; the old one redirects.
 
 ## 2.3.4 (2026-10-30)
 
