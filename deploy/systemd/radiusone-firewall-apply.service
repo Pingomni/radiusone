@@ -1,0 +1,10 @@
+[Unit]
+Description=RadiusOne: apply the firewall rules (asked for in the portal)
+After=mariadb.service
+
+[Service]
+Type=oneshot
+# root: changes nftables. Waits up to a minute for the portal to confirm, then puts the old rules back.
+# Progress: /var/lib/radiusone/firewall-status/status.json.
+ExecStart=/usr/local/sbin/radiusone-firewall apply
+TimeoutStartSec=180

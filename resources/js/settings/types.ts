@@ -107,3 +107,36 @@ export type License = {
     /** The licence's registration with the PingOmni account portal (report only: Pro never depends on it). */
     activation: { status: 'off' | 'pending' | 'registered' | 'in_use' | 'refused' | 'unreachable'; message: string; hostname: string | null; last_ok: string | null; account_url: string };
 };
+
+export type FirewallRule = {
+    id: number;
+    position: number;
+    action: 'accept' | 'drop' | 'reject';
+    protocol: 'tcp' | 'udp' | 'tcp+udp' | 'icmp' | 'any';
+    source: string;
+    ports: string;
+    comment: string;
+    enabled: boolean;
+    created_by: string;
+    expires_at: string | null;
+    expired: boolean;
+};
+
+export type FirewallStatus = { state: string; id?: string; by?: string; message?: string; deadline?: number; enabled?: boolean; busy?: boolean };
+
+export type Firewall = {
+    config: { enabled: boolean; management_networks: string[] };
+    rules: FirewallRule[];
+    routers: string[];
+    active: { by: string; at: string } | null;
+    status: FirewallStatus;
+    on: boolean;
+    pending: boolean;
+    busy: boolean;
+    preview: string;
+    warnings: string[];
+    clientIp: string;
+    username: string;
+    ready: boolean;
+    sshPorts: number[];
+};

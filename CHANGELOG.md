@@ -4,6 +4,14 @@ RadiusOne follows [semantic versioning](https://semver.org): **major** for chang
 upgrading, **minor** for new features, **patch** for fixes. The version is in the `VERSION` file and shows in
 the portal's sidebar and under Settings → System information.
 
+## Unreleased
+
+- **Firewall under Settings → Firewall.** Turn this server's firewall on and off, and manage its rules from the
+  portal. It starts off, with a template you can change: the portal from anywhere, RADIUS from your routers, and
+  SSH only from your management networks. If the portal can't reach the server within a minute of a change, the
+  previous rules come back. See INSTALL.md. Runs `radiusone-postinstall` on update, which changes no rules.
+- **Fresh installs work again.** The installer gave the migration user its database rights too late.
+
 ## 2.3.4 (2026-10-30)
 
 The updater keeps the web user's access to `.env`. Update with `sudo radiusone-update` as usual.

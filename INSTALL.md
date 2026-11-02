@@ -207,8 +207,37 @@ but has not been tested on a real router yet. DHCP (MAC) login is not finished y
 | 1813 | UDP | your routers | RADIUS accounting |
 
 Outgoing, the server reaches your routers on UDP 3799 (disconnect/CoA), UDP 161 (SNMP, if set up) and
-TCP 8729 (RouterOS API, if switched on). Restrict 1812/1813 to your routers' addresses in your firewall.
-MariaDB (3306) listens only on the server itself.
+TCP 8729 (RouterOS API, if switched on). MariaDB (3306) listens only on the server itself.
+
+## Firewall
+
+**Settings → Firewall** manages this server's firewall from the portal, using nftables. It starts **off**. The
+first time you open the page, it fills in a template you can change:
+
+- **Management networks:** the address you opened the page from. SSH and the portal are always open to these
+  networks, whatever the rules say.
+- **Rules:** the portal (TCP 80 and 443) from anywhere, and RADIUS (UDP 1812 and 1813) from your routers.
+
+Everything else coming in is dropped. Replies to the server's own connections, such as CoA, SNMP and the
+RouterOS API, still get through.
+
+- **Turn on / Turn off:** switches the firewall. Turning it off keeps your rules for next time.
+- **Rules:** add, edit, reorder or switch off rules, or block an address for a limited time. **Restore the
+  template** brings back the starting rules. While the firewall is on, changes wait until you press **Apply
+  changes**.
+- **"routers" as a source** means the addresses under NAS. It follows them by themselves within a minute, with no
+  Apply. A router listed by name instead of an address isn't included; the page warns you about it.
+
+**You can't lock yourself out by accident.** After you turn it on or apply, your browser has a minute to reach
+the server again, or the previous rules come back by themselves. Confirmed rules load again at boot.
+
+If you still can't reach the portal, turn it off from the server's console:
+
+```bash
+sudo radiusone-firewall off
+```
+
+If `ufw` is active too, both firewalls apply, so a port has to be open in both. The page warns you about this.
 
 ## Running it again and updating
 

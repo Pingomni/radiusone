@@ -6,7 +6,7 @@
 #   - the root helpers in /usr/local/sbin: radiusone-service-restart (Restart buttons on Monitoring → RADIUS
 #     server), radiusone-set-timezone (Settings → Regional), radiusone-backup-now (Settings → Backups → Back up
 #     now), radiusone-root-artisan (artisan as root, for the helpers and the nightly backup) and
-#     radiusone-update (the updater). The names from before 2.3 (frweb-...) become links to them.
+#     radiusone-update (the updater), radiusone-firewall (Settings → Firewall). The names from before 2.3 (frweb-...) become links to them.
 #   - /etc/sudoers.d/radiusone: www-data may restart exactly FreeRADIUS, MariaDB, Nginx and PHP-FPM, schedule a
 #     time zone change and start a backup; nothing else.
 #   - installing updates from the portal, as DNSOne does: the request folder www-data writes in, the status
@@ -35,7 +35,7 @@ place() {  # $1 source, $2 target, $3 mode
 }
 
 echo "== root helpers ($app)"
-for name in service-restart set-timezone backup-now root-artisan update; do
+for name in service-restart set-timezone backup-now root-artisan update firewall; do
   place "$app/ops/radiusone-$name" "/usr/local/sbin/radiusone-$name" 0755
 done
 # The names before 2.3 lead to the new helpers (old cron lines, scripts). frweb-update is the old, git-based
@@ -93,4 +93,16 @@ systemctl enable --quiet radiusone-update.path
 # A request left while the units were being replaced is picked up now.
 systemctl restart radiusone-update.path
 
-echo "RadiusOne helpers, sudoers and updates are set up for $app."
+echo "== firewall from the portal ($data)"
+# Off until an administrator turns it on under Settings → Firewall. Nothing here changes the running rules.
+install -d -o www-data -g www-data -m 0750 "$data/firewall"
+install -d -o root -g www-data -m 0750 "$data/firewall-status"
+for unit in radiusone-firewall.path radiusone-firewall-apply.service radiusone-firewall.service; do
+  place "$app/deploy/systemd/$unit" "/etc/systemd/system/$unit" 0644
+done
+systemctl daemon-reload
+systemctl enable --quiet radiusone-firewall.service radiusone-firewall.path
+systemctl restart radiusone-firewall.path
+/usr/local/sbin/radiusone-firewall detect || true
+
+echo "RadiusOne helpers, sudoers, updates and the firewall are set up for $app."

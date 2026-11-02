@@ -6,6 +6,7 @@ use App\Http\Controllers\BillingController;
 use App\Http\Controllers\BrandingAssetController;
 use App\Http\Controllers\ClientController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\FirewallController;
 use App\Http\Controllers\MonitoringController;
 use App\Http\Controllers\NasController;
 use App\Http\Controllers\OperationsController;
@@ -65,6 +66,20 @@ Route::middleware('frweb.auth')->group(function () {
         // The update buttons post here; a browser left on these addresses (a reload, Back, a reopened tab after the
         // update) lands on Settings instead of an error.
         Route::get('/settings/update/{action}', static fn () => redirect('/settings'))->whereIn('action', ['check', 'start', 'move']);
+        Route::get('/settings/firewall/status', [FirewallController::class, 'status']);
+        Route::post('/settings/firewall/confirm', [FirewallController::class, 'confirm']);
+        Route::middleware('recent-auth')->prefix('/settings/firewall')->group(function () {
+            Route::post('/management', [FirewallController::class, 'management']);
+            Route::post('/rules', [FirewallController::class, 'addRule']);
+            Route::post('/rules/{id}', [FirewallController::class, 'updateRule'])->whereNumber('id');
+            Route::post('/rules/{id}/toggle', [FirewallController::class, 'toggleRule'])->whereNumber('id');
+            Route::post('/rules/{id}/move', [FirewallController::class, 'moveRule'])->whereNumber('id');
+            Route::post('/rules/{id}/delete', [FirewallController::class, 'deleteRule'])->whereNumber('id');
+            Route::post('/template', [FirewallController::class, 'template']);
+            Route::post('/enable', [FirewallController::class, 'enable']);
+            Route::post('/disable', [FirewallController::class, 'disable']);
+            Route::post('/apply', [FirewallController::class, 'apply']);
+        });
         Route::middleware('recent-auth')->group(function () {
             Route::post('/settings/license', [SettingsController::class, 'saveLicense']);
             Route::post('/settings/retention', [SettingsController::class, 'saveRetention']);

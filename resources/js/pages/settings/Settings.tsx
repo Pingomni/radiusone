@@ -3,16 +3,17 @@ import AppLayout from '@/layouts/AppLayout';
 import { BackupsTab } from '@/settings/BackupsTab';
 import { BrandingTab } from '@/settings/BrandingTab';
 import { DocumentsTab } from '@/settings/DocumentsTab';
+import { FirewallTab } from '@/settings/FirewallTab';
 import { LicenseTab } from '@/settings/LicenseTab';
 import { NotificationsTab } from '@/settings/NotificationsTab';
 import { OverviewTab } from '@/settings/OverviewTab';
 import { RegionalTab } from '@/settings/RegionalTab';
 import { RetentionTab } from '@/settings/RetentionTab';
 import { UsersTab } from '@/settings/UsersTab';
-import type { Backups, Branding, Documents, License, Notifications, Operator, Overview, Regional, Retention, SoftwareUpdate } from '@/settings/types';
+import type { Backups, Branding, Documents, Firewall, License, Notifications, Operator, Overview, Regional, Retention, SoftwareUpdate } from '@/settings/types';
 
-export default function Settings({ tab, overview, update, users, usersSummary, roleDescriptions, branding, notifications, documents, regional, retention, backups, license }: {
-    tab: 'overview' | 'users' | 'notifications' | 'branding' | 'documents' | 'regional' | 'retention' | 'backups' | 'license';
+export default function Settings({ tab, overview, update, users, usersSummary, roleDescriptions, branding, notifications, documents, regional, retention, backups, firewall, license }: {
+    tab: 'overview' | 'users' | 'notifications' | 'branding' | 'documents' | 'regional' | 'retention' | 'backups' | 'firewall' | 'license';
     overview: Overview;
     update: SoftwareUpdate | null;
     users: Operator[] | null;
@@ -24,6 +25,7 @@ export default function Settings({ tab, overview, update, users, usersSummary, r
     regional: Regional | null;
     retention: Retention | null;
     backups: Backups | null;
+    firewall: Firewall | null;
     license: License | null;
 }) {
     return (
@@ -39,6 +41,7 @@ export default function Settings({ tab, overview, update, users, usersSummary, r
                     {tab === 'regional' && regional && <RegionalTab r={regional} />}
                     {tab === 'retention' && retention && <RetentionTab r={retention} />}
                     {tab === 'backups' && backups && <BackupsTab b={backups} />}
+                    {tab === 'firewall' && firewall && <FirewallTab f={firewall} />}
                     {tab === 'license' && license && <LicenseTab l={license} />}
                 </div>
             </div>

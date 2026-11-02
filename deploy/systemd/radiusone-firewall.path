@@ -1,0 +1,10 @@
+[Unit]
+Description=RadiusOne: watch for firewall changes to apply (Settings → Firewall)
+
+[Path]
+# The portal or the scheduler (www-data) creates this file; radiusone-firewall removes it as it starts.
+PathExists=/var/lib/radiusone/firewall/request
+Unit=radiusone-firewall-apply.service
+
+[Install]
+WantedBy=multi-user.target

@@ -6,6 +6,7 @@ namespace Tests;
 
 use App\Support\Backup\BackupNow;
 use App\Support\Db;
+use App\Support\Firewall;
 use App\Support\License;
 use App\Support\MigrationRunner;
 use App\Support\Security;
@@ -45,6 +46,10 @@ abstract class TestCase extends BaseTestCase
         SoftwareUpdate::$statusDir = $dir . '/update-status';
         SoftwareUpdate::$legacyStatusFile = $dir . '/update-status.json';
         SoftwareUpdate::$legacyLogFile = $dir . '/update.log';
+        // Nor nft: a test must not change this server's firewall.
+        Firewall::$requestDir = $dir . '/firewall';
+        Firewall::$statusDir = $dir . '/firewall-status';
+        Firewall::$nft = [$dir . '/no-nft'];
         // This checkout counts as moved to the RadiusOne layout unless a test says otherwise.
         SoftwareUpdate::$home = (string) realpath(base_path());
         SoftwareUpdate::$legacyEtc = $dir . '/no-freeradius-web';

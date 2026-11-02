@@ -97,6 +97,7 @@ const SECTIONS: [key: string, label: string, href: string, icon: string, hint: s
     ['documents', 'Invoices & receipts', '/settings?tab=documents', 'billing', 'PDF wording and company details'],
     ['regional', 'Regional', '/settings?tab=regional', 'calendar', 'Time zone and currency'],
     ['backups', 'Backups', '/settings?tab=backups', 'server', 'Encrypted remote copies'],
+    ['firewall', 'Firewall', '/settings?tab=firewall', 'shield', 'This server\'s firewall rules'],
     ['retention', 'Data retention', '/settings?tab=retention', 'logs', 'Session and login records'],
     ['license', 'License', '/settings?tab=license', 'lock', 'RadiusOne Pro key'],
 ];

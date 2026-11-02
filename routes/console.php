@@ -30,6 +30,9 @@ Schedule::command('radiusone:prune-job-runs')->dailyAt('03:30')->appendOutputTo(
 // Needs DELETE on radacct/radpostauth (ops/install/grants.sql).
 Schedule::command('radiusone:prune-radius')->dailyAt('03:45')->appendOutputTo($log('maintenance'));
 
+// Settings → Firewall: the rules in force follow the routers and expired rules (does nothing while it is off).
+Schedule::command('radiusone:firewall sync')->everyMinute()->runInBackground()->appendOutputTo($log('firewall'));
+
 // The licence's server, registered with the PingOmni account when due (report only: never changes a Pro feature).
 Schedule::command('license:check-in')->everyFiveMinutes()->runInBackground()->appendOutputTo($log('license'));
 

@@ -98,7 +98,7 @@ step 'Installing packages (nginx, PHP 8.3, MariaDB, FreeRADIUS)'
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -q
 apt-get install -y -q --no-install-recommends \
-  ca-certificates curl git unzip openssl sudo cron logrotate iputils-ping xz-utils \
+  ca-certificates curl git unzip openssl sudo cron logrotate iputils-ping xz-utils nftables \
   nginx mariadb-server mariadb-client \
   freeradius freeradius-mysql freeradius-utils \
   "php$PHP-fpm" "php$PHP-cli" "php$PHP-mysql" "php$PHP-mbstring" "php$PHP-xml" "php$PHP-curl" \

@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# Root's side of Settings → Firewall (App\Support\Firewall). Installed by ops/radiusone-postinstall as
+# /usr/local/sbin/radiusone-firewall. It is not in the sudoers rule: www-data only leaves a request, which
+# radiusone-firewall.path picks up.
+#   radiusone-firewall boot     load the last confirmed rules (radiusone-firewall.service, before the network)
+#   radiusone-firewall apply    apply the snapshot in force, then wait for the portal to confirm it
+#   radiusone-firewall detect   note this server's SSH ports, and whether ufw and nft are here, for the portal
+#   radiusone-firewall off      remove the rules from a shell, if the portal cannot be reached
+set -euo pipefail
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+status=/var/lib/radiusone/firewall-status
+[[ $EUID -eq 0 ]] || { echo 'Run as root.' >&2; exit 2; }
+
+detect() {
+  local ports='' ufw=false nft=false tmp
+  # The ports sshd really listens on: management networks must keep reaching them.
+  ports=$(sshd -T 2>/dev/null | awk '$1 == "port" && $2 ~ /^[0-9]+$/ { print $2 }' | sort -un | paste -sd, -) || true
+  [[ -n $ports ]] || ports=22
+  command -v ufw >/dev/null && ufw status 2>/dev/null | grep -q '^Status: active' && ufw=true
+  command -v nft >/dev/null && nft=true
+  tmp=$(mktemp "$status/.host.XXXXXX")
+  printf '{"ssh_ports":[%s],"ufw_active":%s,"nft":%s}\n' "$ports" "$ufw" "$nft" > "$tmp"
+  chown root:www-data "$tmp"; chmod 0640 "$tmp"
+  mv -f "$tmp" "$status/host.json"
+}
+
+case "${1:-}" in
+  boot)
+    if [[ -f $status/active.nft && ! -L $status/active.nft ]]; then
+      nft -f "$status/active.nft"
+    fi
+    ;;
+  apply)
+    detect
+    exec /usr/local/sbin/radiusone-root-artisan radiusone:firewall apply
+    ;;
+  detect)
+    detect
+    ;;
+  off)
+    # Directly first: this must work even if the portal, PHP or the database does not.
+    nft delete table inet radiusone 2>/dev/null || true
+    rm -f "$status/active.nft"
+    /usr/local/sbin/radiusone-root-artisan radiusone:firewall off || echo 'The rules are gone, but the portal could not be told. Turn the firewall off there too.' >&2
+    echo 'The RadiusOne firewall is off.'
+    ;;
+  *) echo 'Usage: radiusone-firewall boot|apply|detect|off' >&2; exit 2 ;;
+esac

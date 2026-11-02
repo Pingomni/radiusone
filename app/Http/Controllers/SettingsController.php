@@ -44,7 +44,7 @@ final class SettingsController extends Controller
     {
         $tab = (string) $request->query('tab', 'overview');
         $tab = $tab === 'custom' ? 'branding' : $tab;
-        $tab = in_array($tab, ['overview', 'users', 'notifications', 'branding', 'documents', 'regional', 'retention', 'backups', 'license'], true) ? $tab : 'overview';
+        $tab = in_array($tab, ['overview', 'users', 'notifications', 'branding', 'documents', 'regional', 'retention', 'backups', 'firewall', 'license'], true) ? $tab : 'overview';
 
         $userCount = (int) Db::value('SELECT COUNT(*) FROM portal_users');
         $enabledUsers = (int) Db::value('SELECT COUNT(*) FROM portal_users WHERE enabled = 1');
@@ -70,6 +70,7 @@ final class SettingsController extends Controller
             // Only the active tab's notification data is built: it may query many customers.
             'notifications' => $tab === 'notifications' ? $this->notifications($request) : null,
             'backups' => $tab === 'backups' ? BackupSettingsController::props() : null,
+            'firewall' => $tab === 'firewall' ? FirewallController::props() : null,
             'documents' => $tab === 'documents' ? [
                 'values' => BillingDocuments::settings(),
                 'defaults' => BillingDocuments::defaults(),
