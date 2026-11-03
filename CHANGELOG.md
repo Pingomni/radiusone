@@ -4,6 +4,14 @@ RadiusOne follows [semantic versioning](https://semver.org): **major** for chang
 upgrading, **minor** for new features, **patch** for fixes. The version is in the `VERSION` file and shows in
 the portal's sidebar and under Settings → System information.
 
+## 2.5.1 (2026-11-03)
+
+Get back in when you're locked out. Update with **Settings → Overview → Software update** or `sudo radiusone-update`.
+
+- **Reset a portal password from the terminal:** `sudo radiusone-root-artisan radiusone:reset-password <login>`. It asks
+  for the new password without showing it, logs out open sessions and records the reset in the audit log. Add
+  `--reset-2fa` if the authenticator phone is lost too.
+
 ## 2.5.0 (2026-11-02)
 
 See why a router can't connect. Update with **Settings → Overview → Software update** or `sudo radiusone-update`.

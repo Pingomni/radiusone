@@ -333,6 +333,6 @@ in `/var/backups/radiusone-move-<date>/`; if a step fails it puts everything bac
 | *Let's Encrypt failed* | The domain must point at this server and port 80 must be open from the internet. The self-signed certificate stays in place; run the installer again once DNS is right. |
 | The login page does not open | `systemctl status nginx php8.3-fpm`, then `tail /var/log/nginx/error.log` and `storage/logs/` |
 | Routers are rejected or time out | Open the router under *NAS* → *Diagnostics*: see [Debugging a router](#debugging-a-router). |
-| Lost the administrator password | Another superadmin can reset it under *Settings → Users*. |
+| Lost the administrator password | Another superadmin can reset it under *Settings → Users*. Or on the server, run `sudo radiusone-root-artisan radiusone:reset-password admin`, using your login in place of `admin`. Leave the login out to list them, and add `--reset-2fa` if the authenticator phone is lost too. |
 | *Check for updates* says GitHub could not be reached | The server needs HTTPS access to `api.github.com` and `github.com`. Test with `sudo radiusone-update --check`. |
 | Scheduled jobs do not run | `cat /etc/cron.d/radiusone` and `tail /var/log/radiusone/scheduler.log`; *Monitoring* shows when each job last ran. |
