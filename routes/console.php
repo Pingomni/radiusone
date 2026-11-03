@@ -15,6 +15,8 @@ Schedule::command('radiusone:process-customer-notifications')->everyMinute()->ru
     ->when(static fn () => License::allows('notifications'));
 Schedule::command('radiusone:poll-snmp')->everyMinute()->runInBackground()->appendOutputTo($log('snmp-poll'))
     ->when(static fn () => License::allows('monitoring'));
+// Only reads: each OLT over SNMP every 5 minutes and its MAC table every 15. Does nothing until an OLT is added.
+Schedule::command('radiusone:poll-olts')->everyMinute()->runInBackground()->appendOutputTo($log('olt'));
 // Off until Settings → Notifications → Admin alerts is turned on (the command then checks every minute).
 // FreeRADIUS loads the NAS list when it starts: NAS saved before that are in effect.
 Schedule::command('radiusone:mark-nas-applied --auto')->everyMinute()->runInBackground()->appendOutputTo($log('nas-applied'));

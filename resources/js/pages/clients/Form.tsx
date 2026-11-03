@@ -5,6 +5,7 @@ import { PostButton, useConfirm } from '@/components/confirm';
 import Icon from '@/components/Icon';
 import { LivePanel } from '@/components/LivePanel';
 import { DataTable } from '@/components/table';
+import ClientOnu, { type ClientOnuData } from '@/components/ClientOnu';
 import { Tabs } from '@/components/tabs';
 import { UsageCard, type UsageHistory } from '@/components/usage';
 import { Badge, Check, ConnectionState, Empty, ErrorSummary, Field, Panel, Select, Tag, TextArea, type TagData } from '@/components/ui';
@@ -38,6 +39,7 @@ type Client = {
     documents: { id: number; type: string; name: string; mime: string; uploaded: string }[];
     logs: { actor: string; action: string; entity: string; time: string }[];
     revealed: string | null;
+    onu: ClientOnuData | null;
 };
 
 function Section({ title, icon, children }: { title: string; description?: string; icon: string; children: ReactNode }) {
@@ -208,7 +210,7 @@ export default function ClientForm({ values, draftRestored, draftTab, canEdit, c
     const form = useForm<Values>({ ...values, id_front: null, id_back: null });
     const [tab, setTab] = useState(draftTab ?? (typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('tab') : null) ?? 'account');
     // Accounting, Billing and Logs are read-only views: the form's Save bar does not apply there.
-    const formTab = !['accounting', 'billing', 'logs'].includes(tab);
+    const formTab = !['accounting', 'billing', 'logs', 'onu'].includes(tab);
     const [generated, setGenerated] = useState(false);
     const disabled = !canEdit;
     const dhcp = form.data.auth_method === 'dhcp';
@@ -334,6 +336,7 @@ export default function ClientForm({ values, draftRestored, draftTab, canEdit, c
                 </>
             ) : <Empty>Session details appear after the client is saved and connects.</Empty>,
         },
+        ...(client?.onu ? [{ key: 'onu', title: 'ONU', icon: 'fiber', content: <ClientOnu username={client.username} data={client.onu} canLink={canEdit} /> }] : []),
         {
             key: 'billing', title: 'Billing', icon: 'billing', count: client ? client.billing.invoices.length : undefined,
             content: client ? (

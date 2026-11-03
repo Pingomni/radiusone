@@ -9,6 +9,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\FirewallController;
 use App\Http\Controllers\MonitoringController;
 use App\Http\Controllers\NasController;
+use App\Http\Controllers\OltController;
 use App\Http\Controllers\OperationsController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ReportsController;
@@ -176,6 +177,24 @@ Route::middleware('frweb.auth')->group(function () {
     });
 
     // NAS devices and monitoring.
+    // OLTs and their ONUs: read-only towards the OLT.
+    Route::middleware('permission:nas.view')->group(function () {
+        Route::get('/olts', [OltController::class, 'index']);
+        Route::get('/olts/mapping', [OltController::class, 'mapping']);
+        Route::post('/clients/{username}/onu', [OltController::class, 'link']);
+        Route::post('/clients/{username}/onu/unlink', [OltController::class, 'unlink']);
+        Route::middleware('permission:nas.manage')->group(function () {
+            Route::get('/olts/create', [OltController::class, 'form']);
+            Route::get('/olts/{id}/edit', [OltController::class, 'form'])->whereNumber('id');
+            Route::post('/olts/save', [OltController::class, 'save']);
+            Route::post('/olts/{id}/save', [OltController::class, 'save'])->whereNumber('id');
+            Route::post('/olts/{id}/test', [OltController::class, 'test'])->whereNumber('id');
+            Route::post('/olts/{id}/sync', [OltController::class, 'sync'])->whereNumber('id');
+            Route::post('/olts/{id}/delete', [OltController::class, 'delete'])->whereNumber('id');
+        });
+        Route::get('/olts/{id}', [OltController::class, 'show'])->whereNumber('id');
+    });
+
     Route::middleware('permission:nas.view')->group(function () {
         Route::get('/nas', [NasController::class, 'index']);
         Route::get('/nas/health', [NasController::class, 'health']);

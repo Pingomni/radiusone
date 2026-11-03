@@ -150,6 +150,24 @@ const SECTIONS: Section[] = [
         ),
     },
     {
+        id: 'olt',
+        title: 'OLT and client mapping',
+        icon: 'fiber',
+        body: (
+            <>
+                <p>Under <Link href="/olts">OLT</Link>, add a Huawei MA5800-X7 to see each ONU&apos;s port, status, signal and last disconnect, and which client is on it. The portal only reads: it cannot change anything on the OLT.</p>
+                <Note>This server must reach the OLT&apos;s management address on UDP 161 (SNMP) and TCP 23 (telnet). Use a read-only SNMP community. Telnet is optional and not encrypted, so keep it on your management network.</Note>
+                <h3>How clients are linked</h3>
+                <ul>
+                    <li><strong>From the session:</strong> an online client&apos;s MAC is behind exactly one ONU. This needs telnet.</li>
+                    <li><strong>From the description:</strong> an ONU&apos;s description on the OLT matches a username, and only one ONU has it.</li>
+                    <li><strong>By hand:</strong> on the client&apos;s ONU tab, enter the serial number.</li>
+                </ul>
+                <p>A link follows the serial number, so it survives the ONU moving to another port. It is never replaced automatically. <Link href="/olts/mapping">Client mapping</Link> shows clients with no ONU, and clients whose session points to a different ONU.</p>
+            </>
+        ),
+    },
+    {
         id: 'monitoring',
         title: 'Monitoring',
         icon: 'activity',
@@ -430,6 +448,7 @@ const SECTIONS: Section[] = [
                         [<code>radiusone:sync-expired</code>, 'Every minute (RADIUSONE_SCHEDULE_EXPIRY_SYNC=true)', 'Expires services, moves expired customers to their expired plan and publishes changed access rules to RADIUS.'],
                         [<code>radiusone:process-network-operations</code>, 'Every minute (NETWORK_WORKER_ENABLED=true)', 'Applies those changes on the network: an online customer is disconnected (CoA or RouterOS API) so they reconnect with the new rules; an offline one gets them at the next login. A refused disconnect is retried five times, then shown under Network operations.'],
                         [<code>radiusone:mark-nas-applied --auto</code>, 'Every minute', 'Records NAS changes as in effect once FreeRADIUS has restarted.'],
+                        [<code>radiusone:poll-olts</code>, 'Every minute', 'Reads each OLT when due: the ONU list every 5 minutes and the MAC table every 15. Only reads, and links clients to ONUs.'],
                         [<code>radiusone:generate-billing</code>, '03:15', 'Creates recurring invoices and marks overdue ones.'],
                         [<code>radiusone:backup</code>, '02:15 (root cron)', 'Database and documents backup with encrypted remote copies.'],
                         [<code>radiusone:prune-job-runs</code>, '03:30', 'Removes old job history.'],

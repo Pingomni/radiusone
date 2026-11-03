@@ -91,6 +91,7 @@ final class Secrets
         $targets = [
             ['nas_metadata', 'nas_id', ['api_password'], '1=1'],
             ['nas_snmp', 'nas_id', ['community', 'v3_auth_password', 'v3_priv_password'], '1=1'],
+            ['olts', 'id', ['snmp_community', 'v3_auth_password', 'v3_priv_password', 'telnet_user', 'telnet_password'], '1=1'],
             ['settings', 'setting_key', ['setting_value'], 'is_secret = 1'],
         ];
         $summary = [];

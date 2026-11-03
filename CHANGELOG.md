@@ -4,6 +4,16 @@ RadiusOne follows [semantic versioning](https://semver.org): **major** for chang
 upgrading, **minor** for new features, **patch** for fixes. The version is in the `VERSION` file and shows in
 the portal's sidebar and under Settings → System information.
 
+## 2.6.0 (2026-11-03)
+
+See your OLT and which client is on which ONU. Update with **Settings → Overview → Software update** or `sudo radiusone-update`.
+
+- **OLT in the menu:** add a Huawei MA5800-X7 with SNMP, and optionally telnet. It shows each ONU's port, status, signal,
+  distance and last disconnect. Read-only: the portal can't change anything on the OLT.
+- **Client mapping:** clients are linked to their ONU from the session's MAC, or an ONU description matching the username,
+  or by hand. A new **ONU** tab on each client shows it.
+- **On the server:** four new database tables, and a job that does nothing until an OLT is added.
+
 ## 2.5.1 (2026-11-03)
 
 Get back in when you're locked out. Update with **Settings → Overview → Software update** or `sudo radiusone-update`.

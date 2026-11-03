@@ -19,6 +19,10 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON `radius`.`nas_snmp_temperature_samples` 
 GRANT SELECT, INSERT, UPDATE, DELETE ON `radius`.`nas_snmp_health_samples` TO `radiusone_portal`@`localhost`;
 GRANT SELECT, INSERT, UPDATE ON `radius`.`settings` TO `radiusone_portal`@`localhost`;
 GRANT SELECT, INSERT, UPDATE, DELETE ON `radius`.`firewall_rules` TO `radiusone_portal`@`localhost`;
+GRANT SELECT, INSERT, UPDATE, DELETE ON `radius`.`olts` TO `radiusone_portal`@`localhost`;
+GRANT SELECT, INSERT, UPDATE, DELETE ON `radius`.`olt_onus` TO `radiusone_portal`@`localhost`;
+GRANT SELECT, INSERT, UPDATE, DELETE ON `radius`.`olt_macs` TO `radiusone_portal`@`localhost`;
+GRANT SELECT, INSERT, UPDATE, DELETE ON `radius`.`customer_onus` TO `radiusone_portal`@`localhost`;
 GRANT SELECT, INSERT, UPDATE, DELETE ON `radius`.`billing_invoices` TO `radiusone_portal`@`localhost`;
 GRANT SELECT, INSERT, UPDATE ON `radius`.`notification_jobs` TO `radiusone_portal`@`localhost`;
 GRANT SELECT, INSERT, UPDATE, DELETE ON `radius`.`radreply` TO `radiusone_portal`@`localhost`;

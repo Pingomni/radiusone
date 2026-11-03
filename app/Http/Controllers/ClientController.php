@@ -178,6 +178,7 @@ final class ClientController extends Controller
                 'cause' => (string) $r['acctterminatecause'],
             ], Db::select('SELECT acctstarttime, acctupdatetime, acctstoptime, acctsessiontime, framedipaddress, nasipaddress, acctinputoctets, acctoutputoctets, acctterminatecause FROM radacct WHERE ' . $in . ' ORDER BY acctstarttime DESC LIMIT 50', $ids)),
             'billing' => $this->billing($row, $invoices),
+            'onu' => Auth::can('nas.view') ? OltController::clientTab((int) $row['id']) : null,
             'documents' => Auth::can('documents.view') ? array_map(static fn (array $d) => [
                 'id' => (int) $d['id'],
                 'type' => (string) $d['document_type'],
