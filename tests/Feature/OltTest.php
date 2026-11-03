@@ -468,9 +468,15 @@ final class OltTest extends TestCase
         return MonitoringData::overview();
     }
 
+    /** What the OLTs put under Needs attention: the test machine may have stopped services of its own. */
+    private function oltProblems(): array
+    {
+        return array_values(array_filter(array_column($this->overview()['problems'], 'text'), static fn (string $text) => str_starts_with($text, 'OLT ')));
+    }
+
     private function problemTexts(): string
     {
-        return implode("\n", array_column($this->overview()['problems'], 'text'));
+        return implode("\n", $this->oltProblems());
     }
 
     public function test_monitoring_shows_a_card_for_each_olt_without_contacting_it(): void
@@ -497,7 +503,7 @@ final class OltTest extends TestCase
         $this->startAgent();
         $olt = $this->olt();
         OltSync::run($olt);
-        $this->assertSame([], $this->overview()['problems']);
+        $this->assertSame([], $this->oltProblems());
 
         Db::exec('UPDATE olts SET snmp_community=? WHERE id=?', [Secrets::encrypt('wrong'), $olt['id']]);
         OltSync::run(['sync_requested_at' => 'now'] + Olts::find((int) $olt['id']));
@@ -529,7 +535,7 @@ final class OltTest extends TestCase
         $olt = $this->olt();
         OltSync::run($olt);
         Db::exec('UPDATE olts SET enabled=0,last_sync_at=NOW()-INTERVAL 1 DAY,last_sync_ok=0 WHERE id=?', [$olt['id']]);
-        $this->assertSame([], $this->overview()['problems']);
+        $this->assertSame([], $this->oltProblems());
         $this->assertFalse($this->overview()['olts'][0]['danger']);
         $this->assertArrayNotHasKey('olt', JobHealth::all());
     }
@@ -545,7 +551,7 @@ final class OltTest extends TestCase
             $row + ['port' => 1, 'ont_id' => 1, 'sn' => 'B1'],
             $row + ['port' => 2, 'ont_id' => 1, 'sn' => 'C1'], $row + ['port' => 2, 'ont_id' => 2, 'sn' => 'C2'],
         ]);
-        $this->assertSame([], $this->overview()['problems']);
+        $this->assertSame([], $this->oltProblems());
         sleep(1);
         $down = ['status' => 'offline'] + $row;
         OltSync::saveOnus($olt, [
@@ -554,12 +560,12 @@ final class OltTest extends TestCase
             $down + ['port' => 2, 'ont_id' => 1, 'sn' => 'C1'], $row + ['port' => 2, 'ont_id' => 2, 'sn' => 'C2'],
         ]);
         // Only the port with several ONUs, all of them down.
-        $this->assertSame(['OLT olt-1: PON 0/1/0 has all 2 ONUs offline'], array_column($this->overview()['problems'], 'text'));
+        $this->assertSame(['OLT olt-1: PON 0/1/0 has all 2 ONUs offline'], $this->oltProblems());
         $this->assertTrue($this->overview()['olts'][0]['danger']);
 
         // A port down for more than a day is out of use, not an outage.
         Db::exec('UPDATE olt_onus SET last_online_at=NOW()-INTERVAL 2 DAY WHERE port=0');
-        $this->assertSame([], $this->overview()['problems']);
+        $this->assertSame([], $this->oltProblems());
     }
 
     public function test_the_olt_reader_shows_under_background_jobs_once_there_is_an_olt(): void
