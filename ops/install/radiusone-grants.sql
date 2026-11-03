@@ -22,6 +22,10 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON `radius`.`firewall_rules` TO `radiusone_
 GRANT SELECT, INSERT, UPDATE, DELETE ON `radius`.`olts` TO `radiusone_portal`@`localhost`;
 GRANT SELECT, INSERT, UPDATE, DELETE ON `radius`.`olt_onus` TO `radiusone_portal`@`localhost`;
 GRANT SELECT, INSERT, UPDATE, DELETE ON `radius`.`olt_samples` TO `radiusone_portal`@`localhost`;
+GRANT SELECT, INSERT, UPDATE, DELETE ON `radius`.`olt_fans` TO `radiusone_portal`@`localhost`;
+GRANT SELECT, INSERT, UPDATE, DELETE ON `radius`.`olt_boards` TO `radiusone_portal`@`localhost`;
+GRANT SELECT, INSERT, UPDATE, DELETE ON `radius`.`olt_ports` TO `radiusone_portal`@`localhost`;
+GRANT SELECT, INSERT, UPDATE, DELETE ON `radius`.`olt_hw_samples` TO `radiusone_portal`@`localhost`;
 GRANT SELECT, INSERT, UPDATE, DELETE ON `radius`.`olt_macs` TO `radiusone_portal`@`localhost`;
 GRANT SELECT, INSERT, UPDATE, DELETE ON `radius`.`customer_onus` TO `radiusone_portal`@`localhost`;
 GRANT SELECT, INSERT, UPDATE, DELETE ON `radius`.`billing_invoices` TO `radiusone_portal`@`localhost`;

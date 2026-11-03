@@ -9,7 +9,7 @@ import { useCan } from '@/lib/auth';
 
 type Item = { label: string; value: string; tone: string };
 type NasCard = { id: number; name: string; ip: string; vendor: string; state: TagData; danger: boolean; radiusDisabled: boolean; items: Item[]; readings: Item[]; setupSnmp: boolean };
-type OltCard = { id: number; name: string; host: string; model: string; enabled: boolean; danger: boolean; items: Item[] };
+type OltCard = { id: number; name: string; host: string; model: string; enabled: boolean; danger: boolean; items: Item[]; readings: Item[] };
 type Job = { label: string; does: string; detail: string; state: string; tone: string };
 type Overview = {
     metrics: Metric[];
@@ -80,7 +80,13 @@ function OverviewBody({ data, canManage }: { data: Overview; canManage: boolean 
                             {!olt.enabled ? <Badge tone="warning">off</Badge> : olt.danger && <Badge tone="danger">problem</Badge>}
                         </div>
                         <div className="health-grid">{olt.items.map((i) => <HealthItem key={i.label} {...i} />)}</div>
-                        <div className="health-card-actions"><Link className="button" href={`/olts/${olt.id}`}><Icon name="fiber" />ONUs and graph</Link></div>
+                        <Readings items={olt.readings} />
+                        <div className="health-card-actions">
+                            <Link className="button" href={`/olts/${olt.id}`}><Icon name="fiber" />ONUs</Link>
+                            <Link className="button" href={`/olts/${olt.id}?tab=ports`}>Ports</Link>
+                            <Link className="button" href={`/olts/${olt.id}?tab=cards`}>Cards</Link>
+                            <Link className="button" href={`/olts/${olt.id}?tab=graphs`}><Icon name="reports" />Graphs</Link>
+                        </div>
                     </article>
                 ))}
             </div>

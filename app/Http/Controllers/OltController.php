@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers;
 
 use App\Http\Support\Clients;
+use App\Http\Support\Format;
 use App\Http\Support\MonitoringData;
 use App\Support\Audit;
 use App\Support\Auth;
@@ -162,19 +163,87 @@ final class OltController extends Controller
             ],
             'counts' => array_map('intval', $counts ?? []),
             'filters' => ['q' => $q, 'status' => $status],
+            'hardware' => self::hardware($olt),
             'history' => (static function () use ($olt, $request): array {
                 $range = self::range($request->query('range'));
-                return ['range' => $range, 'ranges' => array_map(static fn (array $r) => $r[2], OltMonitor::RANGES), 'url' => '/olts/' . (int) $olt['id'] . '/graph?range=' . $range, 'data' => MonitoringData::oltChart($olt, $range)];
+                $graph = static fn (string $key, string $title, array $data) => ['key' => $key, 'title' => $title, 'url' => '/olts/' . (int) $olt['id'] . '/graph?chart=' . $key . '&range=' . $range, 'data' => $data];
+
+                return ['range' => $range, 'ranges' => array_map(static fn (array $r) => $r[2], OltMonitor::RANGES), 'charts' => [
+                    $graph('onus', 'ONUs over time', MonitoringData::oltChart($olt, $range)),
+                    $graph('cpu', 'Control card CPU and memory', MonitoringData::oltHardwareChart($olt, 'cpu', $range)),
+                    $graph('temperature', 'Temperature', MonitoringData::oltHardwareChart($olt, 'temperature', $range)),
+                    $graph('traffic', 'Uplink traffic', MonitoringData::oltHardwareChart($olt, 'traffic', $range)),
+                ]];
             })(),
             'result' => ['rows' => array_map(self::onuRow(...), $rows), 'total' => $total, 'page' => $page, 'pages' => $pages, 'size' => self::PAGE_SIZE],
         ]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $olt
+     * @return array<string, mixed>
+     */
+    private static function hardware(array $olt): array
+    {
+        $onus = [];
+        foreach (Db::select('SELECT frame,slot,port,COUNT(*) AS total,SUM(status="online") AS online FROM olt_onus WHERE olt_id=? GROUP BY frame,slot,port', [$olt['id']]) as $r) {
+            $onus[$r['frame'] . '/' . $r['slot'] . '/' . $r['port']] = ['total' => (int) $r['total'], 'online' => (int) $r['online']];
+        }
+        $rate = static fn (mixed $bps) => $bps === null ? null : Format::bytes((float) $bps / 8) . '/s';
+
+        return [
+            'lastRead' => $olt['last_hw_at'],
+            'error' => (string) ($olt['last_hw_error'] ?? ''),
+            'boards' => array_map(static function (array $b) {
+                $state = OltMonitor::boardState($b['status_code'] === null ? null : (int) $b['status_code'], $b['online_code'] === null ? null : (int) $b['online_code']);
+
+                return [
+                    'position' => $b['frame'] . '/' . $b['slot'],
+                    'name' => (string) $b['name'],
+                    'status' => $state['text'],
+                    'tone' => $state['ok'] ? 'success' : ($state['alert'] ? 'danger' : 'warning'),
+                    'role' => match ((int) $b['work_mode']) {
+                        1 => 'Active', 2 => 'Standby', default => ''
+                    },
+                    'power' => match ((int) $b['power_input']) {
+                        1 => 'Normal', 2 => 'Fault', default => ''
+                    },
+                    'serial' => (string) $b['serial'],
+                    'cpu' => $b['cpu_pct'] === null ? null : (int) $b['cpu_pct'],
+                    'memory' => $b['mem_pct'] === null ? null : (int) $b['mem_pct'],
+                    'temperature' => $b['temperature_c'] === null ? null : (int) $b['temperature_c'],
+                ];
+            }, Db::select('SELECT * FROM olt_boards WHERE olt_id=? ORDER BY frame,slot', [$olt['id']])),
+            'fans' => array_map(static fn (array $f) => ['label' => (string) $f['label'], 'state' => (string) $f['state'], 'ok' => (bool) $f['ok'], 'speed' => $f['speed_pct'] === null ? null : (int) $f['speed_pct']], Db::select('SELECT * FROM olt_fans WHERE olt_id=? ORDER BY label', [$olt['id']])),
+            'ports' => array_map(static function (array $p) use ($onus, $rate) {
+                $count = preg_match('~(\\d+)\\s*/\\s*(\\d+)\\s*/\\s*(\\d+)~', (string) $p['name'], $m) ? ($onus[$m[1] . '/' . $m[2] . '/' . $m[3]] ?? null) : null;
+
+                return [
+                    'id' => (int) $p['if_index'],
+                    'name' => (string) $p['name'],
+                    'alias' => (string) $p['alias'],
+                    'kind' => (string) $p['kind'],
+                    'admin' => $p['admin_up'] === null ? null : (bool) $p['admin_up'],
+                    'oper' => $p['oper_up'] === null ? null : (bool) $p['oper_up'],
+                    'speed' => $p['speed_mbps'] === null ? null : (int) $p['speed_mbps'],
+                    'in' => $rate($p['in_bps']),
+                    'out' => $rate($p['out_bps']),
+                    'errors' => $p['in_errors'] === null && $p['out_errors'] === null ? null : number_format((float) $p['in_errors'] + (float) $p['out_errors'], 0, '.', ''),
+                    'onus' => $p['kind'] === 'pon' ? $count : null,
+                ];
+            }, Db::select('SELECT * FROM olt_ports WHERE olt_id=? ORDER BY kind DESC,if_index', [$olt['id']])),
+        ];
     }
 
     public function graph(Request $request, string $id): JsonResponse
     {
         $olt = Olts::find((int) $id);
         abort_if(!$olt, 404, 'OLT not found.');
-        return response()->json(MonitoringData::oltChart($olt, self::range($request->query('range'))))->header('Cache-Control', 'no-store');
+        $range = self::range($request->query('range'));
+        $chart = (string) $request->query('chart', 'onus');
+        $data = in_array($chart, ['cpu', 'temperature', 'traffic'], true) ? MonitoringData::oltHardwareChart($olt, $chart, $range) : MonitoringData::oltChart($olt, $range);
+
+        return response()->json($data)->header('Cache-Control', 'no-store');
     }
 
     private static function range(mixed $requested): string

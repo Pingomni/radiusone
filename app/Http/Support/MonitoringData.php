@@ -519,6 +519,40 @@ final class MonitoringData
         ]);
     }
 
+    /**
+     * The OLT's hardware graphs.
+     *
+     * @param  array<string, mixed>  $olt
+     * @return array<string, mixed>
+     */
+    public static function oltHardwareChart(array $olt, string $kind, string $range): array
+    {
+        $config = match ($kind) {
+            'cpu' => ['title' => 'Control card CPU and memory', 'unit' => 'pct', 'fixed_max' => 100.0, 'columns' => ['cpu' => 'cpu_pct', 'mem' => 'mem_pct'], 'names' => ['cpu' => 'CPU', 'mem' => 'Memory'], 'note' => '% used'],
+            'temperature' => ['title' => 'Hottest card', 'unit' => 'celsius', 'zero' => false, 'columns' => ['s0' => 'temperature_c'], 'names' => ['s0' => 'Temperature'], 'note' => '°C'],
+            default => ['title' => 'Uplink traffic', 'unit' => 'bps', 'columns' => ['s0' => 'in_bps', 's1' => 'out_bps'], 'names' => ['s0' => 'In', 's1' => 'Out'], 'note' => 'All uplinks together'],
+        };
+        $series = OltMonitor::hardwareSeries((int) $olt['id'], $range, $config['columns']);
+        $latest = self::latestValues($series['points'], array_keys($config['columns']));
+        $show = match ($config['unit']) {
+            'pct' => static fn (?float $v) => self::pct($v),
+            'celsius' => static fn (?float $v) => $v === null ? '-' : self::trim($v) . ' °C',
+            default => static fn (?float $v) => $v === null ? '-' : self::bpsShort($v),
+        };
+        $names = [];
+        $summary = [];
+        foreach ($config['names'] as $key => $name) {
+            $names[$key] = [$name, $show($latest[$key]) . ' latest'];
+            $summary[] = strtolower($name) . ' ' . $show($latest[$key]);
+        }
+        return self::chart($series, $range, $config + [
+            'note' => '',
+            'series' => $names,
+            'empty' => 'No history yet. A point is added each minute, once the OLT reports these values.',
+            'summary' => $config['title'] . ' on ' . $olt['name'] . ', ' . strtolower(OltMonitor::RANGES[$range][2]) . ': latest ' . implode(', ', $summary) . '.',
+        ]);
+    }
+
     public static function temperatureChart(array $nas, string $range): array
     {
         $series = NasTraffic::temperatureSeries((int) $nas['id'], $range);

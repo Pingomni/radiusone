@@ -13,20 +13,25 @@ final class OltSync
 {
     public const SNMP_EVERY_SECONDS = 300;
     public const MAC_EVERY_SECONDS = 900;
+    public const HW_EVERY_SECONDS = 60;
 
     /** @return array<string, int> */
     public static function due(): array
     {
         $summary = ['olts' => 0, 'failed' => 0, 'linked' => 0];
         $olts = Db::select('SELECT * FROM olts WHERE enabled=1 AND (sync_requested_at IS NOT NULL OR last_sync_at IS NULL OR last_sync_at<=NOW()-INTERVAL ? SECOND
-            OR (telnet_enabled=1 AND (last_mac_sync_at IS NULL OR last_mac_sync_at<=NOW()-INTERVAL ? SECOND))) ORDER BY id', [self::SNMP_EVERY_SECONDS - 30, self::MAC_EVERY_SECONDS - 30]);
+            OR last_hw_at IS NULL OR last_hw_at<=NOW()-INTERVAL ? SECOND
+            OR (telnet_enabled=1 AND (last_mac_sync_at IS NULL OR last_mac_sync_at<=NOW()-INTERVAL ? SECOND))) ORDER BY id', [self::SNMP_EVERY_SECONDS - 30, self::HW_EVERY_SECONDS - 5, self::MAC_EVERY_SECONDS - 30]);
+        $listsRead = false;
         foreach ($olts as $olt) {
             $summary['olts']++;
+            $listsRead = $listsRead || $olt['sync_requested_at'] !== null || self::listDue($olt['last_sync_at'], self::SNMP_EVERY_SECONDS) || ($olt['telnet_enabled'] && self::listDue($olt['last_mac_sync_at'], self::MAC_EVERY_SECONDS));
             if (!self::run($olt)) {
                 $summary['failed']++;
             }
         }
-        if ($olts) {
+        // Hardware is read every minute, but links can only change when a list was read.
+        if ($listsRead) {
             $summary['linked'] = OltMapper::linkAutomatically();
         }
         return $summary;
@@ -42,7 +47,14 @@ final class OltSync
         $requested = $olt['sync_requested_at'] !== null;
         Db::exec('UPDATE olts SET sync_requested_at=NULL WHERE id=?', [$olt['id']]);
         $ok = true;
-        $snmpDue = $requested || $olt['last_sync_at'] === null || strtotime((string) $olt['last_sync_at']) <= time() - self::SNMP_EVERY_SECONDS + 30;
+        try {
+            OltMonitor::saveHardware($olt, HuaweiMa5800::readHardware(Olts::snmp($olt, 120.0)));
+            Db::exec('UPDATE olts SET last_hw_at=NOW(),last_hw_error=NULL WHERE id=?', [$olt['id']]);
+        } catch (Throwable $e) {
+            $ok = false;
+            Db::exec('UPDATE olts SET last_hw_at=NOW(),last_hw_error=? WHERE id=?', [self::message($e), $olt['id']]);
+        }
+        $snmpDue = $requested || self::listDue($olt['last_sync_at'], self::SNMP_EVERY_SECONDS);
         if ($snmpDue) {
             try {
                 self::saveOnus($olt, HuaweiMa5800::readOnus(Olts::snmp($olt)));
@@ -53,7 +65,7 @@ final class OltSync
                 Db::exec('UPDATE olts SET last_sync_at=NOW(),last_sync_ok=0,last_error=? WHERE id=?', [self::message($e), $olt['id']]);
             }
         }
-        $macDue = $olt['telnet_enabled'] && ($requested || $olt['last_mac_sync_at'] === null || strtotime((string) $olt['last_mac_sync_at']) <= time() - self::MAC_EVERY_SECONDS + 30);
+        $macDue = $olt['telnet_enabled'] && ($requested || self::listDue($olt['last_mac_sync_at'], self::MAC_EVERY_SECONDS));
         if ($macDue) {
             try {
                 self::saveMacs($olt, HuaweiMa5800::parseMacTable(Olts::cli($olt)->macTable()));
@@ -64,6 +76,11 @@ final class OltSync
             }
         }
         return $ok;
+    }
+
+    private static function listDue(mixed $last, int $every): bool
+    {
+        return $last === null || strtotime((string) $last) <= time() - $every + 30;
     }
 
     private static function message(Throwable $e): string

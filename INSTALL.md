@@ -260,7 +260,9 @@ Then use **OLT → New OLT** and press **Test connection**. The ONU list is read
 - **By hand:** on the client's **ONU** tab, enter the serial number.
 
 **Monitoring** shows a card for each OLT, and **Needs attention** lists a failed read, an OLT no longer being read, and a PON
-port with two or more ONUs that all went offline in the last 24 hours. The OLT's page has a graph of its ONUs over 7 days.
+port with two or more ONUs that all went offline in the last 24 hours. A faulty card, a power input fault, a fan fault, a card at 75 °C or more, a card's CPU at 90 % or more, and an uplink that's down are listed too. The
+OLT's page has tabs for **Ports** (state, speed, traffic, errors), **Cards** (status, CPU, memory, temperature, power input, and fans
+if the OLT reports them) and **Graphs** over up to 7 days. Cards and ports are read every minute.
 
 A link is kept by serial number, so it survives the ONU moving to another port. It is never replaced automatically: if a
 client's session later points to another ONU, *Client mapping* shows it under **Session points elsewhere** for you to

@@ -4,6 +4,17 @@ RadiusOne follows [semantic versioning](https://semver.org): **major** for chang
 upgrading, **minor** for new features, **patch** for fixes. The version is in the `VERSION` file and shows in
 the portal's sidebar and under Settings → System information.
 
+## 2.8.0 (2026-11-03)
+
+An OLT's own hardware. Update with **Settings → Overview → Software update** or `sudo radiusone-update`.
+
+- **Ports tab:** each uplink and PON port's state, speed, traffic and errors, and the ONUs online on each PON port.
+- **Cards tab:** each card's status, role, CPU, memory, temperature and power input, and fans if the OLT reports them.
+- **Graphs:** control card CPU and memory, the hottest card, and uplink traffic, alongside the ONUs.
+- **Monitoring:** the OLT's card shows CPU, memory, temperature, cards and ports. **Needs attention** lists a faulty,
+  too hot or too busy card, a power or fan fault, and an uplink that's down.
+- **On the server:** four new database tables and two new columns. Customers stay connected.
+
 ## 2.7.0 (2026-11-03)
 
 OLTs on the Monitoring page. Update with **Settings → Overview → Software update** or `sudo radiusone-update`.

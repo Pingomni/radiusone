@@ -10,6 +10,7 @@ use App\Support\JobHealth;
 use App\Support\Olt\HuaweiMa5800;
 use App\Support\Olt\OltCli;
 use App\Support\Olt\OltMapper;
+use App\Support\Olt\OltMonitor;
 use App\Support\Olt\Olts;
 use App\Support\Olt\OltSync;
 use App\Support\Secrets;
@@ -78,6 +79,39 @@ final class OltTest extends TestCase
         $oid["$b.51.1.6.$a"] = [2, 7146];
         // An offline ONU has no optical reading.
         $oid["$b.51.1.4.$c"] = [2, 2147483647];
+        // Cards: the control card and a GPON card, which has no memory reading.
+        foreach ([['0.9', 'H901MPLB', 2, 12, 48, 41, 1], ['0.1', 'H901GPHF', 2, 30, -1, 55, 255]] as [$slot, $name, $state, $cpu, $mem, $temp, $mode]) {
+            $oid["1.3.6.1.4.1.2011.6.3.3.2.1.21.$slot"] = $text($name);
+            $oid["1.3.6.1.4.1.2011.6.3.3.2.1.8.$slot"] = [2, $state];
+            $oid["1.3.6.1.4.1.2011.6.3.3.2.1.11.$slot"] = $text('SN' . $name);
+            $oid["1.3.6.1.4.1.2011.6.3.3.2.1.6.$slot"] = [2, $mode];
+            $oid["1.3.6.1.4.1.2011.2.6.7.1.1.2.1.8.$slot"] = [2, 1];
+            $oid["1.3.6.1.4.1.2011.2.6.7.1.1.2.1.17.$slot"] = [2, 3];
+            $oid["1.3.6.1.4.1.2011.2.6.7.1.1.2.1.5.$slot"] = [2, $cpu];
+            $oid["1.3.6.1.4.1.2011.2.6.7.1.1.2.1.6.$slot"] = [2, $mem];
+            $oid["1.3.6.1.4.1.2011.2.6.7.1.1.2.1.10.$slot"] = [2, $temp];
+        }
+        // A fan that works, and one that is not fitted.
+        $fan = '1.3.6.1.4.1.2011.5.25.31.1.1.10.1';
+        $oid["$fan.5.0.1"] = [2, 40];
+        $oid["$fan.6.0.1"] = [2, 1];
+        $oid["$fan.7.0.1"] = [2, 1];
+        $oid["$fan.6.0.2"] = [2, 2];
+        $oid["$fan.7.0.2"] = [2, 1];
+        // Ports: a PON port, an uplink, and a VLAN that is not shown.
+        $if = '1.3.6.1.2.1.2.2.1';
+        $ifx = '1.3.6.1.2.1.31.1.1.1';
+        foreach ([[self::PORT_A, 'GPON 0/1/0', 250, 1, 1, 2500], [self::PORT_B, 'GPON 0/2/5', 250, 1, 2, 2500], [7, 'ethernet0/9/0', 6, 1, 1, 10000], [8, 'vlanif100', 136, 1, 1, 0]] as [$index, $name, $type, $admin, $oper, $speed]) {
+            $oid["$ifx.1.$index"] = $text($name);
+            $oid["$if.3.$index"] = [2, $type];
+            $oid["$if.7.$index"] = [2, $admin];
+            $oid["$if.8.$index"] = [2, $oper];
+            $oid["$ifx.15.$index"] = [66, $speed];
+            $oid["$ifx.6.$index"] = [70, 1000000];
+            $oid["$ifx.10.$index"] = [70, 2000000];
+            $oid["$if.14.$index"] = [65, 3];
+            $oid["$if.20.$index"] = [65, 4];
+        }
         return $oid;
     }
 
@@ -598,7 +632,7 @@ final class OltTest extends TestCase
             ->assertJsonPath('chart.bucket', 300);
         // An unknown range falls back, and old points are removed.
         $this->getJson('/olts/' . $olt['id'] . '/graph?range=bad')->assertOk()->assertJsonPath('chart.bucket', 900);
-        $this->get('/olts/' . $olt['id'] . '?range=7d')->assertInertia(fn ($p) => $p->where('history.range', '7d')->where('history.data.chart.bucket', 5400));
+        $this->get('/olts/' . $olt['id'] . '?range=7d')->assertInertia(fn ($p) => $p->where('history.range', '7d')->where('history.charts.0.data.chart.bucket', 5400));
         Db::exec('INSERT INTO olt_samples (olt_id,sampled_at,onus,online,offline,weak) VALUES (?,?,0,0,0,0)', [$olt['id'], time() - 900000]);
         Db::exec('UPDATE olts SET sync_requested_at=NOW() WHERE id=?', [$olt['id']]);
         sleep(1);
@@ -622,6 +656,131 @@ final class OltTest extends TestCase
         $this->assertNull(Db::value('SELECT sync_requested_at FROM olts'));
         $this->post('/monitoring/poll', ['target' => 'all'])->assertRedirect();
         $this->assertNotNull(Db::value('SELECT sync_requested_at FROM olts WHERE id=?', [$olt['id']]));
+    }
+
+    public function test_it_reads_the_olts_cards_and_ports(): void
+    {
+        $this->startAgent();
+        $olt = $this->olt();
+        OltSync::run($olt);
+
+        $main = Db::row('SELECT * FROM olt_boards WHERE slot=9');
+        $this->assertSame(['H901MPLB', 2, 12, 48, 41, 'SNH901MPLB'], [$main['name'], (int) $main['status_code'], (int) $main['cpu_pct'], (int) $main['mem_pct'], (int) $main['temperature_c'], $main['serial']]);
+        // -1 means the card has no such reading.
+        $this->assertNull(Db::value('SELECT mem_pct FROM olt_boards WHERE slot=1'));
+        // The VLAN interface is not a port.
+        $this->assertSame(['ethernet0/9/0', 'GPON 0/1/0', 'GPON 0/2/5'], array_column(Db::select('SELECT name FROM olt_ports ORDER BY name'), 'name'));
+        $pon = Db::row('SELECT * FROM olt_ports WHERE name="GPON 0/2/5"');
+        $this->assertSame(['pon', 1, 0, 2500], [$pon['kind'], (int) $pon['admin_up'], (int) $pon['oper_up'], (int) $pon['speed_mbps']]);
+        $this->assertNull($pon['in_bps']);
+        $this->assertNull(Db::value('SELECT last_hw_error FROM olts'));
+        // The fan that isn't fitted is left out.
+        $fan = Db::select('SELECT * FROM olt_fans');
+        $this->assertCount(1, $fan);
+        $this->assertSame(['Fan 0/1', 'Normal', 1, 40], [$fan[0]['label'], $fan[0]['state'], (int) $fan[0]['ok'], (int) $fan[0]['speed_pct']]);
+
+        $this->actingAsOperator('view');
+        $this->get('/olts/' . $olt['id'] . '?tab=cards')->assertOk()->assertInertia(fn ($p) => $p
+            ->where('hardware.boards.1.name', 'H901MPLB')
+            ->where('hardware.boards.1.status', 'Normal')
+            ->where('hardware.boards.1.role', 'Active')
+            ->where('hardware.boards.1.power', '')
+            ->where('hardware.fans.0.speed', 40)
+            ->where('hardware.ports.0.name', 'ethernet0/9/0')
+            ->where('hardware.ports.0.oper', true)
+            ->where('hardware.ports.1.onus.total', 1));
+        $this->get('/monitoring')->assertInertia(fn ($p) => $p
+            ->where('overview.olts.0.readings.0', ['label' => 'CPU', 'value' => '12 %', 'tone' => ''])
+            ->where('overview.olts.0.readings.2.value', '55 °C')
+            ->where('overview.olts.0.readings.3.value', '2 of 2')
+            ->where('overview.olts.0.readings.4.value', '1 of 1')
+            ->where('overview.olts.0.readings.5.value', '1 of 1'));
+        foreach (['cpu', 'temperature', 'traffic', 'onus'] as $chart) {
+            $this->getJson('/olts/' . $olt['id'] . '/graph?chart=' . $chart)->assertOk();
+        }
+        $this->getJson('/olts/' . $olt['id'] . '/graph?chart=cpu&range=6h')->assertJsonPath('chart.series.0.label', 'CPU')->assertJsonPath('chart.unit', 'pct');
+    }
+
+    public function test_traffic_comes_from_the_change_in_the_counters(): void
+    {
+        $this->startAgent();
+        $olt = $this->olt();
+        $port = ['if_index' => 7, 'name' => 'ethernet0/9/0', 'kind' => 'uplink', 'alias' => '', 'admin_up' => 1, 'oper_up' => 1, 'speed_mbps' => 10000, 'in_errors' => 0, 'out_errors' => 0];
+        OltMonitor::saveHardware($olt, ['boards' => [], 'ports' => [$port + ['in_octets' => 1000, 'out_octets' => 5000]]]);
+        Db::exec('UPDATE olt_ports SET sampled_at=sampled_at-100');
+        OltMonitor::saveHardware($olt, ['boards' => [], 'ports' => [$port + ['in_octets' => 2000, 'out_octets' => 4000]]]);
+        $row = Db::row('SELECT * FROM olt_ports');
+        $this->assertSame(80.0, (float) $row['in_bps']);
+        // The counter went backwards: reset, so no rate.
+        $this->assertNull($row['out_bps']);
+    }
+
+    public function test_hardware_problems_need_attention(): void
+    {
+        $this->startAgent();
+        $olt = $this->olt();
+        OltSync::run($olt);
+        $this->assertSame([], $this->oltProblems());
+        Db::exec('UPDATE olt_boards SET status_code=3,power_input=2 WHERE slot=1');
+        Db::exec('UPDATE olt_fans SET ok=0,state="Abnormal"');
+        Db::exec('UPDATE olt_boards SET temperature_c=80,cpu_pct=95 WHERE slot=9');
+        Db::exec('UPDATE olt_ports SET oper_up=0 WHERE kind="uplink"');
+        // A PON port that is down is normal when nothing is plugged in, so only uplinks count.
+        Db::exec('UPDATE olt_ports SET oper_up=0 WHERE kind="pon"');
+        $this->assertSame([
+            'OLT olt-1: card 0/1 H901GPHF: Fault',
+            'OLT olt-1: card 0/1 H901GPHF: power input fault',
+            'OLT olt-1: card 0/9 H901MPLB is at 80 °C',
+            'OLT olt-1: card 0/9 H901MPLB CPU is at 95 %',
+            'OLT olt-1: Fan 0/1: Abnormal',
+            'OLT olt-1: uplink ethernet0/9/0 is down',
+        ], $this->oltProblems());
+        $this->assertTrue($this->overview()['olts'][0]['danger']);
+    }
+
+    public function test_card_states_follow_the_mib(): void
+    {
+        $state = OltMonitor::boardState(...);
+        $this->assertSame(['text' => 'Normal', 'ok' => true, 'alert' => false], $state(2, 1));
+        $this->assertSame(['text' => 'Normal', 'ok' => true, 'alert' => false], $state(2, null));
+        $this->assertSame(['text' => 'Normal', 'ok' => true, 'alert' => false], $state(null, 1));
+        // 7 is offline in HUAWEI-DEVICE-MIB, unless the other table says the card is online.
+        $this->assertSame(['text' => 'Offline', 'ok' => false, 'alert' => true], $state(7, null));
+        $this->assertSame(['text' => 'Offline', 'ok' => false, 'alert' => true], $state(7, 2));
+        $this->assertSame(['text' => 'Normal', 'ok' => true, 'alert' => false], $state(7, 1));
+        $this->assertSame(['text' => 'Fault', 'ok' => false, 'alert' => true], $state(3, null));
+        $this->assertSame(['text' => 'Fault', 'ok' => false, 'alert' => true], $state(2, 3));
+        $this->assertSame(['text' => 'Offline', 'ok' => false, 'alert' => true], $state(2, 2));
+        // A card waiting to be confirmed, or turned off on purpose, needs no alert.
+        $this->assertFalse($state(5, null)['alert']);
+        $this->assertFalse($state(16, null)['alert']);
+        $this->assertSame('Unknown', $state(null, null)['text']);
+        $this->assertSame('Code 99', $state(99, null)['text']);
+    }
+
+    public function test_frame_fan_alarm_bits(): void
+    {
+        // Bit 0 set: this frame can't be queried.
+        $this->assertNull(HuaweiMa5800::frameFan('0', chr(0x80)));
+        $this->assertNull(HuaweiMa5800::frameFan('0', ''));
+        $this->assertSame('Normal', HuaweiMa5800::frameFan('0', chr(0))['state']);
+        $this->assertSame('No contact with the fans', HuaweiMa5800::frameFan('0', chr(0x40))['state']);
+        $this->assertSame('A fan is blocked', HuaweiMa5800::frameFan('0', chr(0x20))['state']);
+        $this->assertSame('Several fans blocked', HuaweiMa5800::frameFan('0', chr(0x10))['state']);
+        $this->assertSame(0, HuaweiMa5800::frameFan('1', chr(0x20))['ok']);
+    }
+
+    public function test_an_olt_that_lists_no_hardware_keeps_the_last_read(): void
+    {
+        $this->startAgent();
+        $olt = $this->olt();
+        OltSync::run($olt);
+        $this->expectExceptionMessage('listed no cards or ports');
+        try {
+            OltMonitor::saveHardware($olt, ['boards' => [], 'ports' => []]);
+        } finally {
+            $this->assertSame(2, (int) Db::value('SELECT COUNT(*) FROM olt_boards'));
+        }
     }
 
     public function test_the_job_reads_only_what_is_due(): void

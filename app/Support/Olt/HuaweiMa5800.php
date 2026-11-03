@@ -15,6 +15,10 @@ final class HuaweiMa5800
 {
     private const BASE = '1.3.6.1.4.1.2011.6.128.1.1.2';
     private const IF_DESCR = '1.3.6.1.2.1.2.2.1.2';
+    private const SLOT = '1.3.6.1.4.1.2011.6.3.3.2.1';
+    private const FRAME = '1.3.6.1.4.1.2011.6.3.3.1.1';
+    private const FAN = '1.3.6.1.4.1.2011.5.25.31.1.1.10.1';
+    private const BOARD = '1.3.6.1.4.1.2011.2.6.7.1.1.2.1';
     /** The OLT's value for "no reading", for example the optical power of an offline ONU. */
     private const NO_READING = 2147483647;
     /** Enough for a full X7: 7 boards × 16 ports × 128 ONUs, and then some. */
@@ -179,6 +183,145 @@ final class HuaweiMa5800
             return null;
         }
         return sprintf('%04d-%02d-%02d %02d:%02d:%02d', $year, $b[2], $b[3], $b[4], $b[5], $b[6]);
+    }
+
+    /**
+     * The OLT's cards and ports. Slot rows and board rows share the index <frame>.<slot>. A value the OLT reports as
+     * unavailable, such as the CPU of a card without one, stays null.
+     *
+     * @return array{boards:list<array<string, mixed>>,ports:list<array<string, mixed>>,fans:list<array<string, mixed>>}
+     */
+    public static function readHardware(Snmp $snmp): array
+    {
+        $table = static function (string $root, string $column) use ($snmp): array {
+            $rows = [];
+            $prefix = $root . '.' . $column;
+            foreach ($snmp->walk($prefix, 5000) as $oid => $value) {
+                $rows[substr((string) $oid, strlen($prefix) + 1)] = $value;
+            }
+
+            return $rows;
+        };
+        $names = $table(self::SLOT, '21');
+        $status = $table(self::SLOT, '8');
+        $serials = $table(self::SLOT, '11');
+        $cpu = $table(self::BOARD, '5');
+        $memory = $table(self::BOARD, '6');
+        $temperature = $table(self::BOARD, '10');
+        $slotTemperature = $table(self::SLOT, '13');
+        $workMode = $table(self::SLOT, '6');
+        $online = $table(self::BOARD, '8');
+        $power = $table(self::BOARD, '17');
+        $boards = [];
+        foreach ($names as $index => $name) {
+            $name = self::text($name, 64);
+            if ($name === '' || !preg_match('/^(?:.*\.)?(\d+)\.(\d+)$/D', (string) $index, $m)) {
+                continue;
+            }
+            $boards[] = [
+                'frame' => (int) $m[1], 'slot' => (int) $m[2], 'name' => $name,
+                'status_code' => is_numeric($status[$index] ?? null) ? (int) $status[$index] : null,
+                'serial' => self::text($serials[$index] ?? '', 64),
+                'cpu_pct' => self::number($cpu[$index] ?? null, 0, 100),
+                'mem_pct' => self::number($memory[$index] ?? null, 0, 100),
+                'temperature_c' => self::number($temperature[$index] ?? null, -40, 150) ?? self::number($slotTemperature[$index] ?? null, -40, 150),
+                'online_code' => is_numeric($online[$index] ?? null) ? (int) $online[$index] : null,
+                'work_mode' => is_numeric($workMode[$index] ?? null) ? (int) $workMode[$index] : null,
+                'power_input' => is_numeric($power[$index] ?? null) ? (int) $power[$index] : null,
+            ];
+        }
+
+        $if = '1.3.6.1.2.1.2.2.1';
+        $ifx = '1.3.6.1.2.1.31.1.1.1';
+        $types = $table($if, '3');
+        $ifNames = $table($ifx, '1') ?: $table($if, '2');
+        $ports = [];
+        $columns = null;
+        foreach ($ifNames as $index => $name) {
+            $name = self::text($name, 64);
+            $kind = self::portKind($name, (int) ($types[$index] ?? 0));
+            if ($kind === null || !ctype_digit((string) $index)) {
+                continue;
+            }
+            $columns ??= [
+                'alias' => $table($ifx, '18'), 'admin' => $table($if, '7'), 'oper' => $table($if, '8'), 'speed' => $table($ifx, '15'),
+                'in' => $table($ifx, '6'), 'out' => $table($ifx, '10'), 'in_err' => $table($if, '14'), 'out_err' => $table($if, '20'),
+            ];
+            $up = static fn (mixed $v) => match ((int) $v) {
+                1 => 1, 2 => 0, default => null
+            };
+            $ports[] = [
+                'if_index' => (int) $index, 'name' => $name, 'kind' => $kind,
+                'alias' => self::text($columns['alias'][$index] ?? '', 128),
+                'admin_up' => $up($columns['admin'][$index] ?? 0),
+                'oper_up' => $up($columns['oper'][$index] ?? 0),
+                'speed_mbps' => is_numeric($columns['speed'][$index] ?? null) ? (int) $columns['speed'][$index] : null,
+                'in_octets' => is_numeric($columns['in'][$index] ?? null) ? $columns['in'][$index] : null,
+                'out_octets' => is_numeric($columns['out'][$index] ?? null) ? $columns['out'][$index] : null,
+                'in_errors' => is_numeric($columns['in_err'][$index] ?? null) ? $columns['in_err'][$index] : null,
+                'out_errors' => is_numeric($columns['out_err'][$index] ?? null) ? $columns['out_err'][$index] : null,
+            ];
+        }
+
+        return ['boards' => $boards, 'ports' => $ports, 'fans' => self::fans($table)];
+    }
+
+    /**
+     * Fans, from the two places Huawei's MIBs have them. Many models fill in neither, and the list is then empty.
+     *
+     * @return list<array{label:string,state:string,ok:int,speed_pct:?int}>
+     */
+    private static function fans(callable $table): array
+    {
+        $fans = [];
+        $state = $table(self::FAN, '7');
+        $present = $table(self::FAN, '6');
+        $speed = $table(self::FAN, '5');
+        foreach ($state as $index => $value) {
+            if ((int) ($present[$index] ?? 1) === 2) {
+                continue;
+            }
+            $fans[] = ['label' => 'Fan ' . str_replace('.', '/', (string) $index), 'state' => (int) $value === 1 ? 'Normal' : 'Abnormal', 'ok' => (int) $value === 1 ? 1 : 0, 'speed_pct' => self::number($speed[$index] ?? null, 0, 100)];
+        }
+        foreach ($table(self::FRAME, '21') as $frame => $bits) {
+            $fan = self::frameFan((string) $frame, (string) $bits);
+            if ($fan !== null) {
+                $fans[] = $fan;
+            }
+        }
+
+        return $fans;
+    }
+
+    /**
+     * hwFrameFanAlarm, BITS with bit 0 first: 0 query not supported, 1 lost contact, 2 a fan blocked, 3 several blocked.
+     *
+     * @return array{label:string,state:string,ok:int,speed_pct:null}|null
+     */
+    public static function frameFan(string $frame, string $bits): ?array
+    {
+        if ($bits === '' || (ord($bits[0]) & 0x80)) {
+            return null;
+        }
+        $byte = ord($bits[0]);
+        $state = match (true) {
+            (bool) ($byte & 0x40) => 'No contact with the fans',
+            (bool) ($byte & 0x10) => 'Several fans blocked',
+            (bool) ($byte & 0x20) => 'A fan is blocked',
+            default => 'Normal',
+        };
+
+        return ['label' => 'Fans in frame ' . $frame, 'state' => $state, 'ok' => $state === 'Normal' ? 1 : 0, 'speed_pct' => null];
+    }
+
+    /** GPON ports have ifType 250. Physical uplinks have an Ethernet type and a frame/slot/port name. */
+    private static function portKind(string $name, int $type): ?string
+    {
+        if ($type === 250 || preg_match('~pon[^0-9]*\d+\s*/\s*\d+\s*/\s*\d+~i', $name)) {
+            return 'pon';
+        }
+
+        return in_array($type, [6, 62, 117], true) && preg_match('~\d+\s*/\s*\d+\s*/\s*\d+~', $name) ? 'uplink' : null;
     }
 
     /**
