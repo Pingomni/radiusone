@@ -6,7 +6,7 @@ import { Empty } from './ui';
 export interface ChartData {
     title: string;
     note: string;
-    unit: 'bps' | 'pct' | 'celsius';
+    unit: 'bps' | 'pct' | 'celsius' | 'count';
     area: string | null;
     summary: string;
     footnote: string | null;
@@ -33,6 +33,7 @@ function formatValue(value: number | null | undefined, unit: ChartData['unit']):
     if (value === null || value === undefined) return 'no data';
     if (unit === 'pct') return `${value.toFixed(1)} %`;
     if (unit === 'celsius') return `${value.toFixed(1)} °C`;
+    if (unit === 'count') return Number.isInteger(value) ? String(value) : value.toFixed(1);
     let v = value;
     let i = 0;
     while (v >= 1000 && i < BPS.length - 1) {

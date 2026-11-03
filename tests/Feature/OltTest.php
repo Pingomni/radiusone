@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Http\Support\MonitoringData;
 use App\Support\Db;
+use App\Support\JobHealth;
 use App\Support\Olt\HuaweiMa5800;
 use App\Support\Olt\OltCli;
 use App\Support\Olt\OltMapper;
@@ -458,6 +460,162 @@ final class OltTest extends TestCase
             $this->assertSame(0, (int) Db::value("SELECT COUNT(*) FROM $table"), $table);
         }
         $this->assertSame(1, (int) Db::value('SELECT COUNT(*) FROM customer_profiles'));
+    }
+
+    /** @return array<string, mixed> */
+    private function overview(): array
+    {
+        return MonitoringData::overview();
+    }
+
+    private function problemTexts(): string
+    {
+        return implode("\n", array_column($this->overview()['problems'], 'text'));
+    }
+
+    public function test_monitoring_shows_a_card_for_each_olt_without_contacting_it(): void
+    {
+        $this->startAgent();
+        $olt = $this->olt();
+        OltSync::run($olt);
+        file_put_contents($this->log, '');
+
+        $this->actingAsOperator('view');
+        $this->get('/monitoring')->assertOk()->assertInertia(fn ($p) => $p
+            ->where('overview.olts.0.id', (int) $olt['id'])
+            ->where('overview.olts.0.danger', false)
+            ->where('overview.olts.0.model', 'Huawei MA5800-X7')
+            ->where('overview.olts.0.items.0.value', '1 of 2')
+            ->where('overview.olts.0.items.1.value', '1')
+            ->where('overview.olts.0.items.2.value', '1'));
+        $this->assertSame('', (string) file_get_contents($this->log));
+        $this->getJson('/monitoring/live')->assertOk()->assertJsonPath('olts.0.name', 'olt-1')->assertDontSee('public-ro')->assertDontSee('read-pass');
+    }
+
+    public function test_monitoring_lists_a_failed_read_and_says_how_old_the_list_is(): void
+    {
+        $this->startAgent();
+        $olt = $this->olt();
+        OltSync::run($olt);
+        $this->assertSame([], $this->overview()['problems']);
+
+        Db::exec('UPDATE olts SET snmp_community=? WHERE id=?', [Secrets::encrypt('wrong'), $olt['id']]);
+        OltSync::run(['sync_requested_at' => 'now'] + Olts::find((int) $olt['id']));
+        $this->assertStringContainsString('OLT olt-1: the read failed', $this->problemTexts());
+        $card = $this->overview()['olts'][0];
+        $this->assertTrue($card['danger']);
+        $this->assertSame('danger', $card['items'][3]['tone']);
+    }
+
+    public function test_monitoring_lists_a_failed_telnet_read(): void
+    {
+        $this->startAgent();
+        OltSync::run($this->olt(['telnet_password' => 'wrong-pass']));
+        $this->assertStringContainsString('the telnet read failed', $this->problemTexts());
+    }
+
+    public function test_monitoring_lists_an_olt_no_longer_being_read(): void
+    {
+        $this->startAgent();
+        $olt = $this->olt();
+        OltSync::run($olt);
+        Db::exec('UPDATE olts SET last_sync_at=NOW()-INTERVAL 1 HOUR WHERE id=?', [$olt['id']]);
+        $this->assertStringContainsString('last read', $this->problemTexts());
+    }
+
+    public function test_a_turned_off_olt_is_not_a_problem(): void
+    {
+        $this->startAgent();
+        $olt = $this->olt();
+        OltSync::run($olt);
+        Db::exec('UPDATE olts SET enabled=0,last_sync_at=NOW()-INTERVAL 1 DAY,last_sync_ok=0 WHERE id=?', [$olt['id']]);
+        $this->assertSame([], $this->overview()['problems']);
+        $this->assertFalse($this->overview()['olts'][0]['danger']);
+        $this->assertArrayNotHasKey('olt', JobHealth::all());
+    }
+
+    public function test_a_recent_pon_outage_needs_attention_but_an_old_or_small_one_does_not(): void
+    {
+        $this->startAgent();
+        $olt = $this->olt();
+        Db::exec('UPDATE olts SET last_sync_at=NOW(),last_sync_ok=1 WHERE id=?', [$olt['id']]);
+        $row = ['frame' => 0, 'slot' => 1, 'description' => '', 'status' => 'online'];
+        OltSync::saveOnus($olt, [
+            $row + ['port' => 0, 'ont_id' => 1, 'sn' => 'A1'], $row + ['port' => 0, 'ont_id' => 2, 'sn' => 'A2'],
+            $row + ['port' => 1, 'ont_id' => 1, 'sn' => 'B1'],
+            $row + ['port' => 2, 'ont_id' => 1, 'sn' => 'C1'], $row + ['port' => 2, 'ont_id' => 2, 'sn' => 'C2'],
+        ]);
+        $this->assertSame([], $this->overview()['problems']);
+        sleep(1);
+        $down = ['status' => 'offline'] + $row;
+        OltSync::saveOnus($olt, [
+            $down + ['port' => 0, 'ont_id' => 1, 'sn' => 'A1'], $down + ['port' => 0, 'ont_id' => 2, 'sn' => 'A2'],
+            $down + ['port' => 1, 'ont_id' => 1, 'sn' => 'B1'],
+            $down + ['port' => 2, 'ont_id' => 1, 'sn' => 'C1'], $row + ['port' => 2, 'ont_id' => 2, 'sn' => 'C2'],
+        ]);
+        // Only the port with several ONUs, all of them down.
+        $this->assertSame(['OLT olt-1: PON 0/1/0 has all 2 ONUs offline'], array_column($this->overview()['problems'], 'text'));
+        $this->assertTrue($this->overview()['olts'][0]['danger']);
+
+        // A port down for more than a day is out of use, not an outage.
+        Db::exec('UPDATE olt_onus SET last_online_at=NOW()-INTERVAL 2 DAY WHERE port=0');
+        $this->assertSame([], $this->overview()['problems']);
+    }
+
+    public function test_the_olt_reader_shows_under_background_jobs_once_there_is_an_olt(): void
+    {
+        $this->assertArrayNotHasKey('olt', JobHealth::all());
+        $this->startAgent();
+        $olt = $this->olt();
+        $this->assertSame('never', JobHealth::all()['olt']['state']);
+        OltSync::run($olt);
+        $this->assertSame('running', JobHealth::all()['olt']['state']);
+        Db::exec('UPDATE olts SET last_sync_at=NOW()-INTERVAL 1 HOUR');
+        $this->assertSame('not_running', JobHealth::all()['olt']['state']);
+    }
+
+    public function test_each_read_adds_a_point_to_the_graph(): void
+    {
+        $this->startAgent();
+        $olt = $this->olt();
+        $this->actingAsOperator('view');
+        $this->getJson('/olts/' . $olt['id'] . '/graph')->assertOk()->assertJsonStructure(['message']);
+
+        OltSync::run($olt);
+        $sample = Db::row('SELECT * FROM olt_samples');
+        $this->assertSame([2, 1, 1, 1], [(int) $sample['onus'], (int) $sample['online'], (int) $sample['offline'], (int) $sample['weak']]);
+
+        $this->getJson('/olts/' . $olt['id'] . '/graph?range=6h')->assertOk()
+            ->assertJsonPath('chart.unit', 'count')
+            ->assertJsonPath('chart.series.0.key', 's0')
+            ->assertJsonPath('chart.series.0.label', 'Online')
+            ->assertJsonPath('chart.bucket', 300);
+        // An unknown range falls back, and old points are removed.
+        $this->getJson('/olts/' . $olt['id'] . '/graph?range=bad')->assertOk()->assertJsonPath('chart.bucket', 900);
+        $this->get('/olts/' . $olt['id'] . '?range=7d')->assertInertia(fn ($p) => $p->where('history.range', '7d')->where('history.data.chart.bucket', 5400));
+        Db::exec('INSERT INTO olt_samples (olt_id,sampled_at,onus,online,offline,weak) VALUES (?,?,0,0,0,0)', [$olt['id'], time() - 900000]);
+        Db::exec('UPDATE olts SET sync_requested_at=NOW() WHERE id=?', [$olt['id']]);
+        sleep(1);
+        OltSync::run(Olts::find((int) $olt['id']));
+        $this->assertSame(0, (int) Db::value('SELECT COUNT(*) FROM olt_samples WHERE sampled_at<?', [time() - 800000]));
+    }
+
+    public function test_a_failed_read_adds_no_point_to_the_graph(): void
+    {
+        $this->startAgent();
+        OltSync::run($this->olt(['snmp_community' => 'wrong']));
+        $this->assertSame(0, (int) Db::value('SELECT COUNT(*) FROM olt_samples'));
+    }
+
+    public function test_poll_all_also_asks_for_the_olts_to_be_read(): void
+    {
+        $this->startAgent();
+        $olt = $this->olt();
+        $this->actingAsOperator();
+        $this->post('/monitoring/poll', ['target' => (string) 999])->assertRedirect();
+        $this->assertNull(Db::value('SELECT sync_requested_at FROM olts'));
+        $this->post('/monitoring/poll', ['target' => 'all'])->assertRedirect();
+        $this->assertNotNull(Db::value('SELECT sync_requested_at FROM olts WHERE id=?', [$olt['id']]));
     }
 
     public function test_the_job_reads_only_what_is_due(): void

@@ -13,6 +13,7 @@ use App\Support\MicroCache;
 use App\Support\NasMonitor;
 use App\Support\NasTables;
 use App\Support\NasTraffic;
+use App\Support\Olt\OltMonitor;
 use App\Support\ServerMonitor;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -49,6 +50,9 @@ final class MonitoringController extends Controller
         }
         if (!NasTraffic::available()) {
             return $this->fail('Apply database migration 022_nas_snmp_samples.sql before polling.', $return);
+        }
+        if ($only === null) {
+            OltMonitor::requestAll();
         }
         @set_time_limit(90);
         try {

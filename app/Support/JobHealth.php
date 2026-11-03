@@ -49,6 +49,14 @@ final class JobHealth
         } catch (\Throwable) {
         }
         $result['snmp'] = self::byAge('Monitoring poller', 'Records server and NAS samples for Monitoring and its graphs.', $snmp, 60);
+        // Only once there is an OLT to read: until then this job has nothing to do.
+        try {
+            $tried = Db::value('SELECT UNIX_TIMESTAMP(MAX(last_sync_at)) FROM olts WHERE enabled=1');
+            if (Db::value('SELECT COUNT(*) FROM olts WHERE enabled=1')) {
+                $result['olt'] = self::byAge('OLT reader', 'Reads the ONU list and MAC table from each OLT, and links clients to ONUs. Only reads.', $tried === null ? null : $now - (int) $tried, 300);
+            }
+        } catch (\Throwable) {
+        }
         // The network worker leaves no job_runs; its outbox shows whether it is sending.
         try {
             $lag = NetworkOperations::lag();

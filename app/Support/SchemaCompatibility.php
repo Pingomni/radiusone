@@ -17,6 +17,7 @@ final class SchemaCompatibility
         'snmp_temperature' => ['nas_snmp_temperature_samples' => ['sensor', 'sampled_at', 'celsius']],
         'snmp_v3' => ['nas_snmp' => ['v3_user', 'v3_auth_protocol', 'v3_auth_password', 'v3_priv_protocol', 'v3_priv_password', 'v3_context']],
         'usage' => ['usage_daily' => ['username', 'day', 'down', 'up'], 'usage_session_marks' => ['radacctid', 'seen_at'], 'usage_cycles' => ['cycle_start', 'capped'], 'service_metadata' => ['cap_action', 'cap_service_group']],
+        'olt' => ['olts' => ['last_sync_at', 'last_mac_error'], 'olt_onus' => ['last_online_at'], 'olt_samples' => ['sampled_at', 'online']],
         'policy' => ['subscriptions' => ['policy_revision', 'policy_hash', 'dirty', 'next_transition_at'], 'network_operations' => ['dedupe_key', 'session_json', 'result_code'], 'access_policies' => ['listener_key', 'valid_until'], 'service_metadata' => ['policy_revision'], 'access_auth_events' => ['decision', 'reason']],
     ];
     public static function problems(string $feature): array
@@ -40,7 +41,7 @@ final class SchemaCompatibility
     {
         if (self::problems($feature)) {
             throw new SchemaMismatch('Action blocked: incompatible ' . $feature . ' schema. Rehearse and deploy migration ' . match ($feature) {
-                'billing' => '017','notifications' => '019','snmp' => '020','snmp_v3' => '021','snmp_history' => '022','snmp_health' => '023','snmp_temperature' => '024','usage' => '029',default => '018'
+                'billing' => '017','notifications' => '019','snmp' => '020','snmp_v3' => '021','snmp_history' => '022','snmp_health' => '023','snmp_temperature' => '024','usage' => '029','olt' => '033',default => '018'
             } . ' with this release; no live migration is automatic.');
         }
     }

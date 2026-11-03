@@ -46,6 +46,7 @@ final class OltSync
         if ($snmpDue) {
             try {
                 self::saveOnus($olt, HuaweiMa5800::readOnus(Olts::snmp($olt)));
+                OltMonitor::record((int) $olt['id']);
                 Db::exec('UPDATE olts SET last_sync_at=NOW(),last_sync_ok=1,last_error=NULL WHERE id=?', [$olt['id']]);
             } catch (Throwable $e) {
                 $ok = false;
@@ -90,7 +91,7 @@ final class OltSync
             foreach ($onus as $onu) {
                 $columns = array_keys($onu);
                 $update = implode(',', array_map(static fn ($c) => "$c=VALUES($c)", array_diff($columns, ['frame', 'slot', 'port', 'ont_id'])));
-                Db::exec('INSERT INTO olt_onus (olt_id,seen_at,' . implode(',', $columns) . ') VALUES (?,?,' . implode(',', array_fill(0, count($columns), '?')) . ') ON DUPLICATE KEY UPDATE seen_at=VALUES(seen_at),' . $update, [$olt['id'], $now, ...array_values($onu)]);
+                Db::exec('INSERT INTO olt_onus (olt_id,seen_at,last_online_at,' . implode(',', $columns) . ') VALUES (?,?,?,' . implode(',', array_fill(0, count($columns), '?')) . ') ON DUPLICATE KEY UPDATE seen_at=VALUES(seen_at),last_online_at=COALESCE(VALUES(last_online_at),last_online_at),' . $update, [$olt['id'], $now, ($onu['status'] ?? '') === 'online' ? $now : null, ...array_values($onu)]);
             }
             Db::exec('DELETE FROM olt_onus WHERE olt_id=? AND seen_at<?', [$olt['id'], $now]);
             $pdo->commit();

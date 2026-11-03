@@ -12,6 +12,7 @@ use App\Support\MicroCache;
 use App\Support\NasMonitor;
 use App\Support\NasRepository;
 use App\Support\NasTraffic;
+use App\Support\Olt\OltMonitor;
 use App\Support\ServerMonitor;
 use App\Support\SessionDisconnect;
 
@@ -257,6 +258,9 @@ final class MonitoringData
             ];
         }
 
+        $olts = OltMonitor::overview(self::age(...));
+        array_push($problems, ...$olts['problems']);
+
         $jobs = JobHealth::all();
         // The legacy reminder sender is replaced by Customer messages: hide it until it has ever run.
         if (($jobs['notifications']['state'] ?? '') === 'never') {
@@ -280,6 +284,7 @@ final class MonitoringData
             'problems' => array_map(static fn (array $p) => ['text' => $p[0], 'href' => $p[1]], $problems),
             'server' => $server,
             'nas' => $cards,
+            'olts' => $olts['cards'],
             'jobs' => array_values(array_map(static function (array $job) {
                 [$text, $tone] = match ($job['state']) {
                     'running' => ['Running', ''],
@@ -491,6 +496,29 @@ final class MonitoringData
         ]);
     }
 
+    /**
+     * @param  array<string, mixed>  $olt
+     * @return array<string, mixed>
+     */
+    public static function oltChart(array $olt, string $range): array
+    {
+        $series = OltMonitor::series((int) $olt['id'], $range);
+        $latest = $series['latest'];
+        $count = static fn (string $key) => $latest === null ? '-' : (string) (int) $latest[$key];
+        return self::chart($series, $range, [
+            'title' => 'ONUs over time',
+            'note' => 'Number of ONUs, ' . self::bucketLabel($series['bucket']) . ' averages',
+            'unit' => 'count',
+            'empty' => 'No history yet. A point is added each time the OLT is read, every 5 minutes.',
+            'series' => [
+                's0' => ['Online', $count('online') . ' latest'],
+                's1' => ['Offline', $count('offline') . ' latest'],
+                's2' => ['Weak signal', $count('weak') . ' latest'],
+            ],
+            'summary' => 'ONUs on ' . $olt['name'] . ', ' . strtolower(OltMonitor::RANGES[$range][2]) . ': latest ' . $count('online') . ' online, ' . $count('offline') . ' offline, ' . $count('weak') . ' with a weak signal.',
+        ]);
+    }
+
     public static function temperatureChart(array $nas, string $range): array
     {
         $series = NasTraffic::temperatureSeries((int) $nas['id'], $range);
@@ -579,6 +607,7 @@ final class MonitoringData
         $label = match ($config['unit']) {
             'pct' => static fn (float $v) => self::trim($v) . '%',
             'celsius' => static fn (float $v) => self::trim($v) . '°',
+            'count' => static fn (float $v) => self::trim($v),
             default => static fn (float $v) => self::bpsShort($v),
         };
         $span = max(1, $series['end'] - $series['start']);

@@ -193,6 +193,7 @@ Route::middleware('frweb.auth')->group(function () {
             Route::post('/olts/{id}/delete', [OltController::class, 'delete'])->whereNumber('id');
         });
         Route::get('/olts/{id}', [OltController::class, 'show'])->whereNumber('id');
+        Route::get('/olts/{id}/graph', [OltController::class, 'graph'])->whereNumber('id');
     });
 
     Route::middleware('permission:nas.view')->group(function () {

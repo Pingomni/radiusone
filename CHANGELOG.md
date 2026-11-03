@@ -4,6 +4,16 @@ RadiusOne follows [semantic versioning](https://semver.org): **major** for chang
 upgrading, **minor** for new features, **patch** for fixes. The version is in the `VERSION` file and shows in
 the portal's sidebar and under Settings → System information.
 
+## 2.7.0 (2026-11-03)
+
+OLTs on the Monitoring page. Update with **Settings → Overview → Software update** or `sudo radiusone-update`.
+
+- **A card for each OLT on Monitoring:** ONUs online, offline and with a weak signal, and how old the list is.
+- **Needs attention:** a failed read, an OLT no longer being read, and a PON port whose ONUs all went offline recently.
+- **A graph on the OLT's page:** ONUs online, offline and with a weak signal, over up to 7 days.
+- **Poll all devices now** also reads the OLTs, within a minute.
+- **On the server:** one new database table and one new column. Customers stay connected.
+
 ## 2.6.0 (2026-11-03)
 
 See your OLT and which client is on which ONU. Update with **Settings → Overview → Software update** or `sudo radiusone-update`.

@@ -163,6 +163,9 @@ const SECTIONS: Section[] = [
                     <li><strong>From the description:</strong> an ONU&apos;s description on the OLT matches a username, and only one ONU has it.</li>
                     <li><strong>By hand:</strong> on the client&apos;s ONU tab, enter the serial number.</li>
                 </ul>
+                <h3>Monitoring</h3>
+                <p>Each OLT has a card on <Link href="/monitoring">Monitoring</Link> with its ONUs online, offline and with a weak signal, and how old the list is. <strong>Needs attention</strong> shows a failed read, an OLT that has stopped being read, and a PON port with two or more ONUs that all went offline in the last 24 hours. The OLT&apos;s page has a graph of its ONUs over the last 7 days.</p>
+                <h3>Keeping links</h3>
                 <p>A link follows the serial number, so it survives the ONU moving to another port. It is never replaced automatically. <Link href="/olts/mapping">Client mapping</Link> shows clients with no ONU, and clients whose session points to a different ONU.</p>
             </>
         ),

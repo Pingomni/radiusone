@@ -5,12 +5,15 @@ declare(strict_types=1);
 namespace App\Http\Controllers;
 
 use App\Http\Support\Clients;
+use App\Http\Support\MonitoringData;
 use App\Support\Audit;
 use App\Support\Auth;
 use App\Support\Db;
 use App\Support\Olt\OltMapper;
+use App\Support\Olt\OltMonitor;
 use App\Support\Olt\Olts;
 use App\Support\Snmp;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -159,8 +162,24 @@ final class OltController extends Controller
             ],
             'counts' => array_map('intval', $counts ?? []),
             'filters' => ['q' => $q, 'status' => $status],
+            'history' => (static function () use ($olt, $request): array {
+                $range = self::range($request->query('range'));
+                return ['range' => $range, 'ranges' => array_map(static fn (array $r) => $r[2], OltMonitor::RANGES), 'url' => '/olts/' . (int) $olt['id'] . '/graph?range=' . $range, 'data' => MonitoringData::oltChart($olt, $range)];
+            })(),
             'result' => ['rows' => array_map(self::onuRow(...), $rows), 'total' => $total, 'page' => $page, 'pages' => $pages, 'size' => self::PAGE_SIZE],
         ]);
+    }
+
+    public function graph(Request $request, string $id): JsonResponse
+    {
+        $olt = Olts::find((int) $id);
+        abort_if(!$olt, 404, 'OLT not found.');
+        return response()->json(MonitoringData::oltChart($olt, self::range($request->query('range'))))->header('Cache-Control', 'no-store');
+    }
+
+    private static function range(mixed $requested): string
+    {
+        return is_string($requested) && isset(OltMonitor::RANGES[$requested]) ? $requested : '24h';
     }
 
     /** @return array{0:int,1:int,2:int} page, page count, offset */

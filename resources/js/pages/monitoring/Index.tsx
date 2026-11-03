@@ -9,12 +9,14 @@ import { useCan } from '@/lib/auth';
 
 type Item = { label: string; value: string; tone: string };
 type NasCard = { id: number; name: string; ip: string; vendor: string; state: TagData; danger: boolean; radiusDisabled: boolean; items: Item[]; readings: Item[]; setupSnmp: boolean };
+type OltCard = { id: number; name: string; host: string; model: string; enabled: boolean; danger: boolean; items: Item[] };
 type Job = { label: string; does: string; detail: string; state: string; tone: string };
 type Overview = {
     metrics: Metric[];
     problems: { text: string; href: string }[];
     server: { host: string; running: string[]; down: string[]; items: Item[] };
     nas: NasCard[];
+    olts: OltCard[];
     jobs: Job[];
 };
 
@@ -71,6 +73,16 @@ function OverviewBody({ data, canManage }: { data: Overview; canManage: boolean 
                     </article>
                 ))}
                 {!data.nas.length && <Empty>No NAS devices yet. {canManage && <Link className="button" href="/nas/create">Add a NAS</Link>}</Empty>}
+                {data.olts.map((olt) => (
+                    <article key={olt.id} className={`health-card monitor-card${olt.danger ? ' tone-danger' : ''}`}>
+                        <div className="health-card-head">
+                            <div><h2><Link href={`/olts/${olt.id}`}>{olt.name}</Link></h2><p>{olt.host} · {olt.model}</p></div>
+                            {!olt.enabled ? <Badge tone="warning">off</Badge> : olt.danger && <Badge tone="danger">problem</Badge>}
+                        </div>
+                        <div className="health-grid">{olt.items.map((i) => <HealthItem key={i.label} {...i} />)}</div>
+                        <div className="health-card-actions"><Link className="button" href={`/olts/${olt.id}`}><Icon name="fiber" />ONUs and graph</Link></div>
+                    </article>
+                ))}
             </div>
             <section className="monitor-jobs" aria-label="Background jobs">
                 <h3>Background jobs</h3>

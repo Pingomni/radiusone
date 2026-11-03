@@ -2,6 +2,8 @@ import { Link, router } from '@inertiajs/react';
 import { useState } from 'react';
 import { StatCards } from '@/components/billing';
 import { PostButton } from '@/components/confirm';
+import { ChartOrMessage, type ChartPayload } from '@/components/LineChart';
+import { LivePanel } from '@/components/LivePanel';
 import { OnuPower, OnuStatus, type OnuRow } from '@/components/olt';
 import { DataTable, Pagination } from '@/components/table';
 import { Field, ListPanel, Select, Time } from '@/components/ui';
@@ -12,7 +14,9 @@ import type { Paginated } from '@/lib/types';
 type Olt = { id: number; name: string; model: string; host: string; enabled: boolean; telnet: boolean; lastSync: string | null; lastMacSync: string | null; syncRequested: boolean; error: string; macError: string };
 type Counts = { total: number; online: number; offline: number; weak: number };
 
-export default function OltShow({ olt, counts, filters, result }: { olt: Olt; counts: Counts; filters: { q: string; status: string }; result: Paginated<OnuRow> }) {
+type History = { range: string; ranges: Record<string, string>; url: string; data: ChartPayload };
+
+export default function OltShow({ olt, counts, filters, history, result }: { olt: Olt; counts: Counts; filters: { q: string; status: string }; history: History; result: Paginated<OnuRow> }) {
     const can = useCan();
     const [q, setQ] = useState(filters.q);
     const [status, setStatus] = useState(filters.status);
@@ -37,6 +41,14 @@ export default function OltShow({ olt, counts, filters, result }: { olt: Olt; co
                 ONU list read <Time value={olt.lastSync} /> (every 5 minutes).
                 {olt.telnet ? <> MAC table read <Time value={olt.lastMacSync} /> (every 15 minutes).</> : ' Telnet is off, so clients are not found automatically from their MAC.'}
             </p>
+            <div className="toolbar traffic-filters">
+                <nav className="segmented" aria-label="Time range">
+                    {Object.entries(history.ranges).map(([key, label]) => (
+                        <Link key={key} href={`${path}?range=${key}`} preserveScroll aria-current={key === history.range ? 'page' : undefined}>{label}</Link>
+                    ))}
+                </nav>
+            </div>
+            <LivePanel title="ONUs over time" url={history.url} interval={60} initial={history.data} className="traffic-panel" render={(payload) => <ChartOrMessage payload={payload} />} />
             <ListPanel
                 title="ONUs"
                 description={`${result.total} matching`}

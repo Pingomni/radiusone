@@ -259,6 +259,9 @@ Then use **OLT → New OLT** and press **Test connection**. The ONU list is read
 - **From the description:** when an ONU's description on the OLT matches a username, and only one ONU has it.
 - **By hand:** on the client's **ONU** tab, enter the serial number.
 
+**Monitoring** shows a card for each OLT, and **Needs attention** lists a failed read, an OLT no longer being read, and a PON
+port with two or more ONUs that all went offline in the last 24 hours. The OLT's page has a graph of its ONUs over 7 days.
+
 A link is kept by serial number, so it survives the ONU moving to another port. It is never replaced automatically: if a
 client's session later points to another ONU, *Client mapping* shows it under **Session points elsewhere** for you to
 decide. After you unlink a client, it isn't linked automatically again.
