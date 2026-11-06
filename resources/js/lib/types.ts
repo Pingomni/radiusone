@@ -14,7 +14,7 @@ export interface AuthUser {
     two_factor_enabled: boolean;
 }
 
-export type ProFeature = 'billing' | 'notifications' | 'monitoring' | 'backups' | 'branding';
+export type ProFeature = 'billing' | 'notifications' | 'monitoring' | 'backups' | 'branding' | 'contracts';
 
 export interface SharedProps {
     appName: string;

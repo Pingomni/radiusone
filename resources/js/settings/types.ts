@@ -93,6 +93,17 @@ export type Documents = {
     values: Record<string, string>; defaults: Record<string, string>; labels: Record<string, string>; lines: Record<string, number>; placeholders: string[];
 };
 
+export type ContractSettings = { template: string; title: string; default: string; placeholders: string[]; max: number; licensed: boolean };
+
+export type PaySettings = {
+    values: Record<'enabled' | 'host' | 'language' | 'color' | 'title' | 'intro' | 'footer' | 'pok_enabled' | 'stripe_enabled' | 'pok_mode' | 'stripe_mode'
+        | 'pok_test_merchant_id' | 'pok_test_key_id' | 'pok_live_merchant_id' | 'pok_live_key_id', string>;
+    /** Which secrets are saved: pok_test, pok_live, stripe_test, stripe_live. */
+    saved: Record<string, boolean>; webhookUrl: string; suggestedHost: string; languages: Record<string, string>; defaults: Record<string, { title: string; intro: string }>;
+    logo: string | null; licensed: boolean;
+    payments: { id: number; username: string; provider: string; status: string; amount: string; currency: string; period_end: string; created_at: string; note: string; invoice_id: number | null }[];
+};
+
 export type Regional = {
     timezone: string; timezones: Record<string, string>; timezoneLog: string[]; timezoneReady: boolean;
     currency: string; currencies: Record<string, string>; issuedOther: number;

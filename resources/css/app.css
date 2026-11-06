@@ -2151,3 +2151,275 @@ td .list-menu > summary:hover { border-color: var(--line); background: var(--sur
 .mark:has(> .po-mark) { overflow: visible; border-radius: 0; background: none; }
 .po-mark { color: var(--text-strong); overflow: visible; }
 .po-mark-dot { fill: var(--pulse-dot); }
+
+/* Contracts */
+.contract-body {
+  padding: var(--sp-4);
+  overflow-wrap: anywhere;
+  color: var(--text);
+}
+
+.contract-body h3 {
+  margin: var(--sp-3) 0 var(--sp-1);
+}
+
+.contract-body p {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+/* The public pay page: the company's colour comes from Settings → Pay page */
+.pay {
+  min-height: 100vh;
+  display: grid;
+  place-items: start center;
+  padding: clamp(16px, 6vh, 72px) 16px;
+  background: linear-gradient(var(--pay-color) 0 180px, var(--bg) 180px);
+}
+
+.pay-card {
+  width: 100%;
+  max-width: 460px;
+  padding: 28px;
+  border: 1px solid var(--border, transparent);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: 0 10px 30px rgb(0 0 0 / 12%);
+}
+
+.pay-head {
+  margin-bottom: 18px;
+}
+
+.pay-logo {
+  display: block;
+  max-width: 180px;
+  max-height: 56px;
+}
+
+.pay-company {
+  font-size: 18px;
+}
+
+.pay h1 {
+  margin: 0 0 12px;
+  font-size: 24px;
+  line-height: 1.2;
+}
+
+.pay-intro,
+.pay-muted,
+.pay-footer {
+  color: var(--text-muted, var(--text));
+}
+
+.pay-intro {
+  margin: 0 0 18px;
+}
+
+.pay-muted {
+  margin: 12px 0;
+  font-size: 13px;
+}
+
+.pay-field {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 16px;
+  font-weight: 600;
+}
+
+.pay-field input {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 12px;
+  font-size: 16px;
+}
+
+.pay-button {
+  width: 100%;
+  min-height: 46px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--pay-color);
+  color: var(--pay-color-text);
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.pay-button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.pay-button:focus-visible,
+.pay-period:focus-within,
+.pay-link:focus-visible {
+  outline: 2px solid var(--pay-color);
+  outline-offset: 2px;
+}
+
+.pay-link {
+  margin-top: 14px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.pay-facts {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 18px;
+}
+
+.pay-facts div {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.pay-facts dt {
+  color: var(--text-muted, var(--text));
+}
+
+.pay-facts dd {
+  margin: 0;
+  font-weight: 600;
+  text-align: right;
+}
+
+.pay-periods {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.pay-periods + .pay-periods,
+.pay-muted + .pay-periods {
+  margin-top: 14px;
+}
+
+.pay-periods + .pay-button,
+.pay-muted + .pay-button {
+  margin-top: 14px;
+}
+
+.pay-periods legend {
+  margin-bottom: 8px;
+  padding: 0;
+  font-weight: 600;
+}
+
+.pay-period {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  align-content: center;
+  gap: 10px;
+  min-height: 46px;
+  padding: 0 12px;
+  border: 1px solid var(--border, #d1d5db);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.pay-period input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+}
+
+.pay-period.selected {
+  border: 2px solid var(--pay-color);
+}
+
+.pay-result h2 {
+  margin: 0 0 8px;
+  font-size: 19px;
+}
+
+.pay-note {
+  padding: 12px;
+  border-radius: 8px;
+  background: var(--bg);
+}
+
+.pay-credentials {
+  margin: 0;
+  padding: 12px 14px 4px;
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 8px;
+}
+
+.pay-credentials legend {
+  padding: 0 6px;
+  font-weight: 600;
+}
+
+.pay-test {
+  margin: 0 0 16px;
+  padding: 10px 12px;
+  border: 1px solid #d99a00;
+  border-radius: 8px;
+  background: #fff7dd;
+  color: #5c4100;
+  font-size: 14px;
+}
+
+.pay-footer {
+  margin-top: 20px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border, #e5e7eb);
+  font-size: 13px;
+  white-space: pre-line;
+}
+
+.pay-brand-preview {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px;
+  border-radius: 8px;
+  background: var(--bg);
+}
+
+.pay-brand-preview img {
+  max-width: 180px;
+  max-height: 48px;
+}
+
+.pay-swatch {
+  padding: 8px 18px;
+  border-radius: 8px;
+  background: var(--pay-color);
+  color: #fff;
+  font-weight: 700;
+}
+
+.pay-color-field input {
+  width: 72px;
+  height: 40px;
+  padding: 2px;
+}
+
+/* Online payments */
+.payment-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 10px;
+  padding: 0 var(--sp-4) var(--sp-3);
+}
+
+.payment-filters label {
+  display: grid;
+  gap: 4px;
+  font-size: 13px;
+}

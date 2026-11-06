@@ -27,6 +27,7 @@ Schedule::command('radiusone:collect-usage')->everyFiveMinutes()->runInBackgroun
 Schedule::command('radiusone:generate-billing')->dailyAt('03:15')->appendOutputTo($log('billing'))
     ->when(static fn () => License::allows('billing'));
 // Needs DELETE on job_runs (ops/install/grants.sql).
+Schedule::command('radiusone:sync-payments')->everyFiveMinutes()->runInBackground()->appendOutputTo($log('billing'));
 Schedule::command('radiusone:prune-job-runs')->dailyAt('03:30')->appendOutputTo($log('maintenance'));
 // Deletes only when a period is chosen under Settings → Data retention (default: keep forever).
 // Needs DELETE on radacct/radpostauth (ops/install/grants.sql).

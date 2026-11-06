@@ -121,6 +121,8 @@ final class ClientController extends Controller
             'framed_pool' => (string) ($row['framed_pool'] ?? ''),
             'email_alert' => (bool) ($row['email_alert'] ?? false),
             'sms_alert' => (bool) ($row['sms_alert'] ?? false),
+            // New clients may pay on the pay page; the ISP can turn it off per client.
+            'online_pay' => (bool) ($row['online_pay'] ?? true),
             'access_profile_id' => $binding['access_profile_id'] ?? '',
             'dhcp_client_id' => $binding['dhcp_client_id'] ?? '',
             'circuit_id' => $binding['circuit_id'] ?? '',
@@ -147,6 +149,7 @@ final class ClientController extends Controller
             'plans' => $planNames,
             'staticIps' => Clients::staticIpOptions($row),
             'binding' => $binding ? ['options' => $binding['options']] : null,
+            'payPage' => self::payPageReady(),
             'client' => null,
         ];
         if (!$row) {
@@ -331,6 +334,9 @@ final class ClientController extends Controller
         } catch (RuntimeException $e) {
             return $this->failKeepingInput($e, $returnPath, self::FIELD_ERRORS);
         }
+        if (self::payPageReady()) {
+            Db::exec('UPDATE customer_profiles SET online_pay=? WHERE username=?', [!empty($input['online_pay']) ? 1 : 0, $savedUsername]);
+        }
         Audit::log($before ? 'update' : 'create', 'client', $savedUsername, $before, array_diff_key($input, ['password' => true]) + ['saved_username' => $savedUsername, 'password_changed' => !empty($input['password'])]);
         $edit = '/clients/' . rawurlencode($savedUsername) . '/edit';
         try {
@@ -339,6 +345,12 @@ final class ClientController extends Controller
             return $this->warn($edit, 'Policy saved; network application pending. Documents were not saved; upload them again. Reference: ' . Diagnostics::report($e));
         }
         return $this->ok($edit . '?tab=' . $tab, 'Policy saved. Network application is pending; see connection diagnostics.');
+    }
+
+    /** The online-payment switch exists once migration 035 (contracts and the pay page) is applied. */
+    private static function payPageReady(): bool
+    {
+        return \App\Support\SchemaCompatibility::problems('contracts') === [];
     }
 
     /** Uploads were validated by Security::uploadInfo; under PHPUnit they are local temp files. */

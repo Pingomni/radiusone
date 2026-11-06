@@ -26,6 +26,7 @@ final class AdminAlerts
         'nas' => 'NAS not responding (ping or SNMP)',
         'resources' => 'Disk or memory almost full on the server',
         'jobs' => 'Background job stuck',
+        'pay' => 'Online payment needs review',
     ];
     /**
      * Message templates (Settings → Notifications → Admin alerts → Message templates); blank uses the default.
@@ -172,6 +173,11 @@ final class AdminAlerts
             $memory = ServerMonitor::memory();
             if ($memory && $memory['used'] / $memory['total'] >= 0.95) {
                 $problems['memory'] = 'Memory is ' . round($memory['used'] / $memory['total'] * 100) . '% used';
+            }
+        }
+        if (in_array('pay', $checks, true) && !SchemaCompatibility::problems('contracts')) {
+            foreach (Db::select('SELECT id, username, amount, currency FROM pay_payments WHERE status="mismatch" ORDER BY id DESC LIMIT 20') as $p) {
+                $problems['pay:' . $p['id']] = "Online payment of {$p['amount']} {$p['currency']} from {$p['username']} needs review (Settings → Pay page)";
             }
         }
         if (in_array('nas', $checks, true) || in_array('jobs', $checks, true)) {

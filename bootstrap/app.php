@@ -3,6 +3,7 @@
 use App\Http\Middleware\Authenticate;
 use App\Http\Middleware\ForceHttps;
 use App\Http\Middleware\HandleInertiaRequests;
+use App\Http\Middleware\PayHost;
 use App\Http\Middleware\RequirePermission;
 use App\Http\Middleware\RequirePro;
 use App\Http\Middleware\RequireRecentAuth;
@@ -35,10 +36,14 @@ $app = Application::configure(basePath: dirname(__DIR__))
         $middleware->remove(ConvertEmptyStringsToNull::class);
         // After TrustProxies (a default global middleware), so X-Forwarded-Proto is honoured.
         $middleware->append([SecurityHeaders::class, ForceHttps::class]);
+        // POK's notice carries no session; it only makes this server ask POK (App\Support\PayPage::sync).
+        $middleware->validateCsrfTokens(except: ['pay/webhook']);
         // The update progress stays readable while an update holds the portal in maintenance mode.
         $middleware->preventRequestsDuringMaintenance(except: ['settings/update/status']);
         $middleware->web(append: [
             HandleInertiaRequests::class,
+            // After Inertia's shared props: its refusals are ordinary error pages.
+            PayHost::class,
         ]);
         $middleware->alias([
             'frweb.auth' => Authenticate::class,

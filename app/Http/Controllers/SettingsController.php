@@ -13,6 +13,9 @@ use App\Support\App;
 use App\Support\Audit;
 use App\Support\Auth;
 use App\Support\BillingDocuments;
+use App\Support\Contracts;
+use App\Support\Pay\Gateways;
+use App\Support\PayPage;
 use App\Support\Branding;
 use App\Support\Currency;
 use App\Support\CustomerNotifications;
@@ -44,7 +47,7 @@ final class SettingsController extends Controller
     {
         $tab = (string) $request->query('tab', 'overview');
         $tab = $tab === 'custom' ? 'branding' : $tab;
-        $tab = in_array($tab, ['overview', 'users', 'notifications', 'branding', 'documents', 'regional', 'retention', 'backups', 'firewall', 'license'], true) ? $tab : 'overview';
+        $tab = in_array($tab, ['overview', 'users', 'notifications', 'branding', 'documents', 'contracts', 'pay', 'regional', 'retention', 'backups', 'firewall', 'license'], true) ? $tab : 'overview';
 
         $userCount = (int) Db::value('SELECT COUNT(*) FROM portal_users');
         $enabledUsers = (int) Db::value('SELECT COUNT(*) FROM portal_users WHERE enabled = 1');
@@ -77,6 +80,28 @@ final class SettingsController extends Controller
                 'labels' => array_map(static fn (array $f) => $f[0], BillingDocuments::FIELDS),
                 'lines' => array_map(static fn (array $f) => $f[3], BillingDocuments::FIELDS),
                 'placeholders' => BillingDocuments::PLACEHOLDERS,
+            ] : null,
+            'contracts' => $tab === 'contracts' ? [
+                'template' => Contracts::template(),
+                'title' => Contracts::title(),
+                'default' => Contracts::DEFAULT_TEMPLATE,
+                'placeholders' => Contracts::PLACEHOLDERS,
+                'max' => Contracts::MAX_TEMPLATE,
+                'licensed' => License::allows('contracts', write: true),
+            ] : null,
+            'pay' => $tab === 'pay' ? [
+                'values' => PayPage::settings(),
+                'saved' => PayPage::secretsSaved(),
+                'webhookUrl' => (Settings::value('pay_host') ?: PayPage::suggestedHost()),
+                'suggestedHost' => PayPage::suggestedHost(),
+                'languages' => PayPage::LANGUAGES,
+                'defaults' => array_map(static fn (array $l) => ['title' => $l['default_title'], 'intro' => $l['default_intro']], PayPage::LABELS),
+                'logo' => Settings::logo(),
+                'licensed' => License::allows('contracts', write: true),
+                'payments' => array_map(static fn (array $p) => [
+                    'id' => (int) $p['id'], 'username' => (string) $p['username'], 'provider' => Gateways::label((string) $p['provider'], (string) $p['mode']), 'status' => (string) $p['status'], 'amount' => (string) $p['amount'], 'currency' => (string) $p['currency'],
+                    'period_end' => (string) $p['period_end'], 'created_at' => (string) $p['created_at'], 'note' => (string) ($p['note'] ?? ''), 'invoice_id' => $p['invoice_id'] ? (int) $p['invoice_id'] : null,
+                ], Db::select('SELECT * FROM pay_payments ORDER BY id DESC LIMIT 30')),
             ] : null,
             'regional' => $tab === 'regional' ? [
                 'timezone' => TimeZone::current(),
@@ -476,6 +501,46 @@ final class SettingsController extends Controller
         }
         Audit::log('update', 'setting', 'billing_documents', $before, BillingDocuments::saved());
         return $this->ok('/settings?tab=documents', 'Saved. New payment requests and receipts use this wording; use Preview to check the layout.');
+    }
+
+    public function saveContractTemplate(Request $request): RedirectResponse
+    {
+        $before = Contracts::template();
+        try {
+            $input = $this->formInput($request);
+            Contracts::saveTemplate((string) ($input['template'] ?? ''), (string) ($input['title'] ?? ''));
+        } catch (InvalidArgumentException $e) {
+            return $this->failKeepingInput($e, '/settings?tab=contracts');
+        }
+        Audit::log('update', 'setting', 'contract_template', ['length' => mb_strlen($before)], ['length' => mb_strlen(Contracts::template())]);
+        return $this->ok('/settings?tab=contracts', 'Saved. New contracts use this template; contracts already issued keep their text.');
+    }
+
+    public function previewContract(): \Illuminate\Http\Response
+    {
+        return response(Contracts::pdf(Contracts::sample(Contracts::template())), 200, ['Content-Type' => 'application/pdf', 'Content-Disposition' => 'inline; filename="contract-preview.pdf"', 'Cache-Control' => 'no-store, max-age=0']);
+    }
+
+    public function savePayPage(Request $request): RedirectResponse
+    {
+        $before = PayPage::settings();
+        try {
+            PayPage::save($this->formInput($request));
+        } catch (InvalidArgumentException $e) {
+            return $this->failKeepingInput($e, '/settings?tab=pay');
+        }
+        Audit::log('update', 'setting', 'pay_page', $before, PayPage::settings());
+        return $this->ok('/settings?tab=pay', 'Saved.');
+    }
+
+    public function testPayService(string $provider, string $mode): RedirectResponse
+    {
+        try {
+            Gateways::test($provider, $mode);
+        } catch (\Throwable $e) {
+            return $this->fail($e->getMessage(), '/settings?tab=pay');
+        }
+        return $this->ok('/settings?tab=pay', Gateways::NAMES[$provider] . ' accepted the ' . $mode . ' key.');
     }
 
     /** Sample payment request or receipt with the saved wording. */

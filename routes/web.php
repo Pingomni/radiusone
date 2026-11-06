@@ -5,12 +5,15 @@ use App\Http\Controllers\BackupSettingsController;
 use App\Http\Controllers\BillingController;
 use App\Http\Controllers\BrandingAssetController;
 use App\Http\Controllers\ClientController;
+use App\Http\Controllers\ContractController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\FirewallController;
 use App\Http\Controllers\MonitoringController;
 use App\Http\Controllers\NasController;
 use App\Http\Controllers\OltController;
 use App\Http\Controllers\OperationsController;
+use App\Http\Controllers\PayController;
+use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ReportsController;
 use App\Http\Controllers\ServiceController;
@@ -24,6 +27,16 @@ use Illuminate\Support\Facades\Route;
 // Coarse permissions are enforced here; controllers check finer ones (…manage) as the legacy code did.
 
 Route::get('/uploads/branding/{file}', BrandingAssetController::class)->where('file', '[A-Za-z0-9._-]+');
+
+// The public pay page: reached only on its own address (App\Http\Middleware\PayHost).
+Route::prefix('/pay')->group(function () {
+    Route::get('/', [PayController::class, 'page']);
+    Route::post('/lookup', [PayController::class, 'lookup'])->middleware('throttle:10,1');
+    Route::post('/forget', [PayController::class, 'forget']);
+    Route::post('/start', [PayController::class, 'start'])->middleware('throttle:10,1');
+    Route::get('/return/{token}', [PayController::class, 'back'])->where('token', '[a-f0-9]{40}')->middleware('throttle:30,1');
+    Route::post('/webhook', [PayController::class, 'webhook'])->middleware('throttle:120,1');
+});
 
 Route::get('/login', [AuthController::class, 'loginPage']);
 Route::post('/login', [AuthController::class, 'login']);
@@ -118,6 +131,12 @@ Route::middleware('frweb.auth')->group(function () {
         Route::middleware('pro:billing')->group(function () {
             Route::post('/settings/documents', [SettingsController::class, 'saveDocuments']);
             Route::get('/settings/documents/preview/{kind}', [SettingsController::class, 'previewDocument'])->whereIn('kind', ['request', 'receipt']);
+        });
+        Route::middleware('pro:contracts')->group(function () {
+            Route::post('/settings/contracts', [SettingsController::class, 'saveContractTemplate']);
+            Route::get('/settings/contracts/preview', [SettingsController::class, 'previewContract']);
+            Route::post('/settings/pay/test/{provider}/{mode}', [SettingsController::class, 'testPayService'])->whereIn('provider', ['pok', 'stripe'])->whereIn('mode', ['test', 'live'])->middleware('recent-auth');
+            Route::post('/settings/pay', [SettingsController::class, 'savePayPage'])->middleware('recent-auth');
         });
         Route::middleware('pro:backups')->group(function () {
             Route::post('/settings/backups/destinations/{id}/test', [BackupSettingsController::class, 'test'])->where('id', '[0-9a-f]{12}');
@@ -247,6 +266,21 @@ Route::middleware('frweb.auth')->group(function () {
         Route::post('/billing/invoices/{id}/void', [BillingController::class, 'void'])->whereNumber('id');
         Route::post('/billing/invoices/{id}/delete', [BillingController::class, 'delete'])->whereNumber('id');
         Route::post('/billing/generate', [BillingController::class, 'generate']);
+    });
+
+    // Contracts (RadiusOne Pro).
+    Route::middleware(['permission:billing.view', 'pro:contracts'])->group(function () {
+        Route::get('/contracts', [ContractController::class, 'index']);
+        Route::get('/contracts/create', [ContractController::class, 'form']);
+        Route::post('/contracts/save', [ContractController::class, 'save']);
+        Route::get('/contracts/{id}', [ContractController::class, 'show'])->whereNumber('id');
+        Route::get('/contracts/{id}/pdf', [ContractController::class, 'pdf'])->whereNumber('id');
+        Route::post('/contracts/{id}/cancel', [ContractController::class, 'cancel'])->whereNumber('id');
+        Route::get('/payments', [PaymentController::class, 'index']);
+        Route::get('/payments/export', [PaymentController::class, 'export']);
+        Route::get('/payments/{id}', [PaymentController::class, 'show'])->whereNumber('id');
+        Route::post('/payments/{id}/check', [PaymentController::class, 'check'])->whereNumber('id')->middleware('throttle:20,1');
+        Route::post('/payments/{id}/review', [PaymentController::class, 'review'])->whereNumber('id');
     });
 
     Route::get('/reports', [ReportsController::class, 'reports'])->middleware('permission:reports.view');

@@ -19,6 +19,10 @@ final class ForceHttps
         if (!in_array($request->method(), ['GET', 'HEAD'], true)) {
             return response('Use HTTPS for this request.', 400, ['Content-Type' => 'text/plain; charset=utf-8']);
         }
+        // The pay page stays on its own address; every other name goes to the portal's.
+        if (\App\Support\PayPage::isPayHost($request->getHost())) {
+            return redirect()->away('https://' . strtolower($request->getHost()) . $request->getRequestUri(), 301);
+        }
         $canonical = rtrim((string) config('app.url'), '/');
         $parts = parse_url($canonical);
         if (!$parts || strtolower((string) ($parts['scheme'] ?? '')) !== 'https' || empty($parts['host'])) {

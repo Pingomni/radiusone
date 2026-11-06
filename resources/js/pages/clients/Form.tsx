@@ -194,7 +194,7 @@ function StaticIpFields({ staticIps, value, disabled, error, onChange }: { stati
     );
 }
 
-export default function ClientForm({ values, draftRestored, draftTab, canEdit, canUpload, plans, staticIps, binding, client }: {
+export default function ClientForm({ values, draftRestored, draftTab, canEdit, canUpload, plans, staticIps, binding, payPage, client }: {
     values: Values;
     draftRestored: boolean;
     draftTab: string | null;
@@ -203,6 +203,7 @@ export default function ClientForm({ values, draftRestored, draftTab, canEdit, c
     plans: Record<string, string>;
     staticIps: StaticIps;
     binding: { options: Record<string, string> } | null;
+    payPage: boolean;
     client: Client | null;
 }) {
     const can = useCan();
@@ -260,6 +261,12 @@ export default function ClientForm({ values, draftRestored, draftTab, canEdit, c
                     <Check label="Email alert" disabled={disabled} {...bindCheck(form, 'email_alert')} />
                     <Check label="SMS alert" disabled={disabled} {...bindCheck(form, 'sms_alert')} />
                 </div>
+                {payPage && (
+                    <div className="alert-options span2">
+                        <span className="alert-options-label">Online payment</span>
+                        <Check label="May pay on the pay page" disabled={disabled} {...bindCheck(form, 'online_pay')} />
+                    </div>
+                )}
             </Section>
             <Section title="Access restrictions" description="Limit where and from which device the account can connect." icon="shield">
                 {binding ? (
@@ -301,6 +308,7 @@ export default function ClientForm({ values, draftRestored, draftTab, canEdit, c
             <Section title="Contract and notes" description="Agreement reference and internal remarks." icon="logs">
                 {field('Contract ID', 'contract_id')}
                 {field('Contract valid until', 'contract_valid_until', { type: 'date' })}
+                <p className="span2 hint"><a href="/contracts">Contracts</a> are issued and kept under Contracts; these two fields follow the active one.</p>
                 <TextArea label="Notes/comments" disabled={disabled} {...bind(form, 'notes')} />
             </Section>
         </>

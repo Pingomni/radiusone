@@ -95,6 +95,8 @@ const SECTIONS: [key: string, label: string, href: string, icon: string, hint: s
     ['notifications', 'Notifications', '/settings?tab=notifications', 'mail', 'Gateways, templates, history'],
     ['branding', 'Branding', '/settings?tab=branding', 'image', 'Workspace identity'],
     ['documents', 'Invoices & receipts', '/settings?tab=documents', 'billing', 'PDF wording and company details'],
+    ['contracts', 'Contract template', '/settings?tab=contracts', 'book', 'The text of new contracts'],
+    ['pay', 'Pay page', '/settings?tab=pay', 'billing', 'Online payments through POK'],
     ['regional', 'Regional', '/settings?tab=regional', 'calendar', 'Time zone and currency'],
     ['backups', 'Backups', '/settings?tab=backups', 'server', 'Encrypted remote copies'],
     ['firewall', 'Firewall', '/settings?tab=firewall', 'shield', 'This server\'s firewall rules'],

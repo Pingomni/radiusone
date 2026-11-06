@@ -75,6 +75,88 @@ final class SimplePdf
     }
 
     /**
+     * A text document of any length, such as a contract: the company's band on the first page, then the text over as many
+     * pages as it needs. A line starting with "# " is a heading.
+     *
+     * @param array{title: string, subtitle?: string, app_name: string, logo_path?: ?string, company_details?: list<string>, body: string} $data
+     */
+    public static function contract(array $data): string
+    {
+        $image = self::imageObject((string) ($data['logo_path'] ?? ''));
+        $lines = [];
+        foreach (explode("\n", str_replace("\r", '', $data['body'])) as $line) {
+            if (str_starts_with($line, '# ')) {
+                $lines[] = ['', false];
+                $lines[] = [trim(substr($line, 2)), true];
+                continue;
+            }
+            foreach (self::wrap([$line], 96) as $wrapped) {
+                $lines[] = [$wrapped, false];
+            }
+        }
+        $first = "q 0.08 0.25 0.55 rg 0 746 595 96 re f Q\n";
+        $textX = 42;
+        if ($image) {
+            $box = self::fitBox((int) $image['width'], (int) $image['height'], 72, 48);
+            $first .= sprintf("q %.2F 0 0 %.2F 42 %.2F cm /Logo Do Q\n", $box['w'], $box['h'], 792 - $box['h']);
+            $textX = 132;
+        }
+        $details = array_slice($data['company_details'] ?? [], 0, 4);
+        $first .= self::text(self::clip($data['app_name'], 44), $textX, $details ? 818 : 804, 16, true, [1, 1, 1]);
+        $lineY = 802;
+        foreach ($details as $line) {
+            $first .= self::text(self::clip((string) $line, $image ? 88 : 104), $textX, $lineY, 8.5, false, [0.86, 0.91, 1]);
+            $lineY -= 11.5;
+        }
+        $first .= self::text($data['title'], 42, 716, 20, true, [0.06, 0.14, 0.25]);
+        if (!empty($data['subtitle'])) {
+            $first .= self::text((string) $data['subtitle'], 42, 698, 10, false, [0.38, 0.45, 0.55]);
+        }
+        $pages = [];
+        $content = $first;
+        $y = 672.0;
+        foreach ($lines as [$text, $bold]) {
+            if ($y < 54) {
+                $pages[] = $content;
+                $content = '';
+                $y = 800.0;
+            }
+            if ($text !== '') {
+                $content .= self::text($text, 42, $y, $bold ? 11.5 : 10, $bold, [0.06, 0.14, 0.25]);
+            }
+            $y -= $bold ? 17 : 14.5;
+        }
+        $pages[] = $content;
+
+        $objects = [];
+        $imageId = null;
+        if ($image) {
+            $imageId = count($objects) + 1;
+            $objects[] = $image['object'];
+        }
+        $fontRegularId = count($objects) + 1;
+        $objects[] = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>';
+        $fontBoldId = count($objects) + 1;
+        $objects[] = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>';
+        $pagesId = count($objects) + 1;
+        $objects[] = 'PAGES_PLACEHOLDER';
+        $xObject = $imageId ? "/XObject << /Logo {$imageId} 0 R >>" : '';
+        $kids = [];
+        foreach ($pages as $page) {
+            $contentId = count($objects) + 1;
+            $objects[] = '<< /Length ' . strlen($page) . " >>\nstream\n{$page}endstream";
+            $kids[] = (count($objects) + 1) . ' 0 R';
+            $objects[] = "<< /Type /Page /Parent {$pagesId} 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 {$fontRegularId} 0 R /F2 {$fontBoldId} 0 R >> {$xObject} >> /Contents {$contentId} 0 R >>";
+        }
+        $objects[$pagesId - 1] = '<< /Type /Pages /Kids [' . implode(' ', $kids) . '] /Count ' . count($kids) . ' >>';
+        $catalogId = count($objects) + 1;
+        $objects[] = "<< /Type /Catalog /Pages {$pagesId} 0 R >>";
+        $infoId = count($objects) + 1;
+        $objects[] = '<< /Title (' . self::pdfText($data['title']) . ') /Author (' . self::pdfText($data['app_name']) . ') >>';
+        return self::assemble($objects, $catalogId, $infoId);
+    }
+
+    /**
      * @param  array<int, string>  $objects
      */
     private static function assemble(array $objects, int $catalogId, int $infoId): string

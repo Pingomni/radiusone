@@ -17,13 +17,15 @@ const NAV: [href: string, label: string, permission: string, icon: string, group
     ['/monitoring', 'Monitoring', 'nas.view', 'activity', 'Operations'],
     ['/operations', 'Network operations', 'operations.view', 'signal', 'Operations'],
     ['/billing', 'Billing', 'billing.view', 'billing', 'Operations'],
+    ['/contracts', 'Contracts', 'billing.view', 'book', 'Operations'],
+    ['/payments', 'Online payments', 'billing.view', 'activity', 'Operations'],
     ['/reports', 'Reports', 'reports.view', 'reports', 'Workspace'],
     ['/logs', 'Logs', 'logs.view', 'logs', 'Workspace'],
     ['/settings', 'Settings', 'settings.manage', 'settings', 'Workspace'],
 ];
 
 // Menu items that are RadiusOne Pro features: marked "Pro" while this server has no licence for them.
-const PRO_NAV: Record<string, ProFeature> = { '/billing': 'billing' };
+const PRO_NAV: Record<string, ProFeature> = { '/billing': 'billing', '/contracts': 'contracts', '/payments': 'contracts' };
 
 const CONTEXTS: Record<string, string> = {
     '': 'Workspace / Overview',
@@ -35,6 +37,8 @@ const CONTEXTS: Record<string, string> = {
     monitoring: 'Workspace / Network',
     operations: 'Workspace / Network',
     billing: 'Workspace / Finance',
+    contracts: 'Workspace / Finance',
+    payments: 'Workspace / Finance',
     reports: 'Workspace / Insights',
     logs: 'Workspace / Activity',
     settings: 'Workspace / Administration',

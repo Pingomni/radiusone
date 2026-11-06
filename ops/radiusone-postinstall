@@ -35,7 +35,7 @@ place() {  # $1 source, $2 target, $3 mode
 }
 
 echo "== root helpers ($app)"
-for name in service-restart set-timezone backup-now root-artisan update firewall nas-diag; do
+for name in service-restart set-timezone backup-now root-artisan update firewall nas-diag pay-domain; do
   place "$app/ops/radiusone-$name" "/usr/local/sbin/radiusone-$name" 0755
 done
 # The names before 2.3 lead to the new helpers (old cron lines, scripts). frweb-update is the old, git-based

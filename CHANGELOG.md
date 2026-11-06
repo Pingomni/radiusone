@@ -4,6 +4,17 @@ RadiusOne follows [semantic versioning](https://semver.org): **major** for chang
 upgrading, **minor** for new features, **patch** for fixes. The version is in the `VERSION` file and shows in
 the portal's sidebar and under Settings → System information.
 
+## 2.9.0 (2026-11-06)
+
+Contracts and a pay page with POK and Stripe. Update with **Settings → Overview → Software update** or `sudo radiusone-update`.
+
+- **Contracts:** issued from your template, kept as issued, printed as a PDF; nightly invoices follow them.
+- **Pay page** on its own address: username plus the last 4 phone digits, 1 to 12 months inside the contract, paid on
+  POK's or Stripe's page. A payment counts only once the service confirms it; then the invoice is paid and the service renewed.
+- **Test and live credentials** per service, starting in test mode; test payments never pay an invoice.
+- **Online payments** page, a per-client switch, and a 15-minute wait after 5 wrong phone numbers.
+- **On the server:** two new tables and one new column. Customers stay connected.
+
 ## 2.8.1 (2026-11-06)
 
 The user guide moves to pingomni.com. Update with **Settings → Overview → Software update** or `sudo radiusone-update`.

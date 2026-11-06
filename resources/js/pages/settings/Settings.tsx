@@ -2,7 +2,9 @@ import { SettingsLinkNav } from '@/components/settings';
 import AppLayout from '@/layouts/AppLayout';
 import { BackupsTab } from '@/settings/BackupsTab';
 import { BrandingTab } from '@/settings/BrandingTab';
+import { ContractsTab } from '@/settings/ContractsTab';
 import { DocumentsTab } from '@/settings/DocumentsTab';
+import { PayTab } from '@/settings/PayTab';
 import { FirewallTab } from '@/settings/FirewallTab';
 import { LicenseTab } from '@/settings/LicenseTab';
 import { NotificationsTab } from '@/settings/NotificationsTab';
@@ -10,10 +12,10 @@ import { OverviewTab } from '@/settings/OverviewTab';
 import { RegionalTab } from '@/settings/RegionalTab';
 import { RetentionTab } from '@/settings/RetentionTab';
 import { UsersTab } from '@/settings/UsersTab';
-import type { Backups, Branding, Documents, Firewall, License, Notifications, Operator, Overview, Regional, Retention, SoftwareUpdate } from '@/settings/types';
+import type { Backups, Branding, ContractSettings, Documents, PaySettings, Firewall, License, Notifications, Operator, Overview, Regional, Retention, SoftwareUpdate } from '@/settings/types';
 
-export default function Settings({ tab, overview, update, users, usersSummary, roleDescriptions, branding, notifications, documents, regional, retention, backups, firewall, license }: {
-    tab: 'overview' | 'users' | 'notifications' | 'branding' | 'documents' | 'regional' | 'retention' | 'backups' | 'firewall' | 'license';
+export default function Settings({ tab, overview, update, users, usersSummary, roleDescriptions, branding, notifications, documents, contracts, pay, regional, retention, backups, firewall, license }: {
+    tab: 'overview' | 'users' | 'notifications' | 'branding' | 'documents' | 'contracts' | 'pay' | 'regional' | 'retention' | 'backups' | 'firewall' | 'license';
     overview: Overview;
     update: SoftwareUpdate | null;
     users: Operator[] | null;
@@ -22,6 +24,8 @@ export default function Settings({ tab, overview, update, users, usersSummary, r
     branding: Branding;
     notifications: Notifications | null;
     documents: Documents | null;
+    contracts: ContractSettings | null;
+    pay: PaySettings | null;
     regional: Regional | null;
     retention: Retention | null;
     backups: Backups | null;
@@ -38,6 +42,8 @@ export default function Settings({ tab, overview, update, users, usersSummary, r
                     {tab === 'notifications' && notifications && <NotificationsTab n={notifications} />}
                     {tab === 'branding' && <BrandingTab branding={branding} />}
                     {tab === 'documents' && documents && <DocumentsTab d={documents} />}
+                    {tab === 'contracts' && contracts && <ContractsTab c={contracts} />}
+                    {tab === 'pay' && pay && <PayTab p={pay} />}
                     {tab === 'regional' && regional && <RegionalTab r={regional} />}
                     {tab === 'retention' && retention && <RetentionTab r={retention} />}
                     {tab === 'backups' && backups && <BackupsTab b={backups} />}

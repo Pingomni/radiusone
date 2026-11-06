@@ -37,6 +37,7 @@ final class License
         'monitoring' => 'NAS monitoring and traffic',
         'backups' => 'Remote backups',
         'branding' => 'Your logo',
+        'contracts' => 'Customer contracts and the pay page',
     ];
 
     /** @var list<string> PingOmni's licence public keys (base64). Tests add their own. */

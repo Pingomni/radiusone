@@ -210,7 +210,7 @@ final class BillingRepository
         $pdo = Db::pdo();
         $pdo->beginTransaction();
         try {
-            $client = Db::row('SELECT c.*, s.name AS service_name, s.price, s.currency, s.billing_mode, s.billing_period FROM customer_profiles c JOIN service_metadata s ON s.group_name=c.service_group WHERE c.username=? AND c.account_status<>"archived" AND s.enabled=1 FOR UPDATE', [$username]);
+            $client = Db::row('SELECT c.*, s.name AS service_name, s.price, s.currency, s.billing_mode, COALESCE((SELECT x.billing_period FROM customer_contracts x WHERE x.username=c.username AND x.status="active" LIMIT 1), s.billing_period) AS billing_period, (SELECT x.end_date FROM customer_contracts x WHERE x.username=c.username AND x.status="active" LIMIT 1) AS contract_end FROM customer_profiles c JOIN service_metadata s ON s.group_name=c.service_group WHERE c.username=? AND c.account_status<>"archived" AND s.enabled=1 FOR UPDATE', [$username]);
             if (!$client || (float) $client['price'] <= 0) {
                 $pdo->commit();
                 SubscriberPolicy::releaseLocks();
@@ -226,6 +226,12 @@ final class BillingRepository
             $lapsed = $periodStart === null && Entitlement::isExpired($client);
             $anchor = (int) ($lapsed ? substr($start, 8, 2) : ($client['billing_anchor_day'] ?: substr($start, 8, 2)));
             $end = self::periodEnd($start, (string) $client['billing_period'], $anchor);
+            // A contract is not invoiced past its end: renewing it comes first.
+            if ($periodStart === null && !empty($client['contract_end']) && $end > $client['contract_end']) {
+                $pdo->commit();
+                SubscriberPolicy::releaseLocks();
+                return null;
+            }
             $cycle = $client['id'] . ':' . $start;
             $previous = Db::row('SELECT * FROM billing_invoices WHERE cycle_key=? ORDER BY id DESC LIMIT 1 FOR UPDATE', [$cycle]);
             if (!$previous) {
@@ -286,6 +292,80 @@ final class BillingRepository
                 SubscriberPolicy::releaseLocks();
             } throw $e;
         }
+    }
+
+    /**
+     * What $period of service would cost this customer, and the dates it covers, from the day after they are paid until.
+     *
+     * @return array{start: string, end: string, amount: float, currency: string}
+     */
+    public static function periodQuote(string $username, string $period, ?string $start = null): array
+    {
+        $client = Db::row('SELECT c.*, s.price, s.currency AS service_currency FROM customer_profiles c JOIN service_metadata s ON s.group_name=c.service_group AND s.enabled=1 WHERE c.username=? AND c.account_status<>"archived"', [$username]);
+        if (!$client) {
+            throw new RuntimeException('This customer cannot be billed.');
+        }
+        $start ??= self::nextPeriodStart($client);
+        $months = self::billingPeriodMonths(self::normalizeBillingPeriod($period));
+        $static = self::staticIpChargeForInvoice($username, self::staticIpPoolKeyForCustomer($username));
+        $amount = round((self::decimal($client['price']) + ($static ? self::decimal($static['price']) : 0.0)) * $months, 2);
+        return ['start' => $start, 'end' => self::periodEnd($start, $period, self::periodAnchor($client, $start)), 'amount' => $amount, 'currency' => strtoupper((string) ($client['service_currency'] ?: Currency::code()))];
+    }
+
+    /**
+     * Issues the invoice for one contract billing period. Unpaid generated invoices that overlap it are voided, since this
+     * one replaces them; one with money on it, or a period already paid, stops it for a person to look at.
+     */
+    public static function issuePeriodInvoice(string $username, string $period, string $notes, ?string $start = null): int
+    {
+        SchemaCompatibility::require('billing');
+        $pdo = Db::pdo();
+        $owns = !$pdo->inTransaction();
+        if ($owns) {
+            $pdo->beginTransaction();
+        }
+        try {
+            $client = Db::row('SELECT * FROM customer_profiles WHERE username=? AND account_status<>"archived" FOR UPDATE', [$username]);
+            if (!$client || empty($client['service_group'])) {
+                throw new RuntimeException('This customer has no service plan to invoice.');
+            }
+            $start ??= self::nextPeriodStart($client);
+            $anchor = self::periodAnchor($client, $start);
+            $end = self::periodEnd($start, $period, $anchor);
+            $replaces = null;
+            foreach (Db::select('SELECT * FROM billing_invoices WHERE username=? AND status NOT IN ("void","draft") AND (cycle_key IS NOT NULL OR cycle_class="generated") AND period_start<=? AND period_end>=? FOR UPDATE', [$username, $end, $start]) as $overlap) {
+                if ((float) $overlap['amount_paid'] > 0 || self::invoicePaidAmount((int) $overlap['id']) > 0) {
+                    throw new RuntimeException('Invoice ' . $overlap['invoice_number'] . ' already has a payment for this period.');
+                }
+                Db::exec('UPDATE billing_invoices SET status="void", balance_due=0, updated_at=NOW() WHERE id=?', [$overlap['id']]);
+                $replaces = (int) $overlap['id'];
+            }
+            $id = self::saveInvoice([
+                'username' => $username, 'service_group' => (string) $client['service_group'], 'billing_period' => $period,
+                'static_ip_pool_key' => self::staticIpPoolKeyForCustomer($username) ?? '',
+                'issue_date' => Entitlement::today(), 'period_start' => $start, 'anchor_day' => $anchor,
+                '_cycle_key' => $client['id'] . ':' . $start, '_period_end' => $end, '_replaces_invoice_id' => $replaces,
+                'status' => 'open', 'notes' => $notes,
+            ]);
+            Db::exec('UPDATE customer_profiles SET billing_anchor_day=? WHERE username=?', [$anchor, $username]);
+            if ($owns) {
+                $pdo->commit();
+                SubscriberPolicy::releaseLocks();
+            }
+            return $id;
+        } catch (\Throwable $e) {
+            if ($owns && $pdo->inTransaction()) {
+                $pdo->rollBack();
+                SubscriberPolicy::releaseLocks();
+            }
+            throw $e;
+        }
+    }
+
+    /** @param array<string, mixed> $client */
+    private static function periodAnchor(array $client, string $start): int
+    {
+        return (int) (Entitlement::isExpired($client) || empty($client['billing_anchor_day']) ? substr($start, 8, 2) : $client['billing_anchor_day']);
     }
 
     public static function generateRecurringInvoices(?string $onlyUsername = null): array
@@ -386,7 +466,11 @@ final class BillingRepository
         $hash = hash('sha256', json_encode([$invoiceId, number_format($amount, 2, '.', ''), $method, $hashDate, $reference, $notes], JSON_THROW_ON_ERROR));
         $actor = Auth::user();
         $pdo = Db::pdo();
-        $pdo->beginTransaction();
+        // Part of a larger change when the caller already opened a transaction (the pay page).
+        $owns = !$pdo->inTransaction();
+        if ($owns) {
+            $pdo->beginTransaction();
+        }
         try {
             $identity = Db::row('SELECT username FROM billing_invoices WHERE id=?', [$invoiceId]);
             if (!$identity) {
@@ -402,8 +486,10 @@ final class BillingRepository
                 if (!hash_equals((string) $existing['request_hash'], $hash)) {
                     throw new RuntimeException('Payment request key was reused with different details.');
                 }
-                $pdo->commit();
-                SubscriberPolicy::releaseLocks();
+                if ($owns) {
+                    $pdo->commit();
+                    SubscriberPolicy::releaseLocks();
+                }
                 return (int) $existing['id'];
             }
             if (!$invoice || in_array($invoice['status'], ['void', 'draft'], true) || $invoice['username'] !== $identity['username']) {
@@ -426,11 +512,13 @@ final class BillingRepository
                 self::renewCustomerFromInvoice($updated);
             }
             Audit::log('payment', 'billing_invoice', (string) $invoiceId, null, ['payment_id' => $paymentId, 'amount' => number_format($amount, 2, '.', '')]);
-            $pdo->commit();
-            SubscriberPolicy::releaseLocks();
+            if ($owns) {
+                $pdo->commit();
+                SubscriberPolicy::releaseLocks();
+            }
             return $paymentId;
         } catch (\Throwable $e) {
-            if ($pdo->inTransaction()) {
+            if ($owns && $pdo->inTransaction()) {
                 $pdo->rollBack();
                 SubscriberPolicy::releaseLocks();
             } throw $e;
