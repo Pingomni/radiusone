@@ -48,6 +48,9 @@ GRANT SELECT, INSERT, UPDATE ON `radius`.`subscriptions` TO `radiusone_portal`@`
 GRANT SELECT, INSERT, UPDATE, DELETE ON `radius`.`usage_daily` TO `radiusone_portal`@`localhost`;
 GRANT SELECT, INSERT, UPDATE, DELETE ON `radius`.`usage_session_marks` TO `radiusone_portal`@`localhost`;
 GRANT SELECT, INSERT, UPDATE, DELETE ON `radius`.`usage_cycles` TO `radiusone_portal`@`localhost`;
+-- Contracts and the pay page (035): kept for the record, so the portal never deletes them.
+GRANT SELECT, INSERT, UPDATE ON `radius`.`customer_contracts` TO `radiusone_portal`@`localhost`;
+GRANT SELECT, INSERT, UPDATE ON `radius`.`pay_payments` TO `radiusone_portal`@`localhost`;
 GRANT SELECT (`reply`, `authdate`, `username`), DELETE ON `radius`.`radpostauth` TO `radiusone_portal`@`localhost`;
 GRANT SELECT, INSERT, UPDATE, DELETE ON `radius`.`radgroupreply` TO `radiusone_portal`@`localhost`;
 GRANT SELECT ON `radius`.`access_auth_events` TO `radiusone_portal`@`localhost`;

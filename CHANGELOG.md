@@ -4,6 +4,13 @@ RadiusOne follows [semantic versioning](https://semver.org): **major** for chang
 upgrading, **minor** for new features, **patch** for fixes. The version is in the `VERSION` file and shows in
 the portal's sidebar and under Settings → System information.
 
+## 2.9.1 (2026-11-06)
+
+A fix for 2.9.0. Update with **Settings → Overview → Software update** or `sudo radiusone-update`.
+
+- **"Application error" after updating to 2.9.0:** the portal's database account could not read the new contracts and
+  online payments tables. The update grants them; a test now checks every table is granted.
+
 ## 2.9.0 (2026-11-06)
 
 Contracts and a pay page with POK and Stripe. Update with **Settings → Overview → Software update** or `sudo radiusone-update`.
