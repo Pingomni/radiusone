@@ -4,6 +4,15 @@ RadiusOne follows [semantic versioning](https://semver.org): **major** for chang
 upgrading, **minor** for new features, **patch** for fixes. The version is in the `VERSION` file and shows in
 the portal's sidebar and under Settings → System information.
 
+## 2.8.1 (2026-11-06)
+
+The user guide moves to pingomni.com. Update with **Settings → Overview → Software update** or `sudo radiusone-update`.
+
+- **Documentation** opens [pingomni.com/docs/radiusone](https://pingomni.com/docs/radiusone/) in a new tab, for every
+  operator; the Backblaze B2, Cloudflare R2 and Telegram setup links open the matching part. The portal no longer carries
+  its own copy, and `/docs` sends old bookmarks there.
+- **On the server:** nothing changes. Customers stay connected.
+
 ## 2.8.0 (2026-11-03)
 
 An OLT's own hardware. Update with **Settings → Overview → Software update** or `sudo radiusone-update`.

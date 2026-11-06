@@ -55,10 +55,12 @@ Route::middleware('frweb.auth')->group(function () {
         Route::post('/profile/2fa/disable', [ProfileController::class, 'twoFactorDisable']);
     });
 
+    // The user guide moved to pingomni.com: old links to /docs go there, for every operator.
+    Route::get('/docs', [SettingsController::class, 'docs']);
+
     // Settings and portal users (settings.manage: superadmin).
     Route::middleware('permission:settings.manage')->group(function () {
         Route::get('/settings', [SettingsController::class, 'settings']);
-        Route::get('/docs', [SettingsController::class, 'docs']);
         Route::get('/settings/notifications/{channel}', [SettingsController::class, 'legacyNotificationPage'])->whereIn('channel', ['general', 'sms', 'email']);
         Route::post('/settings/branding/name', [SettingsController::class, 'saveCompanyName']);
         Route::post('/settings/backups/run', [BackupSettingsController::class, 'runNow']);

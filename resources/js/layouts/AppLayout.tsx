@@ -1,6 +1,7 @@
 import { Head, Link, router, usePage } from '@inertiajs/react';
 import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
 import Icon from '@/components/Icon';
+import { DOCS_URL } from '@/lib/docs';
 import { FlashMessage } from '@/components/ui';
 import { useCan, useShared } from '@/lib/auth';
 import { useServerClock } from '@/lib/clock';
@@ -19,7 +20,6 @@ const NAV: [href: string, label: string, permission: string, icon: string, group
     ['/reports', 'Reports', 'reports.view', 'reports', 'Workspace'],
     ['/logs', 'Logs', 'logs.view', 'logs', 'Workspace'],
     ['/settings', 'Settings', 'settings.manage', 'settings', 'Workspace'],
-    ['/docs', 'Documentation', 'settings.manage', 'book', 'Workspace'],
 ];
 
 // Menu items that are RadiusOne Pro features: marked "Pro" while this server has no licence for them.
@@ -38,7 +38,6 @@ const CONTEXTS: Record<string, string> = {
     reports: 'Workspace / Insights',
     logs: 'Workspace / Activity',
     settings: 'Workspace / Administration',
-    docs: 'Workspace / Administration',
     profile: 'Workspace / My account',
 };
 
@@ -204,6 +203,11 @@ export default function AppLayout({ title, children }: { title: string; children
                             </Fragment>
                         );
                     })}
+                    {/* The guide is on pingomni.com, for every operator. */}
+                    <a href={DOCS_URL} target="_blank" rel="noopener noreferrer">
+                        <Icon name="book" />
+                        <span>Documentation</span>
+                    </a>
                 </nav>
                 {appVersion && <div className="sidebar-version">RadiusOne v{appVersion}</div>}
             </aside>

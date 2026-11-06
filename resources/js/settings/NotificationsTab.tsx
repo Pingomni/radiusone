@@ -1,4 +1,5 @@
 import { Link, router, useForm } from '@inertiajs/react';
+import { docsUrl } from '@/lib/docs';
 import { useState } from 'react';
 import { PostButton } from '@/components/confirm';
 import Icon from '@/components/Icon';
@@ -425,7 +426,7 @@ function AdminAlerts({ admin, ready }: { admin: NonNullable<Notifications['admin
                         <Check className="checkbox" label="Telegram (set up below)" name="alert_telegram" checked={form.data.alert_telegram} onChange={(e) => form.setData('alert_telegram', e.target.checked)} />
                     </fieldset>
 
-                    <div className="span2 notice-editor-channel"><h3>Telegram</h3>{tokenSaved ? <Badge tone="success">Bot token saved</Badge> : <Badge>Not set up</Badge>}<Link href="/docs#telegram">Setup guide</Link></div>
+                    <div className="span2 notice-editor-channel"><h3>Telegram</h3>{tokenSaved ? <Badge tone="success">Bot token saved</Badge> : <Badge>Not set up</Badge>}<a href={docsUrl('telegram')} target="_blank" rel="noopener noreferrer">Setup guide</a></div>
                     <Field
                         label="Bot token"
                         name="telegram_token"

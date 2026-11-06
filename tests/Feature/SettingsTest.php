@@ -159,4 +159,10 @@ final class SettingsTest extends TestCase
         $this->get('/settings')->assertForbidden();
         $this->get('/settings/users/create')->assertForbidden();
     }
+
+    public function test_the_guide_is_on_pingomni_com_for_every_operator(): void
+    {
+        $this->actingAsOperator('view');
+        $this->get('/docs')->assertRedirect('https://pingomni.com/docs/radiusone/');
+    }
 }

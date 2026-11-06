@@ -1,4 +1,5 @@
-import { Link, router, useForm } from '@inertiajs/react';
+import { router, useForm } from '@inertiajs/react';
+import { docsUrl } from '@/lib/docs';
 import { useEffect, useState } from 'react';
 import { DeleteButton, PostButton } from '@/components/confirm';
 import { Sheet, SettingsRows } from '@/components/settings';
@@ -110,7 +111,7 @@ function DestinationForm({ d, b, onDone }: { d: BackupDestination | null; b: Bac
                     <Field label="Bucket address" className="span2" required={form.data.provider !== 'b2'} placeholder={help.url} hint={help.where} {...bind(form, 'url')} />
                     <Field label={help.key} required {...bind(form, 'access_key')} />
                     <SecretField label={help.secret} name="secret_key" saved={Boolean(d?.secret_key_saved)} value={form.data.secret_key} error={form.errors.secret_key} onChange={(v) => form.setData('secret_key', v)} />
-                    <p className="span2 hint">Use a private bucket and a key limited to that bucket. <Link href={`/docs#${form.data.provider === 'r2' ? 'r2' : 'b2'}`}>Step-by-step guide</Link></p>
+                    <p className="span2 hint">Use a private bucket and a key limited to that bucket. <a href={docsUrl(form.data.provider === 'r2' ? 'cloudflare-r2-setup' : 'backblaze-b2-setup')} target="_blank" rel="noopener noreferrer">Step-by-step guide</a></p>
                 </>
             )}
             {type === 'sftp' && (

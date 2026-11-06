@@ -267,10 +267,12 @@ final class SettingsController extends Controller
         ];
     }
 
-    /** Administrator guide (static content in resources/js/pages/docs/Docs.tsx). */
-    public function docs(): Response
+    /** The user guide is on pingomni.com (resources/js/lib/docs.ts); old bookmarks of /docs go there. */
+    public const DOCS_URL = 'https://pingomni.com/docs/radiusone/';
+
+    public function docs(): \Symfony\Component\HttpFoundation\Response
     {
-        return Inertia::render('docs/Docs');
+        return Inertia::location(self::DOCS_URL);
     }
 
     public function legacyNotificationPage(string $channel): RedirectResponse
