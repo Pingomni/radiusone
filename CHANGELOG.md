@@ -4,6 +4,13 @@ RadiusOne follows [semantic versioning](https://semver.org): **major** for chang
 upgrading, **minor** for new features, **patch** for fixes. The version is in the `VERSION` file and shows in
 the portal's sidebar and under Settings → System information.
 
+## 2.9.2 (2026-11-06)
+
+A fix for 2.9.0. Update with **Settings → Overview → Software update** or `sudo radiusone-update`.
+
+- **The online payments check failed** ("Unknown lifecycle job"): it now runs every 5 minutes and shows under
+  Monitoring → Background jobs.
+
 ## 2.9.1 (2026-11-06)
 
 A fix for 2.9.0. Update with **Settings → Overview → Software update** or `sudo radiusone-update`.

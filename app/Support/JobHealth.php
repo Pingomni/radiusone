@@ -17,6 +17,7 @@ final class JobHealth
         'billing' => ['Recurring billing', 86400, 'Creates recurring invoices once a day.'],
         'customer-notifications' => ['Customer messages', 60, 'Sends queued customer email and SMS.'],
         'usage' => ['Usage and data caps', 300, 'Records daily download/upload and applies plan data caps.'],
+        'pay-sync' => ['Online payments', 300, 'Checks open pay page payments with POK or Stripe, and ends contracts past their end date.'],
         'notifications' => ['Expiry reminders (legacy)', 300, 'Older expiry-reminder sender.'],
     ];
 

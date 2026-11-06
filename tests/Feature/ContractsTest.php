@@ -402,6 +402,18 @@ final class ContractsTest extends TestCase
         $this->get(self::PORTAL . '/payments')->assertInertia(fn ($page) => $page->where('result.rows.0.provider', 'POK (test)')->where('metrics.0.value', '0.00 EUR'));
     }
 
+    public function test_the_scheduled_job_checks_open_payments(): void
+    {
+        $this->enablePay();
+        $this->contract(12);
+        $this->fakePok(['isCompleted' => true, 'originalAmount' => 20, 'originalCurrencyCode' => 'EUR', 'transactionId' => 'tx-job']);
+        $payment = $this->startPayment('monthly');
+        Db::exec('UPDATE pay_payments SET created_at = NOW() - INTERVAL 10 MINUTE WHERE id=?', [$payment['id']]);
+        $this->artisan('radiusone:sync-payments')->assertExitCode(0);
+        $this->assertSame('paid', Db::value('SELECT status FROM pay_payments WHERE id=?', [$payment['id']]));
+        $this->assertSame('succeeded', Db::value('SELECT state FROM job_runs WHERE job_name="pay-sync" ORDER BY id DESC LIMIT 1'));
+    }
+
     public function test_live_payments_use_pok_production(): void
     {
         $this->enablePay();

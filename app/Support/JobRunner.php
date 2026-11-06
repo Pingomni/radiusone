@@ -12,9 +12,10 @@ final class JobRunner
     public static function run(string $job, Closure $work): array
     {
         SchemaCompatibility::require(match ($job) {
-            'customer-notifications' => 'notifications', 'expiry' => 'policy', 'usage' => 'usage', default => 'billing'
+            'customer-notifications' => 'notifications', 'expiry' => 'policy', 'usage' => 'usage', 'pay-sync' => 'contracts', default => 'billing'
         });
-        if (!in_array($job, ['billing', 'expiry', 'notifications', 'customer-notifications', 'usage'], true)) {
+        // pay-sync issues invoices and renews services, so it shares the lifecycle lock with billing and expiry.
+        if (!in_array($job, ['billing', 'expiry', 'notifications', 'customer-notifications', 'usage', 'pay-sync'], true)) {
             throw new RuntimeException('Unknown lifecycle job.');
         }
         // Usage has its own lock: it may run next to billing and expiry (it only marks subscriptions for them).
