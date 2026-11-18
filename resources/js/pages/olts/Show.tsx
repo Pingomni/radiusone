@@ -12,7 +12,7 @@ import AppLayout from '@/layouts/AppLayout';
 import { useCan } from '@/lib/auth';
 import type { Paginated } from '@/lib/types';
 
-type Olt = { id: number; name: string; model: string; host: string; enabled: boolean; telnet: boolean; lastSync: string | null; lastMacSync: string | null; syncRequested: boolean; error: string; macError: string };
+type Olt = { id: number; name: string; model: string; host: string; enabled: boolean; telnet: boolean; canChange: boolean; lastSync: string | null; lastMacSync: string | null; syncRequested: boolean; error: string; macError: string };
 type Counts = { total: number; online: number; offline: number; weak: number };
 
 type History = { range: string; ranges: Record<string, string>; charts: { key: string; title: string; url: string; data: ChartPayload }[] };
@@ -121,6 +121,7 @@ export default function OltShow({ olt, counts, filters, hardware, history, resul
                 <Link className="button" href="/olts">All OLTs</Link>
                 <Link className="button" href="/olts/mapping">Client mapping</Link>
                 {can('nas.manage') && <PostButton action={`${path}/sync`} label={olt.syncRequested ? 'Read requested' : 'Read now'} className="button" disabled={olt.syncRequested} />}
+                {can('nas.manage') && olt.telnet && <Link className="button" href={`${path}/provision`}>New ONUs</Link>}
                 {can('nas.manage') && <Link className="button" href={`${path}/edit`}>Edit</Link>}
             </div>
             {olt.error && <p className="flash danger" role="alert">SNMP read failed: {olt.error}</p>}
@@ -134,6 +135,7 @@ export default function OltShow({ olt, counts, filters, hardware, history, resul
             <p className="hint">
                 ONU list read <Time value={olt.lastSync} /> (every 5 minutes).
                 {olt.telnet ? <> MAC table read <Time value={olt.lastMacSync} /> (every 15 minutes).</> : ' Telnet is off, so clients are not found automatically from their MAC.'}
+                {olt.canChange ? ' Changes from the portal are allowed: open an ONU to restart, turn off, rename or remove it.' : ' The portal only reads this OLT.'}
             </p>
             <Tabs
                 label="OLT sections"
@@ -162,10 +164,10 @@ export default function OltShow({ olt, counts, filters, hardware, history, resul
                     emptyText={counts.total ? 'No ONU matches.' : 'No ONUs read yet.'}
                     columns={[
                         { header: 'Port', cell: (o) => <span className="mono">{o.position}</span> },
-                        { header: 'Serial', cell: (o) => <span className="mono">{o.sn}</span> },
+                        { header: 'Serial', cell: (o) => <Link className="mono" href={`${path}/onus/${o.id}`}>{o.sn}</Link> },
                         { header: 'Description', className: 'wrap', cell: (o) => o.description || '-' },
                         { header: 'Client', cell: (o) => (o.clients.length ? o.clients.map((u) => <div key={u}><Link href={`/clients/${encodeURIComponent(u)}/edit?tab=onu`}>{u}</Link></div>) : '-') },
-                        { header: 'Status', cell: (o) => <OnuStatus status={o.status} /> },
+                        { header: 'Status', cell: (o) => (o.active === false ? <Badge tone="warning">Turned off</Badge> : <OnuStatus status={o.status} />) },
                         { header: 'Signal at ONU', cell: (o) => <OnuPower dbm={o.rx} /> },
                         { header: 'Signal at OLT', cell: (o) => <OnuPower dbm={o.oltRx} /> },
                         { header: 'Distance', cell: (o) => (o.distance === null ? '-' : `${o.distance} m`) },

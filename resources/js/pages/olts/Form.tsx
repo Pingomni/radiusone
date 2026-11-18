@@ -8,7 +8,7 @@ import { bind, bindCheck } from '@/lib/form';
 type Values = {
     name: string; model: string; host: string; enabled: boolean; snmp_version: string; snmp_port: string; snmp_community: string;
     v3_user: string; v3_context: string; v3_auth_protocol: string; v3_auth_password: string; v3_priv_protocol: string; v3_priv_password: string;
-    telnet_enabled: boolean; telnet_port: string; telnet_user: string; telnet_password: string;
+    telnet_enabled: boolean; telnet_port: string; telnet_user: string; telnet_password: string; manage_enabled: boolean;
 };
 type Saved = Record<'snmp_community' | 'v3_auth_password' | 'v3_priv_password' | 'telnet_user' | 'telnet_password', boolean>;
 
@@ -56,7 +56,7 @@ export default function OltForm({ id, models, authOptions, privOptions, values, 
                     </div>
                 </Panel>
                 <Panel title="Telnet">
-                    <p className="hint">Gives the MACs behind each ONU, which is how clients are found automatically. The portal can only send its fixed read commands. Telnet is not encrypted, so keep it on your management network, and use a user with few rights.</p>
+                    <p className="hint">Gives the MACs behind each ONU, which is how clients are found automatically, and an ONU&apos;s live details. Telnet is not encrypted, so keep it on your management network.</p>
                     <div className="form-grid">
                         <Check label="Read the MAC table over telnet" className="check span2" {...bindCheck(form, 'telnet_enabled')} />
                         {form.data.telnet_enabled && (
@@ -67,6 +67,13 @@ export default function OltForm({ id, models, authOptions, privOptions, values, 
                             </>
                         )}
                     </div>
+                </Panel>
+                <Panel title="Changes">
+                    <p className="hint">Off: the portal only sends read commands, and the telnet user needs no more than read rights. On: operators who may manage NAS devices can restart, turn off, rename and remove ONUs and add new ones, over telnet, with a user that has those rights on the OLT. Every change is written to the audit log with the commands sent. If another system also adds ONUs to this OLT, use only one of them for that.</p>
+                    <div className="form-grid">
+                        <Check label="Allow changes from the portal" className="check span2" disabled={!form.data.telnet_enabled} {...bindCheck(form, 'manage_enabled')} />
+                    </div>
+                    {!form.data.telnet_enabled && <p className="hint">Needs telnet turned on above.</p>}
                 </Panel>
                 <div className="form-actions"><button className="primary" disabled={form.processing}>Save OLT</button></div>
             </form>

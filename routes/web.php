@@ -11,6 +11,7 @@ use App\Http\Controllers\FirewallController;
 use App\Http\Controllers\MonitoringController;
 use App\Http\Controllers\NasController;
 use App\Http\Controllers\OltController;
+use App\Http\Controllers\OnuController;
 use App\Http\Controllers\OperationsController;
 use App\Http\Controllers\PayController;
 use App\Http\Controllers\PaymentController;
@@ -198,7 +199,7 @@ Route::middleware('frweb.auth')->group(function () {
     });
 
     // NAS devices and monitoring.
-    // OLTs and their ONUs: read-only towards the OLT.
+    // OLTs and their ONUs.
     Route::middleware('permission:nas.view')->group(function () {
         Route::get('/olts', [OltController::class, 'index']);
         Route::get('/olts/mapping', [OltController::class, 'mapping']);
@@ -212,7 +213,13 @@ Route::middleware('frweb.auth')->group(function () {
             Route::post('/olts/{id}/test', [OltController::class, 'test'])->whereNumber('id');
             Route::post('/olts/{id}/sync', [OltController::class, 'sync'])->whereNumber('id');
             Route::post('/olts/{id}/delete', [OltController::class, 'delete'])->whereNumber('id');
+            // The only routes that change an OLT, and only for an OLT with "Allow changes from the portal" on.
+            Route::get('/olts/{id}/provision', [OnuController::class, 'provision'])->whereNumber('id');
+            Route::post('/olts/{id}/provision', [OnuController::class, 'add'])->whereNumber('id');
+            Route::post('/olts/{id}/onus/{onu}/{action}', [OnuController::class, 'change'])->whereNumber(['id', 'onu'])->whereIn('action', ['reboot', 'disable', 'enable', 'describe', 'delete']);
         });
+        Route::get('/olts/{id}/onus/{onu}', [OnuController::class, 'show'])->whereNumber(['id', 'onu']);
+        Route::get('/olts/{id}/onus/{onu}/live', [OnuController::class, 'live'])->whereNumber(['id', 'onu']);
         Route::get('/olts/{id}', [OltController::class, 'show'])->whereNumber('id');
         Route::get('/olts/{id}/graph', [OltController::class, 'graph'])->whereNumber('id');
     });

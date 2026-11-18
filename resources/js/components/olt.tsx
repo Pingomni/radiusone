@@ -3,7 +3,7 @@ import { Badge } from '@/components/ui';
 export type OnuRow = {
     id: number; position: string; sn: string; description: string; model: string; profile: string; status: string; downCause: string;
     lastUp: string | null; lastDown: string | null; rx: number | null; oltRx: number | null; distance: number | null; macs: number | null;
-    temperature: number | null; seen: string; clients: string[];
+    temperature: number | null; seen: string; clients: string[]; active: boolean | null; serviceProfile: string;
 };
 
 export function OnuStatus({ status }: { status: string }) {

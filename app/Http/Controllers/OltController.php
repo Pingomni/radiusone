@@ -10,6 +10,7 @@ use App\Http\Support\MonitoringData;
 use App\Support\Audit;
 use App\Support\Auth;
 use App\Support\Db;
+use App\Support\Olt\OltManager;
 use App\Support\Olt\OltMapper;
 use App\Support\Olt\OltMonitor;
 use App\Support\Olt\Olts;
@@ -22,7 +23,7 @@ use Inertia\Response;
 use PDOException;
 use RuntimeException;
 
-/** OLTs, their ONUs and which client is on which ONU. Read-only towards the OLT. */
+/** OLTs, their ONUs and which client is on which ONU. Only reads from the OLT: changes are in OnuController. */
 final class OltController extends Controller
 {
     private const PAGE_SIZE = 50;
@@ -72,6 +73,7 @@ final class OltController extends Controller
                 'telnet_port' => (string) ($olt['telnet_port'] ?? '23'),
                 'telnet_user' => '',
                 'telnet_password' => '',
+                'manage_enabled' => (bool) ($olt['manage_enabled'] ?? false),
             ],
             // Secrets go one way: the page is only told whether one is saved.
             'saved' => [
@@ -97,9 +99,9 @@ final class OltController extends Controller
         }
         // Reads the OLT with the new settings on the next minute.
         Db::exec('UPDATE olts SET sync_requested_at=NOW() WHERE id=? AND enabled=1', [$saved]);
-        $public = static fn (array $o) => array_intersect_key($o, array_flip(['name', 'model', 'host', 'enabled', 'snmp_version', 'snmp_port', 'telnet_enabled', 'telnet_port']));
+        $public = static fn (array $o) => array_intersect_key($o, array_flip(['name', 'model', 'host', 'enabled', 'snmp_version', 'snmp_port', 'telnet_enabled', 'telnet_port', 'manage_enabled']));
         Audit::log($stored ? 'update' : 'create', 'olt', (string) $saved, $stored ? $public($stored) : null, $public($values));
-        return $this->ok('/olts/' . $saved, 'OLT saved. It is read within a minute. Nothing is changed on the OLT.');
+        return $this->ok('/olts/' . $saved, 'OLT saved. It is read within a minute. ' . ($values['manage_enabled'] ? 'Changes from the portal are allowed for this OLT.' : 'Nothing is changed on the OLT.'));
     }
 
     public function test(string $id): RedirectResponse
@@ -157,7 +159,7 @@ final class OltController extends Controller
         return Inertia::render('olts/Show', [
             'olt' => [
                 'id' => (int) $olt['id'], 'name' => (string) $olt['name'], 'model' => Olts::MODELS[$olt['model']] ?? (string) $olt['model'], 'host' => (string) $olt['host'], 'enabled' => (bool) $olt['enabled'],
-                'telnet' => (bool) $olt['telnet_enabled'], 'lastSync' => $olt['last_sync_at'], 'lastMacSync' => $olt['last_mac_sync_at'],
+                'telnet' => (bool) $olt['telnet_enabled'], 'canChange' => OltManager::canChange($olt), 'lastSync' => $olt['last_sync_at'], 'lastMacSync' => $olt['last_mac_sync_at'],
                 'syncRequested' => $olt['sync_requested_at'] !== null,
                 'error' => (string) ($olt['last_error'] ?? ''), 'macError' => (string) ($olt['last_mac_error'] ?? ''),
             ],
@@ -263,9 +265,11 @@ final class OltController extends Controller
      * @param  array<string, mixed>  $o
      * @return array<string, mixed>
      */
-    private static function onuRow(array $o): array
+    public static function onuRow(array $o): array
     {
         return [
+            'active' => ($o['active'] ?? null) === null ? null : (bool) $o['active'],
+            'serviceProfile' => (string) ($o['service_profile'] ?? ''),
             'id' => (int) $o['id'],
             'position' => Olts::position($o),
             'sn' => (string) $o['sn'],
@@ -407,6 +411,8 @@ final class OltController extends Controller
             'onu' => $linked !== null && $linked['onu'] !== null ? self::onuRow($linked['onu'] + ['clients' => null]) : null,
             'found' => $found === null ? null : ['mac' => OltMapper::formatMac($found['mac']), 'onus' => array_map(static fn (array $o) => ['sn' => (string) $o['sn'], 'position' => Olts::position($o)], $found['onus'])],
             'hasOlts' => (bool) Db::value('SELECT COUNT(*) FROM olts'),
+            // Where a new ONU can be added for this client.
+            'addOn' => array_map(static fn (array $o) => ['id' => (int) $o['id'], 'name' => (string) $o['name']], Db::select('SELECT id,name FROM olts WHERE enabled=1 AND telnet_enabled=1 AND manage_enabled=1 ORDER BY name')),
         ];
     }
 }

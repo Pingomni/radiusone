@@ -30,6 +30,7 @@ final class HuaweiMa5800
         'service_profile' => '43.1.8',
         'description' => '43.1.9',
         'onu_model' => '45.1.4',
+        'active' => '46.1.1',
         'status' => '46.1.15',
         'distance_m' => '46.1.20',
         'mac_count' => '46.1.21',
@@ -109,6 +110,10 @@ final class HuaweiMa5800
             'service_profile' => self::text($row['service_profile'] ?? '', 64),
             'status' => match ((int) ($row['status'] ?? 0)) {
                 1 => 'online', 2 => 'offline', default => 'unknown'
+            },
+            // The OLT's own switch for the ONU: 1 on, 2 turned off by an operator.
+            'active' => match ((int) ($row['active'] ?? 0)) {
+                1 => 1, 2 => 0, default => null
             },
             'down_cause' => self::DOWN_CAUSES[(int) ($row['down_cause'] ?? 0)] ?? '',
             'last_up_at' => self::dateTime($row['last_up_at'] ?? null),

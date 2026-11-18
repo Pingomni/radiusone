@@ -4,6 +4,18 @@ RadiusOne follows [semantic versioning](https://semver.org): **major** for chang
 upgrading, **minor** for new features, **patch** for fixes. The version is in the `VERSION` file and shows in
 the portal's sidebar and under Settings → System information.
 
+## 2.10.0 (2026-11-18)
+
+ONU management on the OLT. Update with **Settings → Overview → Software update** or `sudo radiusone-update`.
+
+- **Changes are off per OLT** until **Allow changes from the portal** is turned on under Edit.
+- **New ONUs:** lists ONUs plugged in but not added, and adds one in router or bridge mode, linked to a client if you want.
+- **An ONU's page:** live state, signal, internet connection and LAN ports; restart, turn off and on, rename, remove.
+- **Safe by design:** the serial number is checked on the OLT before every change, a failed add is undone, and every
+  change is in the audit log with the commands sent.
+- **Fixed:** an OLT that prints a notice just after login no longer breaks the MAC table read.
+- **On the server:** three new columns. No OLT is changed by the update.
+
 ## 2.9.2 (2026-11-06)
 
 A fix for 2.9.0. Update with **Settings → Overview → Software update** or `sudo radiusone-update`.

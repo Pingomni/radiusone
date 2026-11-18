@@ -239,12 +239,12 @@ sudo systemctl start freeradius
 ## OLT and client mapping
 
 **OLT** in the menu reads a Huawei MA5800-X7 and shows each ONU's port, status, signal and last disconnect, and which client
-is on it. The portal **only reads**. Its SNMP client cannot send a change, and its telnet client can send only `enable`,
-`scroll`, `display mac-address all` and `quit`, so it can't change anything on the OLT.
+is on it. The portal **only reads** an OLT until you turn on **Allow changes from the portal** for it. Its SNMP client cannot
+send a change, and until then its telnet client can send only `display` commands and the lines needed to reach them.
 
 Before adding the OLT:
 
-- **This server must reach the OLT's management address,** on UDP 161 for SNMP and TCP 23 for telnet. Allow this server
+- **This server must reach the OLT's management address,** on UDP 161 for SNMP and TCP 23 for telnet (both ports can be changed on the form). Allow this server
   in any ACL on the OLT.
 - **Use a read-only SNMP community.** On the OLT: `snmp-agent community read <name>` and
   `snmp-agent sys-info version v2c`. SNMP v3 is also supported.
@@ -252,6 +252,17 @@ Before adding the OLT:
   automatically. Use a user with few rights, and keep it on your management network.
 
 Then use **OLT → New OLT** and press **Test connection**. The ONU list is read every 5 minutes, and the MAC table every 15.
+
+**Managing ONUs.** Under **OLT → Edit**, turn on **Allow changes from the portal**. The telnet user then needs the right to
+configure on the OLT. After that:
+
+- **OLT → New ONUs** lists ONUs that are plugged in but not added, and adds one with the line profile, service profile, VLAN
+  and traffic tables you choose. A client's **ONU** tab has the same, and links the new ONU to that client.
+- **An ONU's page** (click its serial number) shows its live state, signal, internet connection and LAN ports, and has
+  **Restart**, **Turn off**, **Turn on**, the description, and **Remove from the OLT**.
+- Before any change the portal checks the serial number on the OLT, and every change is in the audit log with the commands sent.
+- The portal does not send `save`: check `display autosave configuration` on the OLT. If another system such as SmartOLT also
+  adds ONUs to the same OLT, use only one of them for that.
 
 **How clients are linked** (see **OLT → Client mapping**):
 

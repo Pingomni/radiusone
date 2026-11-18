@@ -1,0 +1,395 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Tests\Feature;
+
+use App\Support\Db;
+use App\Support\Olt\HuaweiCli;
+use App\Support\Olt\OltManager;
+use App\Support\Olt\Olts;
+use App\Support\Olt\OltSync;
+use App\Support\Olt\OltTelnet;
+use RuntimeException;
+use Tests\TestCase;
+
+/** Changing an OLT from the portal, against the pretend OLT in tests/fixtures/fake-olt.php. */
+final class OltManageTest extends TestCase
+{
+    private const BASE = '1.3.6.1.4.1.2011.6.128.1.1.2';
+    /** GPON 0/1/0 in the MA5800's numbering. */
+    private const PORT_A = 4194312192;
+
+    /** @var resource|null */
+    private $agent = null;
+    private string $log = '';
+    private int $snmpPort = 0;
+    private int $telnetPort = 0;
+
+    protected function tearDown(): void
+    {
+        if (is_resource($this->agent)) {
+            proc_terminate($this->agent);
+            proc_close($this->agent);
+        }
+        parent::tearDown();
+    }
+
+    /** @param  array<string, mixed>  $more */
+    private function startAgent(array $more = []): void
+    {
+        $dir = (string) getenv('RADIUSONE_TEST_DIR');
+        $this->log = $dir . '/fake-olt-' . bin2hex(random_bytes(4)) . '.log';
+        $this->snmpPort = random_int(20000, 40000);
+        $this->telnetPort = $this->snmpPort + 1;
+        $config = $dir . '/fake-olt-' . bin2hex(random_bytes(4)) . '.json';
+        $text = static fn (string $v) => [4, base64_encode($v)];
+        $b = self::BASE;
+        touch($this->log);
+        file_put_contents($config, json_encode($more + [
+            'log' => $this->log, 'ready' => $config . '.ready', 'snmp_port' => $this->snmpPort, 'telnet_port' => $this->telnetPort,
+            'community' => 'public-ro', 'user' => 'manager', 'password' => 'manage-pass', 'mac_table' => "  Total: 0\n",
+            'oids' => [
+                '1.3.6.1.2.1.1.1.0' => $text('Huawei Integrated Access Software MA5800-X7'),
+                '1.3.6.1.2.1.2.2.1.2.' . self::PORT_A => $text('GPON 0/1/0'),
+                "$b.43.1.3." . self::PORT_A . '.3' => $text('HWTC' . hex2bin('1234ABCD')),
+                "$b.43.1.3." . self::PORT_A . '.4' => $text('HWTC' . hex2bin('1234ABCE')),
+                "$b.46.1.1." . self::PORT_A . '.3' => [2, 1],
+                "$b.46.1.1." . self::PORT_A . '.4' => [2, 2],
+                "$b.46.1.15." . self::PORT_A . '.3' => [2, 1],
+                "$b.46.1.15." . self::PORT_A . '.4' => [2, 2],
+            ],
+        ], JSON_THROW_ON_ERROR));
+        $pipes = [];
+        $this->agent = proc_open([PHP_BINARY, base_path('tests/fixtures/fake-olt.php'), $config], [1 => ['file', '/dev/null', 'w'], 2 => ['file', '/dev/null', 'w']], $pipes);
+        for ($i = 0; $i < 100 && !is_file($config . '.ready'); $i++) {
+            usleep(50000);
+        }
+        $this->assertFileExists($config . '.ready');
+    }
+
+    /** @return array<string, mixed> */
+    private function olt(bool $manage = true): array
+    {
+        return Olts::find(Olts::save(null, Olts::validated([
+            'name' => 'olt-1', 'model' => 'huawei_ma5800_x7', 'host' => '127.0.0.1', 'enabled' => '1',
+            'snmp_version' => '2c', 'snmp_port' => (string) $this->snmpPort, 'snmp_community' => 'public-ro',
+            'telnet_enabled' => '1', 'telnet_port' => (string) $this->telnetPort, 'telnet_user' => 'manager', 'telnet_password' => 'manage-pass',
+            'manage_enabled' => $manage ? '1' : '',
+        ], null)));
+    }
+
+    /** The ONU the pretend OLT has at 0/1/0:3, as the portal last read it. */
+    private function onu(array $olt, string $sn = 'HWTC1234ABCD', int $ontId = 3): int
+    {
+        return $this->insertRow('olt_onus', ['olt_id' => $olt['id'], 'frame' => 0, 'slot' => 1, 'port' => 0, 'ont_id' => $ontId, 'sn' => $sn, 'description' => 'Kati 2 hyrja A', 'status' => 'online', 'active' => 1, 'seen_at' => date('Y-m-d H:i:s')]);
+    }
+
+    /** @return list<string> every line the pretend OLT received over telnet after the login */
+    private function commands(): array
+    {
+        $lines = array_filter(file($this->log, FILE_IGNORE_NEW_LINES), static fn (string $l) => str_starts_with($l, 'telnet-cmd '));
+        return array_values(array_map(static fn (string $l) => substr($l, 11), $lines));
+    }
+
+    /** @return list<string> only the lines that change the OLT */
+    private function changes(): array
+    {
+        return array_values(array_filter($this->commands(), static fn (string $c) => !preg_match('/^(enable|scroll|config|quit|y|n|display .*|interface gpon .*)$/', $c)));
+    }
+
+    public function test_nothing_is_changed_until_changes_are_allowed_for_the_olt(): void
+    {
+        $this->startAgent();
+        $olt = $this->olt(false);
+        $onu = $this->onu($olt);
+        $this->actingAsOperator();
+        foreach (['reboot', 'disable', 'enable', 'describe', 'delete'] as $action) {
+            $this->post("/olts/{$olt['id']}/onus/$onu/$action", ['description' => 'x'])->assertSessionHas('flash.type', 'danger');
+        }
+        $this->post("/olts/{$olt['id']}/provision", ['sn' => 'HWTCAAAA0001', 'description' => 'x', 'line_profile' => '6', 'service_profile' => '2', 'vlan' => '100', 'gem' => '1', 'traffic_up' => '8', 'traffic_down' => '9'])->assertSessionHas('flash.type', 'danger');
+        $this->assertSame([], $this->commands());
+        $this->assertSame(0, (int) Db::value('SELECT manage_enabled FROM olts'));
+    }
+
+    public function test_allowing_changes_needs_telnet(): void
+    {
+        $values = Olts::validated(['name' => 'x', 'model' => 'huawei_ma5800_x7', 'host' => '192.0.2.10', 'snmp_version' => '2c', 'snmp_port' => '161', 'snmp_community' => 'c', 'telnet_port' => '23', 'manage_enabled' => '1'], null);
+        $this->assertSame(0, $values['manage_enabled']);
+    }
+
+    public function test_restart_sends_one_command_after_checking_the_serial_number(): void
+    {
+        $this->startAgent();
+        $olt = $this->olt();
+        $onu = $this->onu($olt);
+        $this->actingAsOperator();
+        $this->post("/olts/{$olt['id']}/onus/$onu/reboot")->assertSessionHas('flash.type', 'success');
+        $this->assertSame(['enable', 'scroll', 'display ont info 0 1 0 3', 'config', 'interface gpon 0/1', 'ont reset 0 3', 'y', 'quit', 'quit', 'quit', 'y'], $this->commands());
+        $audit = Db::row('SELECT * FROM audit_logs WHERE action="onu_reboot"');
+        $this->assertSame('HWTC1234ABCD', $audit['entity_id']);
+        $this->assertStringContainsString('ont reset 0 3', $audit['after_json']);
+        $this->assertNotNull(Db::value('SELECT sync_requested_at FROM olts'));
+    }
+
+    public function test_a_different_onu_at_that_position_is_never_touched(): void
+    {
+        $this->startAgent();
+        $olt = $this->olt();
+        // The portal's list is stale: it believes another serial number sits at 0/1/0:3.
+        $onu = $this->onu($olt, 'HWTC99999999');
+        $this->actingAsOperator();
+        foreach (['reboot', 'disable', 'delete'] as $action) {
+            $this->post("/olts/{$olt['id']}/onus/$onu/$action")->assertSessionHas('flash.message', fn (string $m) => str_contains($m, 'different ONU'));
+        }
+        $this->assertSame([], $this->changes());
+        $this->assertSame(1, (int) Db::value('SELECT COUNT(*) FROM olt_onus'));
+        // And one the OLT no longer has at all.
+        $gone = $this->onu($olt, 'HWTC88888888', 77);
+        $this->post("/olts/{$olt['id']}/onus/$gone/reboot")->assertSessionHas('flash.message', fn (string $m) => str_contains($m, 'no ONU at 0/1/0:77'));
+        $this->assertSame([], $this->changes());
+    }
+
+    public function test_turning_an_onu_off_and_on(): void
+    {
+        $this->startAgent();
+        $olt = $this->olt();
+        $onu = $this->onu($olt);
+        $this->actingAsOperator();
+        $this->post("/olts/{$olt['id']}/onus/$onu/disable")->assertSessionHas('flash.type', 'success');
+        $this->assertSame(['ont deactivate 0 3'], $this->changes());
+        $row = Db::row('SELECT * FROM olt_onus');
+        $this->assertSame([0, 'offline'], [(int) $row['active'], $row['status']]);
+        // A turned off ONU cannot be restarted.
+        $this->post("/olts/{$olt['id']}/onus/$onu/reboot")->assertSessionHas('flash.type', 'danger');
+        $this->post("/olts/{$olt['id']}/onus/$onu/enable")->assertSessionHas('flash.type', 'success');
+        $this->assertSame(['ont deactivate 0 3', 'ont activate 0 3'], $this->changes());
+        $this->assertSame(1, (int) Db::value('SELECT active FROM olt_onus'));
+        $this->assertSame(2, (int) Db::value('SELECT COUNT(*) FROM audit_logs WHERE action IN ("onu_disable","onu_enable")'));
+    }
+
+    public function test_a_description_is_cleaned_before_it_reaches_the_olt(): void
+    {
+        $this->startAgent();
+        $olt = $this->olt();
+        $onu = $this->onu($olt);
+        $this->actingAsOperator();
+        $this->post("/olts/{$olt['id']}/onus/$onu/describe", ['description' => "Ëndrit Çela \"kati 2\"?\r\nont delete 0 3"])->assertSessionHas('flash.type', 'success');
+        $this->assertSame(['ont modify 0 3 desc "Endrit Cela kati 2 ont delete 0 3"'], $this->changes());
+        $this->assertSame('Endrit Cela kati 2 ont delete 0 3', Db::value('SELECT description FROM olt_onus'));
+        $this->post("/olts/{$olt['id']}/onus/$onu/describe", ['description' => '???'])->assertSessionHas('flash.type', 'danger');
+        $this->assertCount(1, $this->changes());
+        $this->assertSame('Failure x', HuaweiCli::description('Failure: x'));
+        $this->assertSame(64, strlen(HuaweiCli::description(str_repeat('a', 200))));
+    }
+
+    public function test_removing_an_onu_takes_its_service_ports_first_and_unlinks_its_client(): void
+    {
+        $this->startAgent();
+        $olt = $this->olt();
+        $onu = $this->onu($olt);
+        $customer = $this->insertRow('customer_profiles', ['username' => 'gtest', 'account_status' => 'active', 'enabled' => 1]);
+        $this->insertRow('customer_onus', ['customer_id' => $customer, 'olt_id' => $olt['id'], 'sn' => 'HWTC1234ABCD', 'source' => 'manual', 'linked_at' => date('Y-m-d H:i:s')]);
+        // NOC may manage, but not delete.
+        $this->actingAsOperator('noc');
+        $this->post("/olts/{$olt['id']}/onus/$onu/delete")->assertForbidden();
+        $this->assertSame([], $this->commands());
+        $this->actingAsOperator();
+        $this->post("/olts/{$olt['id']}/onus/$onu/delete")->assertRedirect('/olts/' . $olt['id'])->assertSessionHas('flash.type', 'success');
+        // Only this ONU's service port: 2101 belongs to another ONU.
+        $this->assertSame(['undo service-port 2100', 'ont delete 0 3'], $this->changes());
+        $this->assertSame(0, (int) Db::value('SELECT COUNT(*) FROM olt_onus'));
+        $this->assertSame(0, (int) Db::value('SELECT COUNT(*) FROM customer_onus'));
+        $this->assertSame(1, (int) Db::value('SELECT COUNT(*) FROM customer_profiles'));
+    }
+
+    public function test_the_new_onus_page_lists_what_is_plugged_in_and_what_most_onus_use(): void
+    {
+        $this->startAgent();
+        $olt = $this->olt();
+        $this->insertRow('customer_profiles', ['username' => 'gtest', 'first_name' => 'Ëndrit', 'last_name' => 'Çela', 'account_status' => 'active', 'enabled' => 1]);
+        $this->actingAsOperator();
+        $this->get("/olts/{$olt['id']}/provision?client=gtest")->assertOk()->assertInertia(fn ($p) => $p->component('olts/Provision')
+            ->where('error', '')
+            ->where('options.found.0.sn', 'HWTCAAAA0001')->where('options.found.0.port', 0)->where('options.found.0.model', 'EG8145V5')
+            ->where('options.defaults.line_profile', '6')->where('options.defaults.service_profile', '2')->where('options.defaults.vlan', '100')
+            ->where('options.defaults.traffic_up', '8')->where('options.defaults.traffic_down', '9')->where('options.defaults.gem', '1')
+            ->where('options.defaults.wan_profile', '0')->where('options.defaults.route_profile', '1')
+            ->where('client.description', 'Endrit Cela gtest'));
+        $this->assertSame([], $this->changes());
+    }
+
+    public function test_adding_an_onu_in_router_mode_and_linking_its_client(): void
+    {
+        $this->startAgent();
+        $olt = $this->olt();
+        $this->onu($olt);
+        $this->insertRow('customer_profiles', ['username' => 'gtest', 'account_status' => 'active', 'enabled' => 1]);
+        $this->actingAsOperator();
+        $input = ['sn' => 'HWTC-AAAA0001', 'mode' => 'router', 'line_profile' => '6', 'service_profile' => '2', 'vlan' => '100', 'gem' => '1', 'traffic_up' => '8', 'traffic_down' => '9', 'wan_profile' => '0', 'route_profile' => '1', 'description' => 'Endrit Cela', 'client' => 'gtest'];
+        $this->post("/olts/{$olt['id']}/provision", $input)->assertSessionHas('flash.type', 'success');
+        $this->assertSame([
+            'ont add 0 sn-auth "48575443AAAA0001" omci ont-lineprofile-id 6 ont-srvprofile-id 2 desc "Endrit Cela"',
+            'ont ipconfig 0 0 ip-index 1 dhcp vlan 100 priority 0',
+            'ont internet-config 0 0 ip-index 1',
+            'ont wan-config 0 0 ip-index 1 profile-id 0',
+            'ont policy-route-config 0 0 profile-id 1',
+            'ont port route 0 0 eth 1 enable', 'ont port route 0 0 eth 2 enable', 'ont port route 0 0 eth 3 enable', 'ont port route 0 0 eth 4 enable',
+            'service-port vlan 100 gpon 0/1/0 ont 0 gemport 1 multi-service user-vlan 100 tag-transform translate inbound traffic-table index 8 outbound traffic-table index 9',
+        ], $this->changes());
+        $row = Db::row('SELECT * FROM olt_onus WHERE sn="HWTCAAAA0001"');
+        $this->assertSame([0, 1, 0, 0, 'Endrit Cela', 'EG8145V5'], [(int) $row['frame'], (int) $row['slot'], (int) $row['port'], (int) $row['ont_id'], $row['description'], $row['onu_model']]);
+        $link = Db::row('SELECT * FROM customer_onus');
+        $this->assertSame(['HWTCAAAA0001', 'manual'], [$link['sn'], $link['source']]);
+        $this->assertSame('100', (string) json_decode((string) Db::value('SELECT provision_defaults FROM olts'), true)['vlan']);
+        $this->assertStringContainsString('ont add 0 sn-auth', (string) Db::value('SELECT after_json FROM audit_logs WHERE action="onu_add"'));
+        // It is no longer "new", and the form now starts from what was just used without reading every service port.
+        file_put_contents($this->log, '');
+        $this->get("/olts/{$olt['id']}/provision")->assertInertia(fn ($p) => $p->where('options.found', [])->where('options.defaults.route_profile', '1'));
+        $this->assertNotContains('display service-port all', $this->commands());
+        // The same ONU cannot be added twice.
+        $this->post("/olts/{$olt['id']}/provision", $input)->assertSessionHas('flash.message', fn (string $m) => str_contains($m, 'no longer lists'));
+        $this->assertSame([], $this->changes());
+    }
+
+    public function test_adding_an_onu_in_bridge_mode(): void
+    {
+        $this->startAgent();
+        $olt = $this->olt();
+        $this->actingAsOperator();
+        $this->post("/olts/{$olt['id']}/provision", ['sn' => 'HWTCAAAA0001', 'mode' => 'bridge', 'line_profile' => '6', 'service_profile' => '1', 'vlan' => '100', 'gem' => '1', 'traffic_up' => '8', 'traffic_down' => '9', 'wan_profile' => '0', 'description' => 'Bridge'])->assertSessionHas('flash.type', 'success');
+        $this->assertSame([
+            'ont add 0 sn-auth "48575443AAAA0001" omci ont-lineprofile-id 6 ont-srvprofile-id 1 desc "Bridge"',
+            'ont port native-vlan 0 0 eth 1 vlan 100 priority 0',
+            'service-port vlan 100 gpon 0/1/0 ont 0 gemport 1 multi-service user-vlan 100 tag-transform translate inbound traffic-table index 8 outbound traffic-table index 9',
+        ], $this->changes());
+        $this->assertSame(0, (int) Db::value('SELECT COUNT(*) FROM customer_onus'));
+    }
+
+    public function test_an_onu_that_cannot_be_finished_is_taken_off_again(): void
+    {
+        $this->startAgent(['fail' => ['service-port vlan']]);
+        $olt = $this->olt();
+        $this->actingAsOperator();
+        $this->post("/olts/{$olt['id']}/provision", ['sn' => 'HWTCAAAA0001', 'mode' => 'bridge', 'line_profile' => '6', 'service_profile' => '1', 'vlan' => '100', 'gem' => '1', 'traffic_up' => '8', 'traffic_down' => '9', 'description' => 'Half'])
+            ->assertSessionHas('flash.type', 'danger')->assertSessionHas('flash.message', fn (string $m) => str_contains($m, 'Made to fail by the test') && str_contains($m, 'taken off the OLT again'));
+        $changes = $this->changes();
+        $this->assertSame('ont delete 0 0', end($changes));
+        $this->assertSame(0, (int) Db::value('SELECT COUNT(*) FROM olt_onus'));
+        $this->assertNull(Db::value('SELECT provision_defaults FROM olts'));
+        $this->assertSame(0, (int) Db::value('SELECT COUNT(*) FROM audit_logs WHERE action="onu_add"'));
+        // A failure in the middle of the ONU's own settings is undone the same way.
+        $this->tearDown();
+        $this->setUp();
+        $this->startAgent(['fail' => ['ont port native-vlan']]);
+        $olt = $this->olt();
+        try {
+            OltManager::authorize($olt, ['sn' => 'HWTCAAAA0001', 'mode' => 'bridge', 'line_profile' => '6', 'service_profile' => '1', 'vlan' => '100', 'gem' => '1', 'traffic_up' => '8', 'traffic_down' => '9', 'description' => 'Half']);
+            $this->fail('Added');
+        } catch (RuntimeException $e) {
+            $this->assertStringContainsString('taken off the OLT again', $e->getMessage());
+        }
+        $this->assertSame(['ont add 0 sn-auth "48575443AAAA0001" omci ont-lineprofile-id 6 ont-srvprofile-id 1 desc "Half"', 'ont port native-vlan 0 0 eth 1 vlan 100 priority 0', 'ont delete 0 0'], $this->changes());
+    }
+
+    public function test_bad_choices_never_reach_the_olt(): void
+    {
+        $this->startAgent();
+        $olt = $this->olt();
+        $good = ['sn' => 'HWTCAAAA0001', 'mode' => 'router', 'line_profile' => '6', 'service_profile' => '2', 'vlan' => '100', 'gem' => '1', 'traffic_up' => '8', 'traffic_down' => '9', 'description' => 'x'];
+        foreach ([['sn' => 'nope'], ['line_profile' => '6 ont-type 10g'], ['vlan' => '0'], ['vlan' => '100 inbound'], ['gem' => '-1'], ['traffic_up' => ''], ['description' => '"?"'], ['wan_profile' => 'x']] as $bad) {
+            try {
+                OltManager::authorize($olt, $bad + $good);
+                $this->fail('Accepted ' . json_encode($bad));
+            } catch (RuntimeException) {
+            }
+        }
+        $this->assertSame([], $this->commands());
+    }
+
+    public function test_live_details_only_read(): void
+    {
+        $this->startAgent();
+        $olt = $this->olt(false);
+        $onu = $this->onu($olt);
+        $this->actingAsOperator('view');
+        $this->get("/olts/{$olt['id']}/onus/$onu")->assertOk()->assertInertia(fn ($p) => $p->component('olts/Onu')->where('onu.sn', 'HWTC1234ABCD')->where('olt.canChange', false)->where('olt.canRead', true));
+        $this->get("/olts/{$olt['id']}/onus/$onu/live")->assertOk()
+            ->assertJsonPath('ok', true)->assertJsonPath('data.state.run', 'online')->assertJsonPath('data.state.active', true)
+            ->assertJsonPath('data.optical.rx', '-18.18')->assertJsonPath('data.optical.oltRx', '-22.45')
+            ->assertJsonPath('data.wans.0.ip', '10.200.0.254')->assertJsonPath('data.wans.0.status', 'Connected')
+            ->assertJsonPath('data.lan.1.up', true)->assertJsonPath('data.lan.1.speed', '100')
+            ->assertJsonPath('data.software.version', 'V5R024C10S112');
+        $this->assertSame([], $this->changes());
+        $stale = $this->onu($olt, 'HWTC99999999', 77);
+        $this->get("/olts/{$olt['id']}/onus/$stale/live")->assertOk()->assertJsonPath('ok', false);
+    }
+
+    public function test_permissions(): void
+    {
+        $this->startAgent();
+        $olt = $this->olt();
+        $onu = $this->onu($olt);
+        $this->actingAsOperator('view');
+        $this->get("/olts/{$olt['id']}/provision")->assertForbidden();
+        $this->post("/olts/{$olt['id']}/provision", [])->assertForbidden();
+        foreach (['reboot', 'disable', 'enable', 'describe', 'delete'] as $action) {
+            $this->post("/olts/{$olt['id']}/onus/$onu/$action")->assertForbidden();
+        }
+        $this->post("/olts/{$olt['id']}/onus/$onu/save")->assertNotFound();
+        $this->assertSame([], $this->commands());
+    }
+
+    public function test_a_question_the_portal_did_not_expect_is_answered_no(): void
+    {
+        $this->startAgent();
+        $t = new OltTelnet('127.0.0.1', $this->telnetPort, 'manager', 'manage-pass', 30.0);
+        $t->open();
+        $t->command('config');
+        $t->command('interface gpon 0/1');
+        try {
+            $t->command('ont reset 0 3');
+            $this->fail('Answered yes');
+        } catch (RuntimeException $e) {
+            $this->assertStringContainsString('nothing was done', $e->getMessage());
+        }
+        foreach (['display ont info 0 1 0 3?', "quit\nont delete 0 3", "a\tb", ''] as $bad) {
+            try {
+                $t->command($bad);
+                $this->fail('Sent ' . json_encode($bad));
+            } catch (RuntimeException $e) {
+                $this->assertStringContainsString('cannot be sent', $e->getMessage());
+            }
+        }
+        $t->close();
+        $this->assertSame(['enable', 'config', 'interface gpon 0/1', 'ont reset 0 3', 'n', 'quit', 'quit', 'quit', 'y'], $this->commands());
+    }
+
+    public function test_the_reader_knows_an_onu_that_is_turned_off(): void
+    {
+        $this->startAgent();
+        $olt = $this->olt(false);
+        OltSync::run($olt);
+        $this->assertSame(1, (int) Db::value('SELECT last_sync_ok FROM olts'));
+        $this->assertSame(['HWTC1234ABCD' => 1, 'HWTC1234ABCE' => 0], array_map('intval', array_column(Db::select('SELECT sn,active FROM olt_onus ORDER BY sn'), 'active', 'sn')));
+        $this->actingAsOperator();
+        $this->get('/olts/' . $olt['id'])->assertInertia(fn ($p) => $p->where('result.rows.1.active', false)->where('olt.canChange', false));
+    }
+
+    public function test_command_line_answers_are_read_as_the_olt_prints_them(): void
+    {
+        $this->assertSame('HWTC25D275B6', HuaweiCli::serialFromCli('4857544325D275B6 (HWTC-25D275B6)'));
+        $this->assertSame('4857544325D275B6', HuaweiCli::serialForCli('hwtc-25d275b6'));
+        $this->assertSame('4857544325D275B6', HuaweiCli::serialForCli('4857544325D275B6'));
+        $this->assertNull(HuaweiCli::serialForCli('HWTC25D2'));
+        $this->assertSame('Failure: The ONT does not exist', HuaweiCli::failure("display ont info 15 99 \n  Failure: The ONT does not exist\n"));
+        $this->assertSame("% Unknown command, the error locates at '^'", HuaweiCli::failure("display ont port state0/1150\n                           ^\n  % Unknown command, the error locates at '^'\n"));
+        $this->assertNull(HuaweiCli::failure("  Number of ONTs that can be added: 1, success: 1\n  PortID :15, ONTID :16\n"));
+        $ports = HuaweiCli::servicePorts("       4   10 common   gpon 0/1 /15 2    1     vlan  10         9    8    down \n      16   10 common   gpon 0/1 /15 14   1     vlan  10         9    8    up   \n   Total : 2  (Up/Down :   1/1)\n");
+        $this->assertSame([[4, 15, 2, 9, 8, false], [16, 15, 14, 9, 8, true]], array_map(static fn (array $p) => [$p['index'], $p['port'], $p['ont_id'], $p['rx'], $p['tx'], $p['up']], $ports));
+        $this->assertSame([['id' => 6, 'cir' => 'off', 'pir' => 'off'], ['id' => 7, 'cir' => '2048', 'pir' => '10432']], HuaweiCli::trafficTables("     6 off      off        off      off          0 -                  tag-pri\n     7 2048     67536      10432    335824       2 -                local-pri\n  Total Num : 2\n"));
+        $this->assertSame([['id' => 1, 'name' => 'smartolt_eth1-4_wifi1_wan1', 'bound' => 11]], HuaweiCli::profiles("  Profile-ID  Profile-name                                Binding times\n  1           smartolt_eth1-4_wifi1_wan1                  11           \n  Total: 1\n"));
+        $this->assertSame(4, HuaweiCli::ethPorts("  POTS          2               -\n  ETH           4               -\n"));
+        $this->assertNull(HuaweiCli::ethPorts("  ETH           adaptive        4\n"));
+    }
+}

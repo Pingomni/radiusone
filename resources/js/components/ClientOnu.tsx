@@ -1,7 +1,8 @@
 import { Link, router } from '@inertiajs/react';
 import { useState } from 'react';
 import { PostButton } from '@/components/confirm';
-import { Empty, Panel, Time } from '@/components/ui';
+import { Badge, Empty, Panel, Time } from '@/components/ui';
+import { useCan } from '@/lib/auth';
 import { OnuStatus, OnuPower, type OnuRow } from '@/components/olt';
 
 export type ClientOnuData = {
@@ -9,6 +10,7 @@ export type ClientOnuData = {
     onu: OnuRow | null;
     found: { mac: string; onus: { sn: string; position: string }[] } | null;
     hasOlts: boolean;
+    addOn: { id: number; name: string }[];
 };
 
 const Row = ({ label, children }: { label: string; children: React.ReactNode }) => (
@@ -22,6 +24,8 @@ export default function ClientOnu({ username, data, canLink }: { username: strin
     const link = (serial: string) => router.post(base, { sn: serial }, { preserveScroll: true, onSuccess: () => setSn('') });
     const { link: current, onu, found } = data;
     const differs = current && found && !found.onus.some((o) => o.sn === current.sn);
+    const can = useCan();
+    const addOn = can('nas.manage') && canLink ? data.addOn : [];
 
     if (!data.hasOlts) return <Empty>No OLT has been added yet. Add one under <Link href="/olts">OLT</Link>.</Empty>;
     return (
@@ -31,7 +35,7 @@ export default function ClientOnu({ username, data, canLink }: { username: strin
                     <>
                         {onu ? (
                             <>
-                                <Row label="Status"><OnuStatus status={onu.status} /></Row>
+                                <Row label="Status">{onu.active === false ? <Badge tone="warning">Turned off</Badge> : <OnuStatus status={onu.status} />}</Row>
                                 <Row label="Signal at the ONU / at the OLT"><OnuPower dbm={onu.rx} /> / <OnuPower dbm={onu.oltRx} /></Row>
                                 <Row label="OLT and port"><Link href={`/olts/${current.oltId}?q=${encodeURIComponent(current.sn)}`}>{current.olt}</Link> <span className="mono">{onu.position}</span></Row>
                                 <Row label="Serial number"><span className="mono">{onu.sn}</span></Row>
@@ -43,6 +47,7 @@ export default function ClientOnu({ username, data, canLink }: { username: strin
                                 <Row label="Last went offline"><Time value={onu.lastDown} /></Row>
                                 <Row label="Reason it last went offline">{onu.downCause || '-'}</Row>
                                 <Row label="Read from the OLT"><Time value={onu.seen} /></Row>
+                                <div className="form-actions"><Link className="button" href={`/olts/${current.oltId}/onus/${onu.id}`}>Live details and actions</Link></div>
                             </>
                         ) : (
                             <>
@@ -62,6 +67,14 @@ export default function ClientOnu({ username, data, canLink }: { username: strin
                             {canLink && <button type="button" className="button" onClick={() => link(o.sn)}>Link this ONU</button>}
                         </div>
                     ))}
+                </Panel>
+            )}
+            {addOn.length > 0 && (!current || !onu) && (
+                <Panel title="Add a new ONU for this client">
+                    <p className="hint">Plug the ONU in at the customer, then look for it on the OLT. Once added, it is linked to this client.</p>
+                    <div className="form-actions">
+                        {addOn.map((o) => <Link key={o.id} className="button" href={`/olts/${o.id}/provision?client=${encodeURIComponent(username)}`}>Look on {o.name}</Link>)}
+                    </div>
                 </Panel>
             )}
             {canLink && (

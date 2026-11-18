@@ -72,6 +72,8 @@ final class Olts
             'telnet_port' => self::port($input['telnet_port'] ?? 23, 'Telnet'),
             'telnet_user' => $secret('telnet_user', 'telnet_user', 'Telnet user'),
             'telnet_password' => $secret('telnet_password', 'telnet_password', 'Telnet password'),
+            // Changes go over telnet, so without telnet there is nothing to allow.
+            'manage_enabled' => empty($input['manage_enabled']) || empty($input['telnet_enabled']) ? 0 : 1,
         ];
         if ($version === '3') {
             Snmp::validateUsm(self::usm($values));

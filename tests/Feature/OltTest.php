@@ -210,7 +210,7 @@ final class OltTest extends TestCase
     public function test_the_telnet_client_refuses_any_other_command(): void
     {
         $cli = new OltCli('127.0.0.1', 1, 'u', 'p');
-        foreach (['undo ont', 'config', 'display mac-address all; reboot', 'ont delete 0 1', 'save'] as $command) {
+        foreach (['undo ont', 'ont reset 0 1', 'display mac-address all; reboot', 'ont delete 0 1', 'save', 'display ont info 0 1\nont delete 0 1', 'interface gpon 0/1 ont reset 0 1', 'undo service-port 5'] as $command) {
             try {
                 (new ReflectionMethod($cli, 'send'))->invoke($cli, $command);
                 $this->fail("Sent: $command");
