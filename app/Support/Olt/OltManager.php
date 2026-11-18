@@ -70,13 +70,13 @@ final class OltManager
      * @param  callable(OltTelnet): T  $work
      * @return T
      */
-    private static function session(array $olt, callable $work): mixed
+    private static function session(array $olt, callable $work, float $budget = 90.0): mixed
     {
         $lock = 'radiusone:olt-change:' . (int) $olt['id'] . ':' . substr(hash('sha256', (string) Db::value('SELECT DATABASE()')), 0, 20);
         if ((int) Db::value('SELECT GET_LOCK(?,15)', [$lock]) !== 1) {
             throw new RuntimeException('Someone else is changing this OLT right now. Try again in a moment.');
         }
-        $t = self::telnet($olt);
+        $t = self::telnet($olt, $budget);
         try {
             $t->open();
             $t->command('scroll');
@@ -457,6 +457,8 @@ final class OltManager
             "display ont info $f $s $p $n", "display ont wan-info $f/$s $p $n", 'config', "interface gpon $f/$s",
             "display ont optical-info $p $n", "display ont port state $p $n eth-port all", "display ont version $p $n",
             "display ont port attribute $p $n eth", "display ont traffic $p $n", 'quit', "display service-port port $f/$s/$p ont $n",
+            // In the same login, so the Configure and Running config tabs need no login of their own.
+            "display current-configuration ont $f/$s/$p $n",
         ]);
         $failure = HuaweiCli::failure($out[0]);
         $info = HuaweiCli::fields($out[0]);
@@ -494,6 +496,8 @@ final class OltManager
             })(),
             'traffic' => HuaweiCli::ontTraffic($out[8]),
             'servicePorts' => array_map(static fn (array $sp) => ['index' => $sp['index'], 'vlan' => $sp['vlan'], 'gem' => $sp['gem'], 'down' => $sp['rx'], 'up' => $sp['tx'], 'state' => $sp['up']], HuaweiCli::servicePorts($out[10])),
+            'config' => ($config = HuaweiCli::configText($out[11])),
+            'omci' => $config !== '' && str_contains($config, HuaweiCli::serialForCli((string) $onu['sn']) ?? "\0") ? HuaweiCli::onuConfig($config, $p, $n) : null,
         ];
     }
 
@@ -577,6 +581,83 @@ final class OltManager
         self::done($olt, $onu, $on ? 'onu_lan_on' : 'onu_lan_off', $sent, ['lan_port' => $eth]);
     }
 
+    /** Commands that save, restart, remove or cut off: the terminal sends them only once the operator said yes to them. */
+    public const TERMINAL_CAREFUL = '/^(save|reboot|reset|undo\b|delete\b|erase|load\b|upgrade|active\b|patch\b|terminal user|sysname|ont (delete|reset|deactivate|factory-setting-restore)\b|board (reset|delete)\b|.*\bshutdown\b)/i';
+
+    /** A command as it may be kept in the audit log: what follows a password, cipher, key or community is masked. */
+    public static function maskSecrets(string $command): string
+    {
+        return (string) preg_replace('/\b(password|cipher|key|authentication-key|(?:read-|write-)?community(?:\s+(?:read|write))?)\s+\S+/i', '$1 ******', $command);
+    }
+
+    /**
+     * The OLT's terminal: any one command, in the mode the operator is in. The connection does not stay open between
+     * commands, so the mode (config, interface gpon 0/1, ...) is entered again before each one, from $context.
+     * A yes/no question from the OLT is answered no and shown, unless $yes; a careful command needs $confirmed.
+     *
+     * @param  array<string, mixed>  $olt
+     * @param  list<string>  $context  the commands that led to the current mode
+     * @return array{output:string,prompt:string,context:list<string>,asked:?string,careful:bool}
+     */
+    public static function terminal(array $olt, array $context, string $command, bool $confirmed = false, bool $yes = false): array
+    {
+        self::requireChange($olt);
+        $command = trim((string) preg_replace('/[ \t]+/', ' ', $command));
+        $line = static function (string $text, string $what): void {
+            if ($text === '' || strlen($text) > 512 || preg_match('/[\x00-\x1f\x7f?]/', $text)) {
+                throw new RuntimeException($what . ' must be one line of up to 512 characters, without "?" (the OLT reads it as help before Enter).');
+            }
+        };
+        $line($command, 'A command');
+        if (count($context) > 6) {
+            throw new RuntimeException('The terminal went too deep into modes. Type "return" to start again at the top.');
+        }
+        foreach ($context as $step) {
+            $line($step, 'A mode');
+            if (preg_match(self::TERMINAL_CAREFUL, $step)) {
+                throw new RuntimeException('That is not a mode. Type "return" to start again at the top.');
+            }
+        }
+        if (!$context && preg_match('/^(quit|logout|exit)$/i', $command)) {
+            throw new RuntimeException('At the top, "quit" would log out. The portal logs in and out by itself for each command.');
+        }
+        if (preg_match(self::TERMINAL_CAREFUL, $command) && !$confirmed) {
+            return ['output' => '', 'prompt' => '', 'context' => $context, 'asked' => null, 'careful' => true];
+        }
+        [$output, $prompt] = self::session($olt, static function (OltTelnet $t) use ($context, $command, $yes): array {
+            foreach ($context as $step) {
+                $failure = HuaweiCli::failure($t->command($step));
+                if ($failure !== null) {
+                    throw new RuntimeException('The OLT would not go back into "' . $step . '": ' . $failure . ' Type "return" to start again at the top.');
+                }
+            }
+            $text = str_replace("\r", '', $t->command($command, $yes, true));
+            $lines = explode("\n", rtrim($text));
+            $prompt = trim((string) array_pop($lines));
+            // The OLT echoes the command first.
+            if ($lines && str_contains($lines[0], $command)) {
+                array_shift($lines);
+            }
+            return [rtrim(implode("\n", $lines)), $prompt];
+        }, 150.0);
+        $asked = !$yes && preg_match('/^.*\(y\/n\).*$/mi', $output, $m) ? trim($m[0]) : null;
+
+        // Where the command left the operator: deeper, back up, or beside where they were.
+        $depth = 0;
+        if (preg_match('/\(([^()]*)\)[#>%]+\s*$/', $prompt, $m)) {
+            $depth = str_starts_with($m[1], 'config-') ? 2 : 1;
+        }
+        if ($depth > count($context)) {
+            $context[] = $command;
+        } elseif ($depth < count($context)) {
+            $context = array_slice($context, 0, $depth);
+        } elseif ($depth > 0 && preg_match('/^interface\s/i', $command)) {
+            $context[count($context) - 1] = $command;
+        }
+        Audit::log('olt_terminal', 'olt', (string) $olt['id'], null, ['olt' => (string) $olt['name'], 'mode' => array_map(self::maskSecrets(...), $context), 'commands' => [self::maskSecrets($command)], 'answered_yes' => $yes]);
+        return ['output' => mb_substr(mb_scrub($output, 'UTF-8'), 0, 400000), 'prompt' => $prompt, 'context' => array_values($context), 'asked' => $asked, 'careful' => false];
+    }
+
     /**
      * What the OMCI settings can be chosen from (the OLT's VLANs, WAN and route policy profiles and traffic tables),
      * and what the ONU has set now, from its running configuration. Only reads.
@@ -587,22 +668,42 @@ final class OltManager
      */
     public static function omciOptions(array $olt, array $onu): array
     {
+        return self::omciChoices($olt) + ['state' => self::onuState($olt, $onu)];
+    }
+
+    /**
+     * The OLT's VLANs, WAN and route policy profiles and traffic tables. Only reads.
+     *
+     * @param  array<string, mixed>  $olt
+     * @return array{vlans:list<int>,wanProfiles:list<array{id:int,name:string,bound:int}>,routeProfiles:list<array{id:int,name:string,bound:int}>,trafficTables:list<array{id:int,cir:string,pir:string}>}
+     */
+    public static function omciChoices(array $olt): array
+    {
         if (!self::canRead($olt)) {
             throw new RuntimeException('This needs telnet turned on for this OLT, under Edit.');
         }
-        $out = Olts::cli($olt, 90.0)->read([
-            'display vlan all', 'display ont wan-profile all', 'display ont policy-route-profile all', 'display traffic table ip from-index 0',
-            sprintf('display current-configuration ont %d/%d/%d %d', $onu['frame'], $onu['slot'], $onu['port'], $onu['ont_id']),
-        ]);
+        $out = Olts::cli($olt, 90.0)->read(['display vlan all', 'display ont wan-profile all', 'display ont policy-route-profile all', 'display traffic table ip from-index 0']);
         $vlans = array_column(HuaweiCli::vlans($out[0]), 'id');
         if (!$vlans) {
             throw new RuntimeException('The OLT did not list its VLANs. Check that the telnet user may read them.');
         }
         sort($vlans);
-        return [
-            'vlans' => $vlans, 'wanProfiles' => HuaweiCli::profiles($out[1]), 'routeProfiles' => HuaweiCli::profiles($out[2]),
-            'trafficTables' => HuaweiCli::trafficTables($out[3]), 'state' => self::stateFrom($out[4], $onu),
-        ];
+        return ['vlans' => $vlans, 'wanProfiles' => HuaweiCli::profiles($out[1]), 'routeProfiles' => HuaweiCli::profiles($out[2]), 'trafficTables' => HuaweiCli::trafficTables($out[3])];
+    }
+
+    /**
+     * What the ONU has set over OMCI now, from its running configuration. Only reads.
+     *
+     * @param  array<string, mixed>  $olt
+     * @param  array<string, mixed>  $onu
+     * @return array<string, mixed>
+     */
+    public static function onuState(array $olt, array $onu): array
+    {
+        if (!self::canRead($olt)) {
+            throw new RuntimeException('This needs telnet turned on for this OLT, under Edit.');
+        }
+        return self::stateFrom(Olts::cli($olt, 60.0)->read([sprintf('display current-configuration ont %d/%d/%d %d', $onu['frame'], $onu['slot'], $onu['port'], $onu['ont_id'])])[0], $onu);
     }
 
     /**

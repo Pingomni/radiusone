@@ -1,9 +1,10 @@
 import { Link, router } from '@inertiajs/react';
 import { useEffect, useState } from 'react';
-import { StatCards } from '@/components/billing';
 import { PostButton } from '@/components/confirm';
+import Icon from '@/components/Icon';
 import { ChartOrMessage, type ChartPayload } from '@/components/LineChart';
 import { LivePanel } from '@/components/LivePanel';
+import OltConsole from '@/components/OltConsole';
 import { OnuPower, OnuStatus, type OnuRow } from '@/components/olt';
 import { DataTable, Pagination } from '@/components/table';
 import { Tabs } from '@/components/tabs';
@@ -39,6 +40,8 @@ const ACTIONS: Record<string, string> = {
     cli: 'Display command run', card_restart: 'Card restarted', port_autofind_on: 'Autofind turned on', port_autofind_off: 'Autofind turned off', port_restart_onus: 'All ONUs on a port restarted', port_off: 'PON port turned off', port_on: 'PON port turned on',
     ntp_add: 'Time server added', ntp_remove: 'Time server removed', vlan_add: 'VLAN created', vlan_remove: 'VLAN deleted', uplink_vlan_add: 'VLAN added to an uplink', uplink_vlan_remove: 'VLAN taken off an uplink',
     onu_add: 'ONU added', onu_delete: 'ONU removed', onu_reboot: 'ONU restarted', onu_disable: 'ONU turned off', onu_enable: 'ONU turned on', onu_describe: 'ONU renamed',
+    onu_wan: 'ONU internet connection set', onu_bridge: 'ONU switched to bridging', onu_eth_port: 'ONU Ethernet port set', onu_lan_vlan: 'ONU LAN VLAN set', onu_speed: 'ONU speed changed',
+    onu_lan_on: 'ONU LAN port turned on', onu_lan_off: 'ONU LAN port turned off', onu_factory_reset: 'ONU reset to factory settings', olt_traffic_table_add: 'Speed added', olt_terminal: 'Terminal command',
 };
 type Hardware = { lastRead: string | null; error: string; boards: Board[]; fans: Fan[]; ports: Port[] };
 
@@ -330,7 +333,7 @@ function BackupsTab({ olt, details, backups, path }: { olt: Olt; details: Detail
     );
 }
 
-function CommandLine({ path }: { path: string }) {
+function CommandLine({ path, full }: { path: string; full: 'role' | 'olt' | null }) {
     const [command, setCommand] = useState('display ');
     const [answer, setAnswer] = useState<{ ok: boolean; output?: string; error?: string } | null>(null);
     const [busy, setBusy] = useState(false);
@@ -347,7 +350,7 @@ function CommandLine({ path }: { path: string }) {
     };
     return (
         <Panel title="Command line (read only)">
-            <p className="hint">Runs one <span className="mono">display</span> command on the OLT and shows its answer, for example <span className="mono">display board 0</span> or <span className="mono">display ont info 0 1 15 0</span>. Nothing but display commands is sent, so this cannot change the OLT. Each command is written to the audit log.</p>
+            <p className="hint">Runs one <span className="mono">display</span> command on the OLT and shows its answer, for example <span className="mono">display board 0</span> or <span className="mono">display ont info 0 1 15 0</span>. Nothing but display commands is sent, so this cannot change the OLT. Each command is written to the audit log.{full === 'olt' ? ' The full terminal needs Allow changes from the portal, under Edit.' : full === 'role' ? ' The full terminal is for operators who may delete.' : ''}</p>
             <form className="toolbar" onSubmit={(e) => { e.preventDefault(); void run(); }}>
                 <Field label="Command" name="command" className="grow" autoComplete="off" spellCheck={false} value={command} onChange={(e) => setCommand(e.target.value)} />
                 <button className="button primary" disabled={busy || command.trim().length < 9}>{busy ? 'Asking the OLT…' : 'Run'}</button>
@@ -371,6 +374,194 @@ function HistoryTab({ rows }: { rows: HistoryRow[] }) {
     );
 }
 
+/** Where a port sits, from its name: "GPON 0/1/15" and "ethernet0/9/0" are frame/slot/port. */
+const portAt = (name: string) => {
+    const m = name.match(/(\d+)\s*\/\s*(\d+)\s*\/\s*(\d+)/);
+    return m ? { slot: `${m[1]}/${m[2]}`, port: Number(m[3]) } : null;
+};
+
+type Light = 'up' | 'partial' | 'down' | 'idle' | 'off' | 'nomodule' | 'unknown';
+/** An uplink port with no optical module fitted is unused, not down. */
+const fitted = (p: Port) => p.kind !== 'uplink' || p.uplink?.optic !== 'absence';
+/** A port's light: what an operator looks for first. A PON port with customers is judged by how many are online. */
+function portLight(p: Port): Light {
+    if (p.admin === false) return 'off';
+    if (!fitted(p)) return 'nomodule';
+    if (p.oper === null) return 'unknown';
+    if (p.kind === 'pon') {
+        const n = p.onus ?? { total: 0, online: 0 };
+        if (!n.total) return p.oper ? 'idle' : 'idle';
+        if (!p.oper || n.online === 0) return 'down';
+        return n.online < n.total ? 'partial' : 'up';
+    }
+    return p.oper ? 'up' : 'down';
+}
+const LIGHT_WORDS: Record<Light, string> = { up: 'up', partial: 'some ONUs offline', down: 'down', idle: 'up, no ONUs', off: 'turned off', nomodule: 'no module', unknown: 'not reported' };
+
+/** What needs a look on this OLT, worst first. */
+function health(olt: Olt, hardware: Hardware, details: Details): { tone: 'success' | 'warning' | 'danger'; reasons: string[] } {
+    const danger: string[] = [];
+    const warning: string[] = [];
+    if (olt.error) danger.push('SNMP read failed');
+    const uplinksDown = hardware.ports.filter((p) => p.kind === 'uplink' && fitted(p) && p.admin !== false && p.oper === false);
+    if (uplinksDown.length) danger.push(`${uplinksDown.length === 1 ? `Uplink ${uplinksDown[0].name} is` : `${uplinksDown.length} uplinks are`} down`);
+    const badCards = hardware.boards.filter((b) => b.tone === 'danger' || b.power === 'Fault');
+    if (badCards.length) danger.push(`${badCards.length === 1 ? `Card ${badCards[0].name} in slot ${badCards[0].position} needs` : `${badCards.length} cards need`} a look`);
+    if (olt.macError || details.error) warning.push('Telnet read failed');
+    if (hardware.fans.some((f) => !f.ok)) warning.push('A fan reports a fault');
+    if (details.autosave?.on === false) warning.push('The OLT does not save its configuration by itself');
+    const ponDown = hardware.ports.filter((p) => p.kind === 'pon' && portLight(p) === 'down');
+    if (ponDown.length) warning.push(`${ponDown.length} PON port${ponDown.length === 1 ? ' has' : 's have'} all ONUs offline`);
+    return danger.length ? { tone: 'danger', reasons: [...danger, ...warning] } : warning.length ? { tone: 'warning', reasons: warning } : { tone: 'success', reasons: [] };
+}
+
+/** The OLT as it stands in the rack: each card in its slot with its state, and a light for each of its ports. */
+function Chassis({ hardware, model, path }: { hardware: Hardware; model: string; path: string }) {
+    const bySlot = new Map<string, Port[]>();
+    for (const p of hardware.ports) {
+        const at = portAt(p.name);
+        if (at) bySlot.set(at.slot, [...(bySlot.get(at.slot) ?? []), p].sort((a, b) => (portAt(a.name)?.port ?? 0) - (portAt(b.name)?.port ?? 0)));
+    }
+    const boards = [...hardware.boards].sort((a, b) => a.position.localeCompare(b.position, undefined, { numeric: true }));
+    if (!boards.length) return <div className="olt-chassis olt-chassis-empty"><p>The OLT has not reported its cards yet.</p></div>;
+    return (
+        <figure className="olt-chassis" aria-label={`${model}: ${boards.length} cards`}>
+            <div className="olt-chassis-frame">
+                {boards.map((b) => {
+                    const ports = bySlot.get(b.position) ?? [];
+                    return (
+                        <div key={b.position} className={`olt-card tone-${b.tone || 'none'}`}>
+                            <span className="olt-card-slot mono">{b.position.split('/')[1] ?? b.position}</span>
+                            <span className="olt-card-led" title={b.status} aria-hidden="true" />
+                            <span className="olt-card-name"><strong>{b.name}</strong>{b.role ? <small>{b.role}</small> : null}</span>
+                            <span className="olt-card-ports">
+                                {ports.map((p) => {
+                                    const light = portLight(p);
+                                    const n = p.onus;
+                                    return (
+                                        <Link key={p.id} href={`${path}?tab=ports`} className={`olt-port ${light}`} title={`${p.name}: ${LIGHT_WORDS[light]}${n && n.total ? `, ${n.online} of ${n.total} ONUs online` : ''}${p.signal !== null ? `, average ${p.signal.toFixed(1)} dBm` : ''}`} aria-label={`${p.name}: ${LIGHT_WORDS[light]}`}>
+                                            <span className="olt-port-num">{portAt(p.name)?.port}</span>
+                                        </Link>
+                                    );
+                                })}
+                            </span>
+                            <span className="olt-card-meta">
+                                {b.temperature !== null && <span>{b.temperature} °C</span>}
+                                {b.cpu !== null && <span>CPU {b.cpu}%</span>}
+                            </span>
+                        </div>
+                    );
+                })}
+            </div>
+            <figcaption className="olt-chassis-legend">
+                {(['up', 'partial', 'down', 'idle', 'off', 'nomodule'] as Light[]).map((l) => <span key={l}><i className={`olt-port ${l}`} />{LIGHT_WORDS[l][0].toUpperCase() + LIGHT_WORDS[l].slice(1)}</span>)}
+            </figcaption>
+        </figure>
+    );
+}
+
+/** Every PON port with customers on it: how many are online, and how strong their signal is on average. */
+function PonGrid({ hardware, olt, path }: { hardware: Hardware; olt: Olt; path: string }) {
+    const used = hardware.ports.filter((p) => p.kind === 'pon' && (p.onus?.total ?? 0) > 0)
+        .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+    const empty = hardware.ports.filter((p) => p.kind === 'pon').length - used.length;
+    if (!used.length) return null;
+    return (
+        <section className="olt-pon" aria-label="PON ports in use">
+            <div className="olt-pon-head">
+                <h3>PON ports in use</h3>
+                <span>{used.length} with ONUs{empty > 0 ? ` · ${empty} empty` : ''}</span>
+            </div>
+            <div className="olt-pon-grid">
+                {used.map((p) => {
+                    const n = p.onus ?? { total: 0, online: 0 };
+                    const share = n.total ? Math.round((n.online / n.total) * 100) : 0;
+                    const tone = p.signal === null ? '' : p.signal < olt.rxCritical ? 'danger' : p.signal < olt.rxWarning ? 'warning' : 'success';
+                    return (
+                        <Link key={p.id} href={`${path}?tab=ports`} className={`olt-pon-card ${portLight(p)}`}>
+                            <span className="olt-pon-name mono">{p.name.replace(/^GPON\s*/i, '')}</span>
+                            <span className="olt-pon-count"><strong>{n.online}</strong>/{n.total}<small> online</small></span>
+                            <span className="olt-pon-bar" role="img" aria-label={`${share}% online`}><i style={{ width: `${share}%` }} /></span>
+                            <span className="olt-pon-foot">
+                                <span className={`olt-pon-signal ${tone}`}>{p.signal === null ? 'No signal reading' : `${p.signal.toFixed(1)} dBm avg`}</span>
+                                {p.pon?.autofind === false && <Badge tone="warning">Autofind off</Badge>}
+                                {p.pon?.rogue && p.pon.rogue.toLowerCase() !== 'inexistent' && <Badge tone="danger">Rogue ONU</Badge>}
+                            </span>
+                        </Link>
+                    );
+                })}
+            </div>
+        </section>
+    );
+}
+
+function OltHero({ olt, counts, hardware, details, path }: { olt: Olt; counts: Counts; hardware: Hardware; details: Details; path: string }) {
+    const can = useCan();
+    const h = health(olt, hardware, details);
+    // Only uplinks with a module fitted: the empty cages are spare.
+    const uplinks = hardware.ports.filter((p) => p.kind === 'uplink' && fitted(p) && p.admin !== false);
+    const up = uplinks.filter((p) => p.oper === true).length;
+    const online = counts.total ? Math.round((counts.online / counts.total) * 1000) / 10 : 0;
+    const software = details.version?.software ? `${details.version.software}${details.version.patch ? ` ${details.version.patch}` : ''}` : '';
+    return (
+        <section className={`onu-hero olt-hero is-${h.tone}`} aria-label="OLT at a glance">
+            <div className="onu-hero-top">
+                <div className="onu-identity">
+                    <div className="onu-title"><h2>{olt.name}</h2>{!olt.enabled && <Badge>Not read</Badge>}</div>
+                    <p>
+                        <span>{details.version?.product || olt.model}</span>
+                        <span aria-hidden="true">·</span><span className="mono">{olt.host}</span>
+                        {software && <><span aria-hidden="true">·</span><span className="mono">{software}</span></>}
+                    </p>
+                    <div className="onu-status-line">
+                        <Badge tone={h.tone}>{h.tone === 'success' ? 'Healthy' : h.tone === 'warning' ? 'Needs a look' : 'Problem'}</Badge>
+                        {details.bootedAt && <span>up <strong>{uptime(details.bootedAt)}</strong></span>}
+                        {details.temperature !== null && <span><strong>{details.temperature} °C</strong> hottest card</span>}
+                        {details.power !== null && <span><strong>{details.power} W</strong></span>}
+                        <span className="onu-pending">{olt.canChange ? 'Changes allowed' : 'Read only'}</span>
+                    </div>
+                    {h.reasons.length > 0 && <ul className="olt-reasons">{h.reasons.map((r) => <li key={r}>{r}</li>)}</ul>}
+                </div>
+                <div className="onu-hero-actions">
+                    {can('nas.manage') && <PostButton action={`${path}/sync`} label={<><Icon name="refresh" />{olt.syncRequested ? 'Read requested' : 'Read now'}</>} className="button" disabled={olt.syncRequested} />}
+                    {can('nas.manage') && olt.telnet && <Link className="button primary" href={`${path}/provision`}><Icon name="plus" />New ONUs</Link>}
+                    {can('nas.manage') && olt.telnet && <Link className="button" href={`${path}?tab=cli`}><Icon name="terminal" />{can('danger.delete') && olt.canChange ? 'Terminal' : 'Command line'}</Link>}
+                    {can('nas.manage') && <Link className="button" href={`${path}/edit`}><Icon name="settings" />Edit</Link>}
+                </div>
+            </div>
+            <div className="olt-hero-body">
+                <Chassis hardware={hardware} model={details.version?.product || olt.model} path={path} />
+                <div className="olt-kpis">
+                    <div className="onu-meter">
+                        <div className="onu-meter-head"><span>ONUs online</span><small>{online}%</small></div>
+                        <strong className="onu-meter-value">{counts.online}<small> / {counts.total}</small></strong>
+                        <span className="olt-ratio" role="img" aria-label={`${online}% online`}><i style={{ width: `${online}%` }} /></span>
+                    </div>
+                    <Link className={`onu-meter olt-kpi-link${counts.offline ? ' warning' : ''}`} href={`${path}?status=offline`}>
+                        <div className="onu-meter-head"><span>Offline</span><small>{counts.offline ? 'Show them' : 'None'}</small></div>
+                        <strong className="onu-meter-value">{counts.offline}</strong>
+                    </Link>
+                    <div className={`onu-meter${counts.weak ? ' warning' : ''}`}>
+                        <div className="onu-meter-head"><span>Weak signal</span><small>below {olt.rxWarning} dBm</small></div>
+                        <strong className="onu-meter-value">{counts.weak}</strong>
+                    </div>
+                    <div className={`onu-meter${uplinks.length && up < uplinks.length ? ' danger' : ''}`}>
+                        <div className="onu-meter-head"><span>Uplinks up</span><small>{uplinks.map((u) => u.speed ? speedText(u.speed) : '').filter(Boolean)[0] ?? ''}</small></div>
+                        <strong className="onu-meter-value">{up}<small> / {uplinks.length}</small></strong>
+                    </div>
+                </div>
+            </div>
+            <PonGrid hardware={hardware} olt={olt} path={path} />
+            <p className="olt-hero-foot">
+                ONU list read <Time value={olt.lastSync} /> (every 5 minutes)
+                {olt.telnet ? <> · MAC table read <Time value={olt.lastMacSync} /> (every 15 minutes)</> : ' · Telnet is off, so clients are not found from their MAC'}
+                {' · '}<Link href="/olts/mapping">Client mapping</Link>
+                {olt.telnet && <> · <a href={`${path}/macs.csv`} download>Export MAC table</a></>}
+            </p>
+        </section>
+    );
+}
+
 export default function OltShow({ olt, counts, filters, hardware, details, backups, history, graphs, result }: { olt: Olt; counts: Counts; filters: { q: string; status: string }; hardware: Hardware; details: Details; backups: Backup[] | null; history: HistoryRow[]; graphs: Graphs; result: Paginated<OnuRow> }) {
     const can = useCan();
     const [q, setQ] = useState(filters.q);
@@ -378,27 +569,12 @@ export default function OltShow({ olt, counts, filters, hardware, details, backu
     const path = `/olts/${olt.id}`;
     return (
         <AppLayout title={olt.name}>
-            <div className="toolbar">
-                <Link className="button" href="/olts">All OLTs</Link>
-                <Link className="button" href="/olts/mapping">Client mapping</Link>
-                {can('nas.manage') && <PostButton action={`${path}/sync`} label={olt.syncRequested ? 'Read requested' : 'Read now'} className="button" disabled={olt.syncRequested} />}
-                {can('nas.manage') && olt.telnet && <Link className="button" href={`${path}/provision`}>New ONUs</Link>}
-                {olt.telnet && <a className="button" href={`${path}/macs.csv`} download>Export MAC table</a>}
-                {can('nas.manage') && <Link className="button" href={`${path}/edit`}>Edit</Link>}
-            </div>
+            <nav className="onu-crumbs" aria-label="Where this OLT is">
+                <Link href="/olts">OLTs</Link><span aria-hidden="true">/</span><span aria-current="page">{olt.name}</span>
+            </nav>
             {olt.error && <p className="flash danger" role="alert">SNMP read failed: {olt.error}</p>}
             {olt.macError && <p className="flash warning" role="alert">Telnet read failed: {olt.macError}</p>}
-            <StatCards stats={[
-                { label: 'ONUs', value: String(counts.total), note: olt.model, tone: '' },
-                { label: 'Online', value: String(counts.online), note: olt.host, tone: '' },
-                { label: 'Offline', value: String(counts.offline), note: '', tone: counts.offline ? 'warning' : '' },
-                { label: 'Weak signal', value: String(counts.weak), note: `Below ${olt.rxWarning} dBm`, tone: counts.weak ? 'warning' : '' },
-            ]} />
-            <p className="hint">
-                ONU list read <Time value={olt.lastSync} /> (every 5 minutes).
-                {olt.telnet ? <> MAC table read <Time value={olt.lastMacSync} /> (every 15 minutes).</> : ' Telnet is off, so clients are not found automatically from their MAC.'}
-                {olt.canChange ? ' Changes from the portal are allowed: open an ONU to restart, turn off, rename or remove it.' : ' The portal only reads this OLT.'}
-            </p>
+            <OltHero olt={olt} counts={counts} hardware={hardware} details={details} path={path} />
             <Tabs
                 label="OLT sections"
                 className="tabs"
@@ -409,12 +585,16 @@ export default function OltShow({ olt, counts, filters, hardware, details, backu
                             <>
             <ListPanel
                 title="ONUs"
-                description={`${result.total} matching`}
+                description={`${result.total} ${filters.q || filters.status ? 'matching' : 'on this OLT'}`}
                 tools={(
-                    <form className="toolbar" onSubmit={(e) => { e.preventDefault(); router.get(path, { q, status }, { preserveState: true }); }}>
-                        <Field label="Search" name="q" placeholder="Serial or client" value={q} onChange={(e) => setQ(e.target.value)} />
-                        <Select label="Status" name="status" options={{ '': 'All', online: 'Online', offline: 'Offline' }} value={status} onChange={(e) => setStatus(e.target.value)} />
-                        <button className="button">Filter</button>
+                    <form className="toolbar olt-onu-filter" onSubmit={(e) => { e.preventDefault(); router.get(path, { q, status }, { preserveState: true }); }}>
+                        <nav className="segmented" aria-label="Status">
+                            {([['', 'All', counts.total], ['online', 'Online', counts.online], ['offline', 'Offline', counts.offline]] as const).map(([key, label, n]) => (
+                                <Link key={key} href={path} data={{ q: filters.q, status: key }} preserveState aria-current={filters.status === key ? 'page' : undefined} onClick={() => setStatus(key)}>{label} <span className="tab-count">{n}</span></Link>
+                            ))}
+                        </nav>
+                        <Field label="Search" name="q" placeholder="Name, serial or client" value={q} onChange={(e) => setQ(e.target.value)} />
+                        <button className="button"><Icon name="search" />Search</button>
                     </form>
                 )}
             >
@@ -425,13 +605,11 @@ export default function OltShow({ olt, counts, filters, hardware, details, backu
                     exportRows
                     emptyText={counts.total ? 'No ONU matches.' : 'No ONUs read yet.'}
                     columns={[
-                        { header: 'Port', cell: (o) => <span className="mono">{o.position}</span> },
-                        { header: 'Serial', cell: (o) => <Link className="mono" href={`${path}/onus/${o.id}`}>{o.sn}</Link> },
-                        { header: 'Description', className: 'wrap', cell: (o) => o.description || '-' },
-                        { header: 'Client', cell: (o) => (o.clients.length ? o.clients.map((u) => <div key={u}><Link href={`/clients/${encodeURIComponent(u)}/edit?tab=onu`}>{u}</Link></div>) : '-') },
+                        { header: 'ONU', className: 'wrap', cell: (o) => <Link className="olt-onu-cell" href={`${path}/onus/${o.id}`}><strong>{o.description || o.sn}</strong><small className="mono">{o.sn}</small></Link> },
                         { header: 'Status', cell: (o) => (o.active === false ? <Badge tone="warning">Turned off</Badge> : <OnuStatus status={o.status} />) },
-                        { header: 'Signal at ONU', cell: (o) => <OnuPower dbm={o.rx} weak={olt.rxWarning} veryWeak={olt.rxCritical} /> },
-                        { header: 'Signal at OLT', cell: (o) => <OnuPower dbm={o.oltRx} weak={olt.rxWarning} veryWeak={olt.rxCritical} /> },
+                        { header: 'Port', cell: (o) => <span className="mono">{o.position}</span> },
+                        { header: 'Client', cell: (o) => (o.clients.length ? o.clients.map((u) => <div key={u}><Link href={`/clients/${encodeURIComponent(u)}/edit?tab=onu`}>{u}</Link></div>) : <span className="onu-pending">Not linked</span>) },
+                        { header: 'Signal ONU / OLT', cell: (o) => <span className="olt-signals"><OnuPower dbm={o.rx} weak={olt.rxWarning} veryWeak={olt.rxCritical} /><OnuPower dbm={o.oltRx} weak={olt.rxWarning} veryWeak={olt.rxCritical} /></span> },
                         { header: 'Distance', cell: (o) => (o.distance === null ? '-' : `${o.distance} m`) },
                         { header: 'Last offline', className: 'wrap', cell: (o) => (o.lastDown || o.downCause ? <>{o.lastDown && <Time value={o.lastDown} />}{o.downCause && <div>{o.downCause}</div>}</> : '-') },
                         { header: 'Model', cell: (o) => o.model || '-' },
@@ -462,7 +640,9 @@ export default function OltShow({ olt, counts, filters, hardware, details, backu
                     },
                     { key: 'vlans', title: 'VLANs and profiles', icon: 'services', count: details.vlans.length, content: <VlansTab details={details} olt={olt} hardware={hardware} path={path} /> },
                     ...(backups ? [{ key: 'backups', title: 'Config backups', icon: 'book', count: backups.length, content: <BackupsTab olt={olt} details={details} backups={backups} path={path} /> }] : []),
-                    ...(can('nas.manage') && olt.telnet ? [{ key: 'cli', title: 'Command line', icon: 'activity', content: <CommandLine path={path} /> }] : []),
+                    ...(can('nas.manage') && olt.telnet ? [can('danger.delete') && olt.canChange
+                        ? { key: 'cli', title: 'Terminal', icon: 'activity', content: <OltConsole path={path} name={olt.name} start={typeof window === 'undefined' ? undefined : new URLSearchParams(window.location.search).get('at') ?? undefined} /> }
+                        : { key: 'cli', title: 'Command line', icon: 'activity', content: <CommandLine path={path} full={can('nas.manage') && !can('danger.delete') ? 'role' : !olt.canChange ? 'olt' : null} /> }] : []),
                     { key: 'history', title: 'History', icon: 'logs', count: history.length, content: <HistoryTab rows={history} /> },
                 ]}
             />

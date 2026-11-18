@@ -647,7 +647,7 @@ while (time() < $until) {
                 continue;
             }
             // Drop the client's replies to the options.
-            $data = (string) preg_replace('/\xff[\xfb-\xfe]./s', '', $data);
+            $data = (string) preg_replace(['/\xff\xfa.*?\xff\xf0/s', '/\xff[\xfb-\xfe]./s'], '', $data);
             if ($state === 'more' && str_contains($data, ' ')) {
                 $data = str_replace(' ', '', $data);
                 $parts = explode('@MORE@', $table);

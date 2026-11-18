@@ -215,6 +215,9 @@ Route::middleware('frweb.auth')->group(function () {
             Route::post('/olts/{id}/delete', [OltController::class, 'delete'])->whereNumber('id');
             Route::post('/olts/{id}/backup', [OltController::class, 'backup'])->whereNumber('id');
             Route::get('/olts/{id}/cli', [OltController::class, 'cli'])->whereNumber('id');
+            Route::post('/olts/{id}/terminal', [OltController::class, 'terminal'])->whereNumber('id');
+            Route::post('/olts/{id}/console', [OltController::class, 'console'])->whereNumber('id');
+            Route::post('/olts/{id}/console/{session}/{action?}', [OltController::class, 'console'])->whereNumber('id')->where('session', '[a-f0-9]{32}')->whereIn('action', ['close']);
             Route::post('/olts/{id}/settings/{what}', [OltController::class, 'setting'])->whereNumber('id')->whereIn('what', ['ntp', 'vlans', 'uplink-vlans']);
             Route::post('/olts/{id}/ports/{ifIndex}/{action}', [OltController::class, 'port'])->whereNumber(['id', 'ifIndex'])->whereIn('action', ['autofind-on', 'autofind-off', 'restart-onus', 'off', 'on']);
             Route::post('/olts/{id}/cards/{frame}/{slot}/restart', [OltController::class, 'card'])->whereNumber(['id', 'frame', 'slot']);

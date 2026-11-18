@@ -855,6 +855,82 @@ final class OltManageTest extends TestCase
         }
     }
 
+    public function test_the_terminal_runs_any_command_in_its_mode_and_asks_first_when_it_matters(): void
+    {
+        $this->startAgent();
+        $olt = $this->olt();
+        $this->onu($olt);
+        $this->actingAsOperator();
+        $term = fn (string $command, array $context = [], array $more = []) => $this->postJson("/olts/{$olt['id']}/terminal", ['command' => $command, 'context' => $context] + $more)->assertOk();
+
+        $term('display board 0')->assertJsonPath('ok', true)->assertJsonPath('prompt', 'MA5800-X7#')->assertJsonPath('context', []);
+        $term('config')->assertJsonPath('prompt', 'MA5800-X7(config)#')->assertJsonPath('context', ['config']);
+        $term('interface gpon 0/1', ['config'])->assertJsonPath('prompt', 'MA5800-X7(config-if-gpon-0/1)#')->assertJsonPath('context', ['config', 'interface gpon 0/1']);
+        $at = ['config', 'interface gpon 0/1'];
+        $term('display ont info 0 3', $at)->assertJsonPath('output', fn (string $o) => str_contains($o, 'Kati 2 hyrja A'))->assertJsonPath('context', $at);
+        $term('no such thing', $at)->assertJsonPath('ok', true)->assertJsonPath('output', fn (string $o) => str_contains($o, 'Unknown command'));
+
+        // Careful: nothing is sent until the operator says yes; then the OLT's own question is answered no until they say yes again.
+        $term('ont reset 0 3', $at)->assertJsonPath('careful', true);
+        $this->assertSame([], array_values(array_filter($this->changes(), static fn (string $c) => str_starts_with($c, 'ont reset'))));
+        $term('ont reset 0 3', $at, ['confirmed' => true])->assertJsonPath('careful', false)->assertJsonPath('asked', fn (string $q) => str_contains($q, '(y/n)'))
+            ->assertJsonPath('output', fn (string $o) => !str_contains($o, 'success'));
+        $term('ont reset 0 3', $at, ['confirmed' => true, 'yes' => true])->assertJsonPath('asked', null)->assertJsonPath('output', fn (string $o) => str_contains($o, 'success: 1'));
+
+        foreach (['quit', 'display ont info 0 3 ?', "display board 0\nreboot", str_repeat('x', 600)] as $refused) {
+            $term($refused)->assertJsonPath('ok', false);
+        }
+        $term('display board 0', ['save'])->assertJsonPath('ok', false);
+        $term('display board 0', array_fill(0, 7, 'config'))->assertJsonPath('ok', false);
+
+        // In the audit log, with secrets masked.
+        $term('snmp-agent community read s3cret-ro', ['config']);
+        $term('display ont info 0 3', $at);
+        $logged = (string) Db::value('SELECT GROUP_CONCAT(after_json) FROM audit_logs WHERE action="olt_terminal"');
+        $this->assertStringNotContainsString('s3cret-ro', $logged);
+        $this->assertStringContainsString('community read ******', $logged);
+        $this->assertSame('display ont info 0 3', json_decode((string) Db::value('SELECT after_json FROM audit_logs WHERE action="olt_terminal" ORDER BY id DESC LIMIT 1'), true)['commands'][0]);
+
+        // Only operators who may delete, and only on an OLT that allows changes.
+        $this->actingAsOperator('noc');
+        $this->postJson("/olts/{$olt['id']}/terminal", ['command' => 'display board 0'])->assertForbidden();
+        $this->actingAsOperator('view');
+        $this->postJson("/olts/{$olt['id']}/terminal", ['command' => 'display board 0'])->assertForbidden();
+        $this->actingAsOperator();
+        Db::exec('UPDATE olts SET manage_enabled=0 WHERE id=?', [$olt['id']]);
+        $this->postJson("/olts/{$olt['id']}/terminal", ['command' => 'display board 0'])->assertJsonPath('ok', false)->assertJsonPath('error', fn (string $e) => str_contains($e, 'Allow changes'));
+    }
+
+    public function test_one_read_of_the_olt_serves_the_onu_page_and_its_tabs(): void
+    {
+        $this->startAgent();
+        $olt = $this->olt();
+        $onu = $this->onu($olt);
+        $this->actingAsOperator();
+        $base = "/olts/{$olt['id']}/onus/$onu";
+        $logins = fn () => count(array_filter($this->commands(), static fn (string $c) => $c === 'scroll'));
+
+        $this->getJson("$base/live")->assertJsonPath('ok', true)->assertJsonPath('data.omci.mode', 'routing')->assertJsonPath('data.config', fn (string $c) => str_contains($c, 'ont add 0 3'));
+        $this->assertSame(1, $logins());
+        // The reload, the Running config tab and the ONU's part of the Configure tab: no new login.
+        $this->getJson("$base/live")->assertJsonPath('ok', true)->assertJsonPath('age', fn (int $age) => $age <= 30);
+        $this->getJson("$base/config")->assertJsonPath('output', fn (string $o) => str_contains($o, 'ont add 0 3'));
+        $this->assertSame(1, $logins());
+        $this->getJson("$base/omci-options")->assertJsonPath('data.state.mode', 'routing');
+        $this->assertSame(2, $logins(), 'only the OLT\'s VLANs and profiles, once');
+        $this->getJson("$base/omci-options")->assertJsonPath('ok', true);
+        $this->assertSame(2, $logins());
+        // Get status, Live and Read again ask the OLT.
+        $this->getJson("$base/live?fresh=1")->assertJsonPath('age', fn (int $age) => $age <= 1);
+        $this->getJson("$base/config?fresh=1")->assertJsonPath('ok', true);
+        $this->assertSame(4, $logins());
+        // A change makes the next read new.
+        $this->post("$base/eth/4", ['mode' => 'access', 'native' => '100'])->assertSessionHas('flash.type', 'success');
+        $before = $logins();
+        $this->getJson("$base/live")->assertJsonPath('data.omci.ports.4.native', 100);
+        $this->assertSame($before + 1, $logins());
+    }
+
     public function test_the_onu_page_shows_its_last_day_as_a_strip(): void
     {
         $this->startAgent();

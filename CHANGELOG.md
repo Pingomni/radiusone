@@ -4,6 +4,17 @@ RadiusOne follows [semantic versioning](https://semver.org): **major** for chang
 upgrading, **minor** for new features, **patch** for fixes. The version is in the `VERSION` file and shows in
 the portal's sidebar and under Settings → System information.
 
+## 2.16.0 (2026-11-19)
+
+A live console on the OLT, a new OLT page, and a faster ONU page. Update with **Settings → Overview → Software update** or `sudo radiusone-update`.
+
+- **Terminal:** a live console on the OLT, as with PuTTY: `?`, Tab, ↑, More pages and Ctrl+C work as on the OLT. For
+  operators who may delete, on OLTs that allow changes; every line is audited. A new service, radiusone-olt-console,
+  holds the sessions; without it the tab sends one line at a time.
+- **OLT page:** health at a glance, the chassis with a light per port, PON ports in use, and a clearer ONU list.
+- **ONU page:** one OLT login per page instead of up to three, and a read serves reloads and tabs for 30 seconds.
+- **On the server:** a new service (radiusone-olt-console); no database change. No OLT is changed by the update.
+
 ## 2.15.0 (2026-11-18)
 
 Routing or bridging, Ethernet port modes, and speeds by size. Update with **Settings → Overview → Software update** or `sudo radiusone-update`.

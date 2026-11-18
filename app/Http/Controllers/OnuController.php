@@ -17,6 +17,7 @@ use App\Support\Olt\Olts;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Inertia\Inertia;
 use Inertia\Response;
 use RuntimeException;
@@ -59,13 +60,43 @@ final class OnuController extends Controller
         ]);
     }
 
-    /** Asks the OLT now. Only reads. */
-    public function live(string $id, string $onu): JsonResponse
+    /** How long one read of an ONU serves its page, its tabs and a reload: each read is a telnet login on the OLT. */
+    private const LIVE_SECONDS = 30;
+    /** The OLT's VLANs, profiles and traffic tables change rarely, and the portal forgets them when it changes them. */
+    private const CHOICES_SECONDS = 600;
+
+    /** @param  array<string, mixed>  $row */
+    private static function liveKey(array $row): string
+    {
+        return 'onu-live:' . (int) $row['olt_id'] . ':' . (int) $row['id'] . ':' . $row['sn'];
+    }
+
+    /**
+     * The last read of this ONU if it is recent, else a new one. ?fresh=1 (Get status, Live) always asks the OLT.
+     *
+     * @param  array<string, mixed>  $olt
+     * @param  array<string, mixed>  $row
+     * @return array{at:int,data:array<mixed>}
+     */
+    private static function liveRead(array $olt, array $row, bool $fresh, int $within = self::LIVE_SECONDS): array
+    {
+        $cached = $fresh ? null : Cache::get(self::liveKey($row));
+        if (is_array($cached) && is_int($cached['at'] ?? null) && is_array($cached['data'] ?? null) && time() - $cached['at'] <= $within) {
+            return ['at' => $cached['at'], 'data' => $cached['data']];
+        }
+        $read = ['at' => time(), 'data' => OltManager::live($olt, $row)];
+        Cache::put(self::liveKey($row), $read, 300);
+        return $read;
+    }
+
+    /** Asks the OLT, or answers from a read of the last 30 seconds. Only reads. */
+    public function live(Request $request, string $id, string $onu): JsonResponse
     {
         [$olt, $row] = self::find($id, $onu);
         set_time_limit(90);
         try {
-            $payload = ['ok' => true, 'data' => OltManager::live($olt, $row)];
+            $read = self::liveRead($olt, $row, $request->boolean('fresh'));
+            $payload = ['ok' => true, 'data' => $read['data'], 'age' => time() - $read['at']];
         } catch (RuntimeException $e) {
             $payload = ['ok' => false, 'error' => $e->getMessage()];
         }
@@ -73,12 +104,15 @@ final class OnuController extends Controller
     }
 
     /** The ONU's part of the OLT's configuration. Only reads. */
-    public function config(string $id, string $onu): JsonResponse
+    public function config(Request $request, string $id, string $onu): JsonResponse
     {
         [$olt, $row] = self::find($id, $onu);
         set_time_limit(90);
         try {
-            $payload = ['ok' => true, 'output' => OltManager::runningConfig($olt, $row)];
+            // The page's own read has it, unless Read again asked for a new one.
+            $cached = $request->boolean('fresh') ? null : Cache::get(self::liveKey($row));
+            $text = is_array($cached) && time() - (int) $cached['at'] <= 60 && ($cached['data']['config'] ?? '') !== '' ? (string) $cached['data']['config'] : null;
+            $payload = ['ok' => true, 'output' => $text ?? OltManager::runningConfig($olt, $row)];
         } catch (RuntimeException $e) {
             $payload = ['ok' => false, 'error' => $e->getMessage()];
         }
@@ -91,7 +125,11 @@ final class OnuController extends Controller
         [$olt, $row] = self::find($id, $onu);
         set_time_limit(120);
         try {
-            $payload = ['ok' => true, 'data' => OltManager::omciOptions($olt, $row)];
+            $choices = Cache::remember('olt-omci-choices:' . (int) $olt['id'], self::CHOICES_SECONDS, static fn () => OltManager::omciChoices($olt));
+            // What the ONU has set comes with the page's own read, when that is recent.
+            $cached = Cache::get(self::liveKey($row));
+            $state = is_array($cached) && time() - (int) $cached['at'] <= 60 && is_array($cached['data']['omci'] ?? null) ? $cached['data']['omci'] : OltManager::onuState($olt, $row);
+            $payload = ['ok' => true, 'data' => $choices + ['state' => $state]];
         } catch (RuntimeException $e) {
             $payload = ['ok' => false, 'error' => $e->getMessage()];
         }
@@ -138,6 +176,7 @@ final class OnuController extends Controller
         } catch (RuntimeException $e) {
             return $this->fail($e->getMessage());
         }
+        Cache::forget(self::liveKey($row));
         return back()->with('flash', ['type' => 'success', 'message' => $message]);
     }
 
@@ -194,6 +233,10 @@ final class OnuController extends Controller
             };
         } catch (RuntimeException $e) {
             return $this->fail($e->getMessage());
+        }
+        Cache::forget(self::liveKey($row));
+        if ($action === 'add-speed') {
+            Cache::forget('olt-omci-choices:' . (int) $olt['id']);
         }
         return $action === 'delete' ? $this->ok('/olts/' . (int) $olt['id'], $message) : back()->with('flash', ['type' => 'success', 'message' => $message]);
     }

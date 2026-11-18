@@ -11,6 +11,8 @@ use App\Http\Support\MonitoringData;
 use App\Support\Audit;
 use App\Support\Auth;
 use App\Support\Db;
+use App\Support\Olt\OltConsole;
+use App\Support\Olt\OltConsoleUnavailable;
 use App\Support\Olt\OltInventory;
 use App\Support\Olt\OltManager;
 use App\Support\Olt\OltMapper;
@@ -251,6 +253,72 @@ final class OltController extends Controller
             $payload = ['ok' => true, 'output' => mb_substr(mb_scrub($output, 'UTF-8'), 0, 400000)];
         } catch (RuntimeException $e) {
             $payload = ['ok' => false, 'error' => $e->getMessage() === 'This command is not allowed on the OLT.' ? 'Only plain "display" commands are allowed: letters, digits, spaces, "/" and "-".' : $e->getMessage()];
+        }
+        return response()->json($payload)->header('Cache-Control', 'no-store');
+    }
+
+    /**
+     * The OLT's live console (OltConsole): open a session, pass keys in and output out, close it. The same people as the
+     * terminal below may use it; each line typed is written to the audit log under the operator's own name.
+     */
+    public function console(Request $request, string $id, ?string $session = null, ?string $action = null): JsonResponse
+    {
+        $olt = Olts::find((int) $id);
+        abort_if(!$olt, 404, 'OLT not found.');
+        Auth::requireCan('danger.delete');
+        abort_if($session !== null && !preg_match('/^[a-f0-9]{32}$/D', $session), 404);
+        $user = (int) (Auth::user()['id'] ?? 0);
+        $base = ['olt' => (int) $olt['id'], 'user' => $user];
+        try {
+            if ($session === null) {
+                if (!OltManager::canChange($olt)) {
+                    throw new RuntimeException('The console needs Allow changes from the portal turned on for this OLT, under Edit.');
+                }
+                $answer = OltConsole::request(['op' => 'open', 'cols' => $request->integer('cols', 80), 'rows' => $request->integer('rows', 24)] + $base);
+                Audit::log('olt_console', 'olt', (string) $olt['id'], null, ['olt' => (string) $olt['name'], 'commands' => ['(console session opened)']]);
+                $payload = ['ok' => true, 'session' => $answer['session']];
+            } elseif ($action === 'close') {
+                OltConsole::request(['op' => 'close', 'session' => $session] + $base);
+                $payload = ['ok' => true];
+            } else {
+                $input = (string) $request->input('input', '');
+                if (strlen($input) > 65536) {
+                    throw new RuntimeException('Too much was pasted at once. Paste it in smaller parts.');
+                }
+                $answer = OltConsole::request(['op' => 'io', 'session' => $session, 'input' => $input, 'offset' => $request->integer('offset'), 'cols' => $request->integer('cols'), 'rows' => $request->integer('rows')] + $base);
+                $lines = array_values(array_filter((array) ($answer['lines'] ?? []), 'is_string'));
+                if ($lines) {
+                    Audit::log('olt_terminal', 'olt', (string) $olt['id'], null, ['olt' => (string) $olt['name'], 'console' => true, 'commands' => array_map(OltManager::maskSecrets(...), $lines)]);
+                }
+                unset($answer['lines']);
+                $payload = $answer;
+            }
+        } catch (OltConsoleUnavailable $e) {
+            $payload = ['ok' => false, 'unavailable' => true, 'error' => $e->getMessage()];
+        } catch (RuntimeException $e) {
+            $payload = ['ok' => false, 'error' => $e->getMessage(), 'ended' => str_contains($e->getMessage(), 'has ended')];
+        }
+        return response()->json($payload)->header('Cache-Control', 'no-store');
+    }
+
+    /**
+     * The OLT's terminal: any command, for operators who may delete, on an OLT that allows changes. Every command is in
+     * the audit log. Careful commands and the OLT's own yes/no questions come back to be confirmed first.
+     */
+    public function terminal(Request $request, string $id): JsonResponse
+    {
+        $olt = Olts::find((int) $id);
+        abort_if(!$olt, 404, 'OLT not found.');
+        Auth::requireCan('danger.delete');
+        $context = $request->input('context', []);
+        set_time_limit(170);
+        try {
+            if (!is_array($context) || array_filter($context, static fn ($c) => !is_string($c))) {
+                throw new RuntimeException('Type "return" to start again at the top.');
+            }
+            $payload = ['ok' => true] + OltManager::terminal($olt, array_values($context), (string) $request->input('command', ''), $request->boolean('confirmed'), $request->boolean('yes'));
+        } catch (RuntimeException $e) {
+            $payload = ['ok' => false, 'error' => $e->getMessage()];
         }
         return response()->json($payload)->header('Cache-Control', 'no-store');
     }

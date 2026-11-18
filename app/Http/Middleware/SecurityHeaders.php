@@ -38,7 +38,9 @@ final class SecurityHeaders
         $dev = app()->environment('local') && is_file(public_path('hot'));
         $vite = $dev ? ' ' . trim((string) file_get_contents(public_path('hot'))) : '';
         $connect = $dev ? $vite . ' ' . str_replace('http', 'ws', trim($vite)) : '';
-        return "default-src 'self'; script-src 'self'{$vite}; style-src 'self'{$vite}; img-src 'self' data: blob: https:; font-src 'self'; "
+        // style-src-elem: the OLT console's terminal (xterm.js) sizes and colours its rows with <style> elements it
+        // writes itself. Style attributes in markup stay blocked (style-src), and scripts stay 'self' only.
+        return "default-src 'self'; script-src 'self'{$vite}; style-src 'self'{$vite}; style-src-elem 'self' 'unsafe-inline'{$vite}; img-src 'self' data: blob: https:; font-src 'self'; "
             . "connect-src 'self'{$connect}; form-action 'self'; base-uri 'self'; frame-ancestors 'none'";
     }
 }

@@ -22,7 +22,7 @@ type Live = {
     traffic: { up: number | null; down: number | null };
     servicePorts: ServicePort[];
 };
-type Answer = { ok: true; data: Live } | { ok: false; error: string };
+type Answer = { ok: true; data: Live; age?: number } | { ok: false; error: string };
 type TrafficTable = { id: number; cir: string; pir: string };
 type OltInfo = { id: number; name: string; canRead: boolean; canChange: boolean; rxWarning: number; rxCritical: number };
 type Client = { username: string; name: string; address: string; phone: string; pppoe: boolean };
@@ -33,7 +33,7 @@ type OnuState = { mode: 'routing' | 'bridging' | 'none'; wans: Record<string, Om
 type OmciOptions = { vlans: number[]; wanProfiles: Profile[]; routeProfiles: Profile[]; trafficTables: TrafficTable[]; state: OnuState };
 type Segment = { from: number; to: number; state: 'online' | 'offline' | 'none' };
 type Timeline = { from: number; to: number; segments: Segment[] };
-type LiveState = { answer: Answer | null; busy: boolean; auto: boolean; setAuto: (on: boolean) => void; read: () => Promise<void>; enabled: boolean };
+type LiveState = { answer: Answer | null; busy: boolean; auto: boolean; setAuto: (on: boolean) => void; read: (fresh?: boolean) => Promise<void>; enabled: boolean };
 
 const dash = (value: string | number | null | undefined, unit = '') => (value === null || value === undefined || value === '' ? '-' : `${value}${unit}`);
 /** A traffic table's speed as operators say it: 100M, 1G, Unlimited. The OLT counts 1024 kbit/s to the megabit. */
@@ -46,7 +46,7 @@ const speedName = (kbps: string | undefined) => {
 };
 const rate = (kbps: number | null | undefined) => (kbps === null || kbps === undefined ? '-' : kbps >= 1000 ? `${(kbps / 1000).toFixed(1)} Mbit/s` : `${kbps} kbit/s`);
 const num = (value: string | undefined) => (value && !Number.isNaN(Number(value)) ? Number(value) : null);
-const clock = (seconds: number) => new Date(seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+const clock = (seconds: number) => new Date(seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
 
 /** 10h 55m, 3d 4h, 12m: the two largest units are enough to read at a glance. */
 function duration(seconds: number | null): string {
@@ -70,17 +70,18 @@ function useLive(base: string, enabled: boolean): LiveState {
     const [answer, setAnswer] = useState<Answer | null>(null);
     const [busy, setBusy] = useState(false);
     const [auto, setAuto] = useState(false);
-    const read = useCallback(async () => {
+    // The first read may come from the last 30 seconds; Get status and Live always ask the OLT.
+    const read = useCallback(async (fresh = true) => {
         setBusy(true);
         try {
-            setAnswer(await getJson<Answer>(`${base}/live`));
+            setAnswer(await getJson<Answer>(`${base}/live${fresh ? '?fresh=1' : ''}`));
         } catch {
             setAnswer({ ok: false, error: 'The portal could not be reached, or your session ended. Reload the page and try again.' });
         } finally {
             setBusy(false);
         }
     }, [base]);
-    useEffect(() => { if (enabled) void read(); }, [enabled, read]);
+    useEffect(() => { if (enabled) void read(false); }, [enabled, read]);
     useEffect(() => {
         if (!enabled || !auto || busy) return undefined;
         const timer = window.setTimeout(() => { if (!document.hidden) void read(); }, 10000);
@@ -232,10 +233,10 @@ function Graphs({ base, ranges }: { base: string; ranges: Record<string, string>
 function RunningConfig({ base }: { base: string }) {
     const [config, setConfig] = useState<{ ok: boolean; output?: string; error?: string } | null>(null);
     const [busy, setBusy] = useState(false);
-    const load = useCallback(async () => {
+    const load = useCallback(async (fresh = false) => {
         setBusy(true);
         try {
-            setConfig(await getJson(`${base}/config`));
+            setConfig(await getJson(`${base}/config${fresh ? '?fresh=1' : ''}`));
         } catch {
             setConfig({ ok: false, error: 'The portal could not be reached. Reload the page and try again.' });
         } finally {
@@ -244,7 +245,7 @@ function RunningConfig({ base }: { base: string }) {
     }, [base]);
     useEffect(() => { void load(); }, [load]);
     return (
-        <Panel title="Running config on the OLT" actions={<button type="button" className="button" disabled={busy} onClick={() => void load()}><Icon name="refresh" />{busy ? 'Asking the OLT…' : 'Read again'}</button>}>
+        <Panel title="Running config on the OLT" actions={<button type="button" className="button" disabled={busy} onClick={() => void load(true)}><Icon name="refresh" />{busy ? 'Asking the OLT…' : 'Read again'}</button>}>
             {!config ? <p className="hint" role="status">Asking the OLT. This takes a few seconds.</p>
                 : config.ok ? <pre className="mono onu-config" tabIndex={0}>{config.output}</pre>
                     : <p className="flash warning" role="alert">{config.error}</p>}
@@ -724,6 +725,7 @@ export default function OnuPage({ olt, onu, clients, disconnections, timeline, s
                             {status === 'off' ? <Badge tone="warning">Turned off</Badge> : <OnuStatus status={status} />}
                             {since !== null && status === onu.status && <span>{status === 'online' ? 'for' : 'since'} <strong>{duration(since)}</strong></span>}
                             {onu.distance !== null && <span><strong>{onu.distance >= 1000 ? `${(onu.distance / 1000).toFixed(2)} km` : `${onu.distance} m`}</strong> of fibre</span>}
+                            {live.answer?.ok && (live.answer.age ?? 0) > 0 && <span className="onu-pending">read {live.answer.age} s ago</span>}
                             {disconnections.day > 0 && <Badge tone="warning">{disconnections.day} disconnection{disconnections.day === 1 ? '' : 's'} in 24 h</Badge>}
                         </div>
                     </div>
@@ -734,6 +736,7 @@ export default function OnuPage({ olt, onu, clients, disconnections, timeline, s
                                 <button type="button" className={`button onu-live-toggle${live.auto ? ' on' : ''}`} aria-pressed={live.auto} onClick={() => live.setAuto(!live.auto)} title="Ask the OLT again every 10 seconds"><span className="onu-live-dot" aria-hidden="true" />Live</button>
                             </>
                         )}
+                        {mayChange && can('danger.delete') && <Link className="button" href={`/olts/${olt.id}?tab=cli&at=${frame}/${slot}`} title={`Open the OLT's terminal at interface gpon ${frame}/${slot}`}><Icon name="terminal" />Terminal</Link>}
                         {mayChange && <PostButton action={`${base}/reboot`} label="Reboot" className="button" disabled={off || onu.status === 'offline'} confirm={{ title: 'Restart this ONU?', message: `${onu.description || onu.sn} loses its connection for a minute or two.`, confirmLabel: 'Restart' }} />}
                     </div>
                 </div>
@@ -760,6 +763,7 @@ export default function OnuPage({ olt, onu, clients, disconnections, timeline, s
             </section>
 
             <div className="onu-facts-grid">
+                <div className="onu-facts-stack">
                 <Facts title="Location" icon="fiber">
                     <Fact label="OLT"><Link href={`/olts/${olt.id}`}>{olt.name}</Link></Fact>
                     <Fact label="Frame / board / port" mono>{frame} / {slot} / {port}</Fact>
@@ -777,6 +781,7 @@ export default function OnuPage({ olt, onu, clients, disconnections, timeline, s
                         </div>
                     )) : <Fact label="Client"><span className="onu-pending">Not linked to a client</span></Fact>}
                 </Facts>
+                </div>
                 <Facts title="Device" icon="server">
                     <Fact label="Serial number" mono>{onu.sn}</Fact>
                     <Fact label="ONU type">{data?.software.model || onu.model || '-'}</Fact>

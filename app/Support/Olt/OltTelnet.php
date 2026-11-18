@@ -101,9 +101,10 @@ final class OltTelnet
 
     /**
      * Sends one line and returns what the OLT printed up to its next prompt. The OLT's "press Enter" and "More" pauses
-     * are answered by themselves. A yes/no question is answered yes only when $confirm says so, and no otherwise.
+     * are answered by themselves. A yes/no question is answered yes only when $confirm says so, and no otherwise; a "no"
+     * the caller did not expect throws, unless $reportDeclined asks for the OLT's words back (the terminal shows them).
      */
-    public function command(string $line, bool $confirm = false): string
+    public function command(string $line, bool $confirm = false, bool $reportDeclined = false): string
     {
         // A question mark or a tab makes the OLT act before Enter, and a line break would be a second command.
         if ($line === '' || preg_match('/[\x00-\x1f\x7f?]/', $line)) {
@@ -134,7 +135,7 @@ final class OltTelnet
                 $declined = !$confirm;
                 $tail = '';
             } elseif ($this->name !== '' ? preg_match($prompt, $tail) : preg_match('/[>#]\s*$/', $tail)) {
-                if ($declined) {
+                if ($declined && !$reportDeclined) {
                     throw new RuntimeException('The OLT asked "are you sure" for "' . $line . '", which was not expected, so the answer was no and nothing was done.');
                 }
                 return $all;

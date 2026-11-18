@@ -107,6 +107,14 @@ systemctl enable --quiet radiusone-firewall.service radiusone-firewall.path
 systemctl restart radiusone-firewall.path
 /usr/local/sbin/radiusone-firewall detect || true
 
+echo "== OLT console"
+# The live console on an OLT's Terminal tab. Restarting it ends open console sessions, never anything on an OLT.
+place "$app/deploy/systemd/radiusone-olt-console.service" /etc/systemd/system/radiusone-olt-console.service 0644
+systemctl daemon-reload
+systemctl enable --quiet radiusone-olt-console.service
+systemctl restart radiusone-olt-console.service \
+  || echo 'The OLT console service did not start: the Terminal tab uses its simpler line mode until it does (journalctl -u radiusone-olt-console).' >&2
+
 echo "== NAS diagnostics"
 command -v tcpdump >/dev/null || apt-get install -y -q --no-install-recommends tcpdump >/dev/null 2>&1 \
   || echo 'Could not install tcpdump, so the packet test will not work until you run: sudo apt install tcpdump' >&2

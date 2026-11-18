@@ -1,0 +1,27 @@
+# RadiusOne: holds the OLT console sessions operators open from the portal (OLT → Terminal). It listens only on a
+# Unix socket the web user can reach, and opens telnet to an OLT only when an operator who may do so asks for it.
+# Installed and restarted by ops/radiusone-postinstall; restarting it ends the open console sessions.
+[Unit]
+Description=RadiusOne OLT console sessions
+After=network-online.target mariadb.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/radiusone
+Environment=RADIUSONE_CONSOLE_SOCKET=/run/radiusone-console/console.sock
+ExecStart=/usr/bin/php /opt/radiusone/artisan radiusone:olt-console
+Restart=always
+RestartSec=3
+RuntimeDirectory=radiusone-console
+RuntimeDirectoryMode=0750
+UMask=0007
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target
