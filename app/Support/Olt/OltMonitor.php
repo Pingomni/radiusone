@@ -94,6 +94,57 @@ final class OltMonitor
     }
 
     /**
+     * An ONU's state over the last $seconds as a strip of stretches: online, offline, or none (no read, so nothing is known).
+     * The OLT is read every 5 minutes, so each read stands for the time up to the next one, and a gap of more than
+     * 15 minutes is shown as unknown rather than guessed.
+     *
+     * @return array{from:int,to:int,segments:list<array{from:int,to:int,state:string}>}
+     */
+    public static function timeline(int $oltId, string $sn, int $seconds = 86400): array
+    {
+        $to = time();
+        $from = $to - $seconds;
+        $gap = 900;
+        // One read before the window, so the strip starts with what was known then.
+        $rows = Db::select('(SELECT sampled_at,online FROM olt_onu_samples WHERE olt_id=? AND sn=? AND sampled_at<? ORDER BY sampled_at DESC LIMIT 1) UNION ALL (SELECT sampled_at,online FROM olt_onu_samples WHERE olt_id=? AND sn=? AND sampled_at>=? ORDER BY sampled_at) ORDER BY sampled_at', [$oltId, $sn, $from, $oltId, $sn, $from]);
+        $segments = [];
+        $add = static function (int $start, int $end, string $state) use (&$segments, $from, $to): void {
+            $start = max($start, $from);
+            $end = min($end, $to);
+            if ($end <= $start) {
+                return;
+            }
+            $last = array_key_last($segments);
+            if ($last !== null && $segments[$last]['state'] === $state && $segments[$last]['to'] === $start) {
+                $segments[$last]['to'] = $end;
+            } elseif ($last !== null && $segments[$last]['to'] < $start) {
+                $segments[] = ['from' => $segments[$last]['to'], 'to' => $start, 'state' => 'none'];
+                $segments[] = ['from' => $start, 'to' => $end, 'state' => $state];
+            } else {
+                $segments[] = ['from' => $start, 'to' => $end, 'state' => $state];
+            }
+        };
+        $count = count($rows);
+        foreach ($rows as $i => $row) {
+            $at = (int) $row['sampled_at'];
+            $next = $i + 1 < $count ? (int) $rows[$i + 1]['sampled_at'] : $to;
+            $add($at, min($next, $at + $gap), (int) $row['online'] === 1 ? 'online' : 'offline');
+        }
+        if (!$segments) {
+            $segments[] = ['from' => $from, 'to' => $to, 'state' => 'none'];
+        } else {
+            if ($segments[0]['from'] > $from) {
+                array_unshift($segments, ['from' => $from, 'to' => $segments[0]['from'], 'state' => 'none']);
+            }
+            $last = $segments[array_key_last($segments)];
+            if ($last['to'] < $to) {
+                $segments[] = ['from' => $last['to'], 'to' => $to, 'state' => 'none'];
+            }
+        }
+        return ['from' => $from, 'to' => $to, 'segments' => $segments];
+    }
+
+    /**
      * @param  array<string, mixed>  $olt
      * @param  array{boards:list<array<string, mixed>>,ports:list<array<string, mixed>>,fans?:list<array<string, mixed>>,power_w?:?int,uptime_s?:?int}  $read
      */

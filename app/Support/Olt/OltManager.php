@@ -47,14 +47,16 @@ final class OltManager
      * Sends one change and throws the OLT's own words if it refused.
      *
      * @param  array<int, string>  $sent
+     * @param  ?string  $shown  the command as it may be kept and shown, when it carries a password
      */
-    private static function send(OltTelnet $t, string $command, array &$sent, bool $confirm = false): string
+    private static function send(OltTelnet $t, string $command, array &$sent, bool $confirm = false, ?string $shown = null): string
     {
-        $sent[] = $command;
+        $shown ??= $command;
+        $sent[] = $shown;
         $output = $t->command($command, $confirm);
         $failure = HuaweiCli::failure($output);
         if ($failure !== null) {
-            throw new RuntimeException('The OLT refused "' . $command . '": ' . $failure);
+            throw new RuntimeException('The OLT refused "' . $shown . '": ' . $failure);
         }
         return $output;
     }
@@ -573,6 +575,168 @@ final class OltManager
             }
         });
         self::done($olt, $onu, $on ? 'onu_lan_on' : 'onu_lan_off', $sent, ['lan_port' => $eth]);
+    }
+
+    /**
+     * What the OMCI settings can be chosen from: the OLT's VLANs and its WAN and route policy profiles. Only reads.
+     *
+     * @param  array<string, mixed>  $olt
+     * @return array{vlans:list<int>,wanProfiles:list<array{id:int,name:string,bound:int}>,routeProfiles:list<array{id:int,name:string,bound:int}>}
+     */
+    public static function omciOptions(array $olt): array
+    {
+        if (!self::canRead($olt)) {
+            throw new RuntimeException('This needs telnet turned on for this OLT, under Edit.');
+        }
+        $out = Olts::cli($olt, 60.0)->read(['display vlan all', 'display ont wan-profile all', 'display ont policy-route-profile all']);
+        $vlans = array_column(HuaweiCli::vlans($out[0]), 'id');
+        if (!$vlans) {
+            throw new RuntimeException('The OLT did not list its VLANs. Check that the telnet user may read them.');
+        }
+        sort($vlans);
+        return ['vlans' => $vlans, 'wanProfiles' => HuaweiCli::profiles($out[1]), 'routeProfiles' => HuaweiCli::profiles($out[2])];
+    }
+
+    /**
+     * Sets the ONU's internet connection (its WAN) through OMCI: DHCP, PPPoE or a fixed address, on a VLAN of the OLT,
+     * and routes its LAN ports through it. Every value is checked here; a PPPoE password never appears in what is kept.
+     *
+     * @param  array<string, mixed>  $olt
+     * @param  array<string, mixed>  $onu
+     * @param  array<string, mixed>  $input
+     * @param  ?array{0:string,1:string}  $login  a PPPoE login looked up by the caller (the linked client's RADIUS login)
+     * @return string what was set, in words
+     */
+    public static function wanConfig(array $olt, array $onu, array $input, ?array $login = null): string
+    {
+        self::requireChange($olt);
+        $int = static function (string $key, string $label, int $min, int $max, ?int $default = null) use ($input): ?int {
+            $raw = trim((string) ($input[$key] ?? ''));
+            if ($raw === '' && func_num_args() > 4) {
+                return $default;
+            }
+            if (!preg_match('/^\d{1,5}$/D', $raw) || (int) $raw < $min || (int) $raw > $max) {
+                throw new RuntimeException('Choose ' . $label . '.');
+            }
+            return (int) $raw;
+        };
+        $mode = (string) ($input['mode'] ?? '');
+        if (!in_array($mode, ['dhcp', 'pppoe', 'static'], true)) {
+            throw new RuntimeException('Choose how the ONU gets its address: DHCP, PPPoE or a fixed address.');
+        }
+        $index = $int('ip_index', 'a connection number from 0 to 7', 0, 7, 1);
+        $vlan = $int('vlan', 'a VLAN from 1 to 4094', 1, 4094);
+        $priority = $int('priority', 'a priority from 0 to 7', 0, 7, 0);
+        $wan = $int('wan_profile', 'a WAN profile', 0, 8191, null);
+        $route = $int('route_profile', 'a route policy profile', 0, 8191, null);
+        $routeLan = !empty($input['route_lan']);
+        [$p, $n] = [(int) $onu['port'], (int) $onu['ont_id']];
+        $base = "ont ipconfig $p $n ip-index $index";
+        $tail = "vlan $vlan priority $priority";
+        $shown = null;
+        if ($mode === 'dhcp') {
+            $command = "$base dhcp $tail";
+            $words = 'DHCP';
+        } elseif ($mode === 'pppoe') {
+            [$user, $password] = $login ?? [(string) ($input['pppoe_user'] ?? ''), (string) ($input['pppoe_password'] ?? '')];
+            if (!HuaweiCli::isCredential($user) || !HuaweiCli::isCredential($password)) {
+                throw new RuntimeException('The PPPoE username and password may only hold letters, digits and . _ @ + = ! # $ % & * - (up to 64 each, no spaces or quotes).');
+            }
+            $command = "$base pppoe $tail user-account username $user password $password";
+            $shown = "$base pppoe $tail user-account username $user password ******";
+            $words = 'PPPoE as ' . $user;
+        } else {
+            $ip = static function (string $key, string $label, bool $optional = false) use ($input): ?string {
+                $raw = trim((string) ($input[$key] ?? ''));
+                if ($raw === '' && $optional) {
+                    return null;
+                }
+                if (filter_var($raw, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) === false) {
+                    throw new RuntimeException('Enter ' . $label . ' as an IPv4 address, such as 10.20.0.2.');
+                }
+                return $raw;
+            };
+            $address = (string) $ip('ip', 'the address');
+            $mask = (string) $ip('mask', 'the subnet mask');
+            $bits = ip2long($mask);
+            if ($bits === false || $bits === 0 || ((~$bits & 0xFFFFFFFF) & ((~$bits & 0xFFFFFFFF) + 1)) !== 0) {
+                throw new RuntimeException('Enter a subnet mask such as 255.255.255.0.');
+            }
+            $gateway = (string) $ip('gateway', 'the gateway');
+            if (((int) ip2long($address) & $bits) !== ((int) ip2long($gateway) & $bits)) {
+                throw new RuntimeException('The gateway is not in the same network as the address.');
+            }
+            $dns = (string) $ip('dns1', 'the first DNS server');
+            $dns2 = $ip('dns2', 'the second DNS server', true);
+            $command = "$base static ip-address $address mask $mask gateway $gateway pri-dns $dns" . ($dns2 !== null ? " slave-dns $dns2" : '') . " $tail";
+            $words = 'fixed address ' . $address;
+        }
+
+        $sent = [];
+        $ports = self::session($olt, static function (OltTelnet $t) use ($onu, $p, $n, $index, $vlan, $wan, $route, $routeLan, $command, $shown, &$sent): int {
+            $info = self::verify($t, $onu);
+            if (!in_array($vlan, array_column(HuaweiCli::vlans($t->command('display vlan all')), 'id'), true)) {
+                throw new RuntimeException('The OLT has no VLAN ' . $vlan . '. Add it on the OLT\'s page first. Nothing was changed.');
+            }
+            foreach ([[$wan, 'display ont wan-profile all', 'WAN profile'], [$route, 'display ont policy-route-profile all', 'route policy profile']] as [$id, $list, $label]) {
+                if ($id !== null && !in_array($id, array_column(HuaweiCli::profiles($t->command($list)), 'id'), true)) {
+                    throw new RuntimeException('The OLT has no ' . $label . ' ' . $id . '. Nothing was changed.');
+                }
+            }
+            $lan = 0;
+            if ($routeLan && preg_match('/^\d+$/', trim((string) ($info['Service profile ID'] ?? '')))) {
+                $lan = min(8, (int) HuaweiCli::ethPorts($t->command('display ont-srvprofile gpon profile-id ' . (int) trim($info['Service profile ID']))));
+            }
+            $t->command('config');
+            $t->command(sprintf('interface gpon %d/%d', $onu['frame'], $onu['slot']));
+            self::send($t, $command, $sent, false, $shown);
+            self::send($t, "ont internet-config $p $n ip-index $index", $sent);
+            if ($wan !== null) {
+                self::send($t, "ont wan-config $p $n ip-index $index profile-id $wan", $sent);
+            }
+            if ($route !== null) {
+                self::send($t, "ont policy-route-config $p $n profile-id $route", $sent);
+            }
+            for ($eth = 1; $eth <= $lan; $eth++) {
+                self::send($t, "ont port route $p $n eth $eth enable", $sent);
+            }
+            return $lan;
+        });
+        self::done($olt, $onu, 'onu_wan', $sent, ['mode' => $mode, 'vlan' => $vlan, 'ip_index' => $index]);
+        return 'The ONU\'s internet connection ' . $index . ' is now set to ' . $words . ' on VLAN ' . $vlan . ($ports ? ', with LAN ports 1 to ' . $ports . ' routed through it' : '') . '. The ONU takes it within a minute: use Get status to see it connect.';
+    }
+
+    /**
+     * Sets the VLAN a LAN port puts untagged traffic on (its native VLAN), through OMCI.
+     *
+     * @param  array<string, mixed>  $olt
+     * @param  array<string, mixed>  $onu
+     */
+    public static function lanVlan(array $olt, array $onu, int $eth, int $vlan, int $priority): void
+    {
+        self::requireChange($olt);
+        if ($vlan < 1 || $vlan > 4094 || $priority < 0 || $priority > 7) {
+            throw new RuntimeException('Choose a VLAN from 1 to 4094 and a priority from 0 to 7.');
+        }
+        $sent = [];
+        self::session($olt, static function (OltTelnet $t) use ($onu, $eth, $vlan, $priority, &$sent): void {
+            self::verify($t, $onu);
+            if (!in_array($vlan, array_column(HuaweiCli::vlans($t->command('display vlan all')), 'id'), true)) {
+                throw new RuntimeException('The OLT has no VLAN ' . $vlan . '. Nothing was changed.');
+            }
+            $t->command('config');
+            $t->command(sprintf('interface gpon %d/%d', $onu['frame'], $onu['slot']));
+            $list = sprintf('display ont port attribute %d %d eth', $onu['port'], $onu['ont_id']);
+            if (!in_array($eth, array_column(HuaweiCli::lanSettings($t->command($list)), 'port'), true)) {
+                throw new RuntimeException('This ONU has no LAN port ' . $eth . '.');
+            }
+            self::send($t, sprintf('ont port native-vlan %d %d eth %d vlan %d priority %d', $onu['port'], $onu['ont_id'], $eth, $vlan, $priority), $sent);
+            $now = array_column(HuaweiCli::lanSettings($t->command($list)), null, 'port')[$eth] ?? null;
+            if ($now !== null && $now['native'] !== $vlan) {
+                throw new RuntimeException('The OLT accepted the command, but LAN port ' . $eth . ' still shows native VLAN ' . $now['native'] . '.');
+            }
+        });
+        self::done($olt, $onu, 'onu_lan_vlan', $sent, ['lan_port' => $eth, 'vlan' => $vlan]);
     }
 
     /**

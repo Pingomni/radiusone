@@ -704,6 +704,109 @@ final class OltManageTest extends TestCase
         $this->assertSame(2, (int) Db::value('SELECT COUNT(*) FROM olt_onu_samples'));
     }
 
+    public function test_the_onus_internet_connection_is_set_through_omci(): void
+    {
+        $this->startAgent();
+        $olt = $this->olt();
+        $onu = $this->onu($olt);
+        $customer = $this->insertRow('customer_profiles', ['username' => 'isa.a', 'first_name' => 'Isa', 'last_name' => 'A', 'account_status' => 'active', 'enabled' => 1]);
+        $this->insertRow('customer_onus', ['customer_id' => $customer, 'olt_id' => $olt['id'], 'sn' => 'HWTC1234ABCD', 'source' => 'manual', 'linked_at' => date('Y-m-d H:i:s')]);
+        $this->insertRow('radcheck', ['username' => 'isa.a', 'attribute' => 'Cleartext-Password', 'op' => ':=', 'value' => 'S3cret-pw']);
+        $other = $this->insertRow('customer_profiles', ['username' => 'someone.else', 'first_name' => 'X', 'last_name' => 'Y', 'account_status' => 'active', 'enabled' => 1]);
+        $this->insertRow('radcheck', ['username' => 'someone.else', 'attribute' => 'Cleartext-Password', 'op' => ':=', 'value' => 'other-pw']);
+        $this->actingAsOperator();
+        $base = "/olts/{$olt['id']}/onus/$onu";
+
+        $this->get($base)->assertInertia(fn ($p) => $p->where('clients.0.pppoe', true)->missing('clients.0.password'));
+        $this->get("$base/omci-options")->assertJsonPath('ok', true)->assertJsonPath('data.vlans', [1, 100])->assertJsonPath('data.wanProfiles.0.id', 0);
+
+        $this->post("$base/wan", ['mode' => 'dhcp', 'vlan' => 100, 'wan_profile' => 0, 'route_profile' => 1, 'route_lan' => '1'])->assertSessionHas('flash.type', 'success');
+        $this->post("$base/wan", ['mode' => 'pppoe', 'vlan' => 100, 'pppoe_client' => 'isa.a'])->assertSessionHas('flash.type', 'success');
+        $this->post("$base/wan", ['mode' => 'pppoe', 'vlan' => 100, 'priority' => 3, 'ip_index' => 0, 'pppoe_user' => 'typed', 'pppoe_password' => 'typed-pw'])->assertSessionHas('flash.type', 'success');
+        $this->post("$base/wan", ['mode' => 'static', 'vlan' => 100, 'ip' => '10.20.0.2', 'mask' => '255.255.255.0', 'gateway' => '10.20.0.1', 'dns1' => '1.1.1.1'])->assertSessionHas('flash.type', 'success');
+        $this->assertSame([
+            'ont ipconfig 0 3 ip-index 1 dhcp vlan 100 priority 0', 'ont internet-config 0 3 ip-index 1', 'ont wan-config 0 3 ip-index 1 profile-id 0', 'ont policy-route-config 0 3 profile-id 1',
+            'ont port route 0 3 eth 1 enable', 'ont port route 0 3 eth 2 enable', 'ont port route 0 3 eth 3 enable', 'ont port route 0 3 eth 4 enable',
+            'ont ipconfig 0 3 ip-index 1 pppoe vlan 100 priority 0 user-account username isa.a password S3cret-pw', 'ont internet-config 0 3 ip-index 1',
+            'ont ipconfig 0 3 ip-index 0 pppoe vlan 100 priority 3 user-account username typed password typed-pw', 'ont internet-config 0 3 ip-index 0',
+            'ont ipconfig 0 3 ip-index 1 static ip-address 10.20.0.2 mask 255.255.255.0 gateway 10.20.0.1 pri-dns 1.1.1.1 vlan 100 priority 0', 'ont internet-config 0 3 ip-index 1',
+        ], $this->changes());
+        // The password went to the OLT, but is kept nowhere.
+        $kept = (string) Db::value('SELECT GROUP_CONCAT(after_json) FROM audit_logs WHERE action="onu_wan"');
+        $this->assertSame(4, (int) Db::value('SELECT COUNT(*) FROM audit_logs WHERE action="onu_wan"'));
+        $this->assertStringNotContainsString('S3cret-pw', $kept);
+        $this->assertStringNotContainsString('typed-pw', $kept);
+        $this->assertStringContainsString('password ******', $kept);
+
+        // Refused before anything is sent.
+        $refused = [
+            ['mode' => 'pppoe', 'vlan' => 100, 'pppoe_client' => 'someone.else'],
+            ['mode' => 'pppoe', 'vlan' => 100, 'pppoe_user' => 'a b', 'pppoe_password' => 'x'],
+            ['mode' => 'pppoe', 'vlan' => 100, 'pppoe_user' => 'a', 'pppoe_password' => "x\nont delete 0 3"],
+            ['mode' => 'pppoe', 'vlan' => 100, 'pppoe_user' => 'a', 'pppoe_password' => 'x?'],
+            ['mode' => 'static', 'vlan' => 100, 'ip' => '10.20.0.2', 'mask' => '255.0.255.0', 'gateway' => '10.20.0.1', 'dns1' => '1.1.1.1'],
+            ['mode' => 'static', 'vlan' => 100, 'ip' => '10.20.0.2', 'mask' => '255.255.255.0', 'gateway' => '10.30.0.1', 'dns1' => '1.1.1.1'],
+            ['mode' => 'static', 'vlan' => 100, 'ip' => '10.20.0.2; ont delete', 'mask' => '255.255.255.0', 'gateway' => '10.20.0.1', 'dns1' => '1.1.1.1'],
+            ['mode' => 'dhcp', 'vlan' => 333],
+            ['mode' => 'dhcp', 'vlan' => 100, 'wan_profile' => 9],
+            ['mode' => 'dhcp', 'vlan' => 100, 'priority' => 8],
+            ['mode' => 'bridge', 'vlan' => 100],
+        ];
+        foreach ($refused as $input) {
+            $this->post("$base/wan", $input)->assertSessionHas('flash.type', 'danger');
+        }
+        $this->assertCount(14, $this->changes());
+
+        // A LAN port's native VLAN, read back from the OLT.
+        $this->post("$base/lan-vlan/4", ['vlan' => 100, 'priority' => 0])->assertSessionHas('flash.type', 'success');
+        $this->get("$base/live")->assertJsonPath('data.lan.1.native', 100);
+        $this->post("$base/lan-vlan/4", ['vlan' => 333])->assertSessionHas('flash.type', 'danger');
+        $this->post("$base/lan-vlan/9", ['vlan' => 100])->assertSessionHas('flash.type', 'danger');
+        $this->assertSame('ont port native-vlan 0 3 eth 4 vlan 100 priority 0', $this->changes()[14]);
+        $this->assertCount(15, $this->changes());
+
+        $this->actingAsOperator('view');
+        $this->post("$base/wan", ['mode' => 'dhcp', 'vlan' => 100])->assertForbidden();
+        $this->post("$base/lan-vlan/4", ['vlan' => 100])->assertForbidden();
+    }
+
+    public function test_the_onu_page_shows_its_last_day_as_a_strip(): void
+    {
+        $this->startAgent();
+        $olt = $this->olt(false);
+        $id = $this->onu($olt);
+        $now = time();
+        $sample = fn (int $ago, int $online) => $this->insertRow('olt_onu_samples', ['olt_id' => $olt['id'], 'sn' => 'HWTC1234ABCD', 'sampled_at' => $now - $ago, 'online' => $online]);
+        // Known before the window, online until 10 hours ago, then no reads for an hour, offline for 10 minutes, back online.
+        $sample(86400 + 120, 1);
+        for ($ago = 86400 - 180; $ago >= 36000; $ago -= 300) {
+            $sample($ago, 1);
+        }
+        $sample(32400, 0);
+        $sample(32100, 0);
+        for ($ago = 31800; $ago >= 60; $ago -= 300) {
+            $sample($ago, 1);
+        }
+        $timeline = OltMonitor::timeline((int) $olt['id'], 'HWTC1234ABCD');
+        $states = array_column($timeline['segments'], 'state');
+        $this->assertSame(['online', 'none', 'offline', 'online'], $states);
+        $this->assertSame($timeline['from'], $timeline['segments'][0]['from']);
+        $this->assertSame($timeline['to'], $timeline['segments'][3]['to']);
+        // The stretches meet without gaps or overlaps.
+        foreach (array_slice($timeline['segments'], 1) as $i => $segment) {
+            $this->assertSame($timeline['segments'][$i]['to'], $segment['from']);
+        }
+        $this->assertSame(600, $timeline['segments'][2]['to'] - $timeline['segments'][2]['from']);
+        // An ONU never read is all unknown, not offline.
+        $this->assertSame([['from' => $timeline['from'], 'to' => $timeline['to'], 'state' => 'none']], OltMonitor::timeline((int) $olt['id'], 'HWTC00000000')['segments']);
+
+        Db::exec('UPDATE olt_onus SET status="online",last_up_at=? WHERE id=?', [date('Y-m-d H:i:s', $now - 3600), $id]);
+        $this->actingAsOperator('view');
+        $this->get("/olts/{$olt['id']}/onus/$id")->assertOk()->assertInertia(fn ($p) => $p
+            ->where('timeline.segments.2.state', 'offline')
+            ->where('since', fn (int $s) => $s >= 3600 && $s < 3700));
+    }
+
     public function test_fan_speed_power_and_uptime_come_over_snmp(): void
     {
         $tray = '1.3.6.1.4.1.2011.6.1.1';

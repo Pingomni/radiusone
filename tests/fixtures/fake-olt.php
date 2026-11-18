@@ -331,7 +331,7 @@ $cli = static function (string $text) use (&$mode, &$state, &$onts, &$autofind, 
     if ($interface !== null && preg_match('/^display ont port attribute (\d+) (\d+) eth$/', $text, $m)) {
         $say("\n  ----------------------------------------------------------------------------\n  ONT ONT     ONT       Auto-neg Speed  Duplex Port   Flow    Native Priority \n      port    port-type          (Mbps)        switch control VLAN            \n  ----------------------------------------------------------------------------\n");
         foreach ([1, 4] as $eth) {
-            $say(sprintf("  %-3d %-7d ETH       enable   auto   auto   %-6s off     1      0       \n", $m[2], $eth, ($lanOff["$interface/$m[1]/$m[2]/$eth"] ?? false) ? 'off' : 'on'));
+            $say(sprintf("  %-3d %-7d ETH       enable   auto   auto   %-6s off     %-6d 0       \n", $m[2], $eth, ($lanOff["$interface/$m[1]/$m[2]/$eth"] ?? false) ? 'off' : 'on', $lanOff["$interface/$m[1]/$m[2]/$eth#native"] ?? 1));
         }
         $say("  ----------------------------------------------------------------------------\n");
         return true;
@@ -426,9 +426,15 @@ $cli = static function (string $text) use (&$mode, &$state, &$onts, &$autofind, 
         $say("\n  Number of ONTs that can be added: 1, success: 1\n  PortID :$m[1], ONTID :$id\n");
         return true;
     }
-    if (preg_match('/^ont (ipconfig|internet-config|wan-config|policy-route-config) (\d+) (\d+) (ip-index 1 dhcp vlan \d+ priority 0|ip-index 1|ip-index 1 profile-id \d+|profile-id \d+)$/', $text, $m)
-        || preg_match('/^ont port (route|native-vlan) (\d+) (\d+) eth \d+ (enable|vlan \d+ priority 0)$/', $text, $m)) {
+    if (preg_match('/^ont (ipconfig|internet-config|wan-config|policy-route-config) (\d+) (\d+) (ip-index [0-7] dhcp vlan \d+ priority [0-7]|ip-index [0-7] pppoe vlan \d+ priority [0-7] user-account username \S+ password \S+|ip-index [0-7] static ip-address [\d.]+ mask [\d.]+ gateway [\d.]+ pri-dns [\d.]+( slave-dns [\d.]+)? vlan \d+ priority [0-7]|ip-index [0-7]|ip-index [0-7] profile-id \d+|profile-id \d+)$/', $text, $m)
+        || preg_match('/^ont port (route) (\d+) (\d+) eth \d+ (enable)$/', $text, $m)) {
         return $need($key($m[2], $m[3])) || $ok();
+    }
+    if (preg_match('/^ont port native-vlan (\d+) (\d+) eth (\d+) vlan (\d+) priority [0-7]$/', $text, $m)) {
+        if ($need($key($m[1], $m[2]))) {
+            $lanOff["$interface/$m[1]/$m[2]/$m[3]#native"] = (int) $m[4];
+        }
+        return true;
     }
     if (preg_match('/^ont (reset|deactivate|activate|delete) (\d+) (\d+)$/', $text, $m)) {
         $k = $key($m[2], $m[3]);

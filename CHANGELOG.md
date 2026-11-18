@@ -4,6 +4,16 @@ RadiusOne follows [semantic versioning](https://semver.org): **major** for chang
 upgrading, **minor** for new features, **patch** for fixes. The version is in the `VERSION` file and shows in
 the portal's sidebar and under Settings → System information.
 
+## 2.14.0 (2026-11-18)
+
+A new ONU page, renaming in place, and the ONU's internet connection pushed over OMCI. Update with **Settings → Overview → Software update** or `sudo radiusone-update`.
+
+- **ONU page:** device view with signal meters, a 24-hour status strip, and Location, Customer, Device and Service cards.
+- **Rename:** the pencil next to the ONU's name changes its description on the OLT.
+- **Configure over OMCI:** DHCP, PPPoE (also from the linked client's RADIUS login) or a fixed address on a VLAN, WAN and
+  route policy profiles, LAN routing, and each LAN port's native VLAN.
+- **On the server:** no database change. No OLT is changed by the update.
+
 ## 2.13.0 (2026-11-18)
 
 A full page for each ONU, and more OLT settings. Update with **Settings → Overview → Software update** or `sudo radiusone-update`.

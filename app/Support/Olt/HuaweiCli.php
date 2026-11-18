@@ -50,6 +50,15 @@ final class HuaweiCli
     }
 
     /**
+     * A PPPoE username or password the command line takes as one word: no spaces, quotes, question marks (the OLT's
+     * help key) or backslashes, so it can never be read as more of the command.
+     */
+    public static function isCredential(string $value): bool
+    {
+        return (bool) preg_match('/^[A-Za-z0-9._@+=!#$%&*-]{1,64}$/D', $value);
+    }
+
+    /**
      * "Name : value" lines. The first value for a name wins.
      *
      * @return array<string, string>
