@@ -260,6 +260,42 @@ final class HuaweiCli
         return $wans;
     }
 
+    /**
+     * An ONU's LAN ports as set on the OLT, from "display ont port attribute".
+     *
+     * @return list<array{port:int,on:bool,native:int,speed:string}>
+     */
+    public static function lanSettings(string $output): array
+    {
+        preg_match_all('/^\s*\d+\s+(\d+)\s+ETH\s+\S+\s+(\S+)\s+\S+\s+(on|off)\s+\S+\s+(\d+)\s+\d+\s*$/mi', $output, $rows, PREG_SET_ORDER);
+        return array_map(static fn (array $r) => ['port' => (int) $r[1], 'on' => strtolower($r[3]) === 'on', 'native' => (int) $r[4], 'speed' => strtolower($r[2])], $rows);
+    }
+
+    /**
+     * What an ONU is sending and receiving right now, in kbit/s, from "display ont traffic".
+     *
+     * @return array{up:?int,down:?int}
+     */
+    public static function ontTraffic(string $output): array
+    {
+        $f = self::fields($output);
+        $number = static fn (string $key) => is_numeric(trim($f[$key] ?? '')) ? (int) trim($f[$key]) : null;
+        return ['up' => $number('Up traffic (kbps)'), 'down' => $number('Down traffic (kbps)')];
+    }
+
+    /** A configuration as the OLT prints it, without the command's echo before it and the prompt after it. */
+    public static function configText(string $output): string
+    {
+        $lines = explode("\n", trim(str_replace("\r", '', $output)));
+        while ($lines && !str_starts_with($lines[0], '[')) {
+            array_shift($lines);
+        }
+        if ($lines && preg_match('/[>#]\s*$/', (string) end($lines))) {
+            array_pop($lines);
+        }
+        return $lines ? trim(implode("\n", $lines)) . "\n" : '';
+    }
+
     /** The OLT prints a dash for "nothing". */
     public static function value(string $raw): string
     {

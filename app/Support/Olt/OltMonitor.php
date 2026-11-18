@@ -17,6 +17,7 @@ final class OltMonitor
     /** A PON whose ONUs were all offline for longer than this is treated as out of use, not as an outage. */
     private const OUTAGE_SECONDS = 86400;
     private const RETENTION_SECONDS = 691200;
+    /** Until an OLT has its own level. */
     private const WEAK_DBM = -27;
     private const HOT_C = 75;
     private const BUSY_PCT = 90;
@@ -34,9 +35,62 @@ final class OltMonitor
 
     public static function record(int $oltId): void
     {
-        $c = Db::row('SELECT COUNT(*) AS onus,COALESCE(SUM(status="online"),0) AS online,COALESCE(SUM(status="offline"),0) AS offline,COALESCE(SUM(rx_dbm<? OR olt_rx_dbm<?),0) AS weak FROM olt_onus WHERE olt_id=?', [self::WEAK_DBM, self::WEAK_DBM, $oltId]);
+        $weak = (float) (Db::value('SELECT rx_warning FROM olts WHERE id=?', [$oltId]) ?? self::WEAK_DBM);
+        $c = Db::row('SELECT COUNT(*) AS onus,COALESCE(SUM(status="online"),0) AS online,COALESCE(SUM(status="offline"),0) AS offline,COALESCE(SUM(rx_dbm<? OR olt_rx_dbm<?),0) AS weak FROM olt_onus WHERE olt_id=?', [$weak, $weak, $oltId]);
         Db::exec('INSERT IGNORE INTO olt_samples (olt_id,sampled_at,onus,online,offline,weak) VALUES (?,?,?,?,?,?)', [$oltId, time(), $c['onus'] ?? 0, $c['online'] ?? 0, $c['offline'] ?? 0, $c['weak'] ?? 0]);
         Db::exec('DELETE FROM olt_samples WHERE sampled_at<? LIMIT 5000', [time() - self::RETENTION_SECONDS]);
+    }
+
+    /**
+     * One point per ONU for its graphs: online or not, both signals, and the traffic since the last read.
+     *
+     * @param  list<array<string, mixed>>  $onus  as read from the OLT
+     * @param  array<string, array{up:float,down:float}>  $traffic  bytes so far, by "frame/slot/port/onu"
+     */
+    public static function recordOnus(int $oltId, array $onus, array $traffic): void
+    {
+        $now = time();
+        $before = [];
+        foreach (Db::select('SELECT sn,up_octets,down_octets,counters_at FROM olt_onus WHERE olt_id=?', [$oltId]) as $row) {
+            $before[(string) $row['sn']] = $row;
+        }
+        $rate = static function (?float $current, mixed $last, int $seconds): ?float {
+            // A counter that went backwards was reset, so it says nothing about this interval.
+            return $current === null || !is_numeric($last) || $seconds <= 0 || $seconds > 3600 || $current < (float) $last ? null : ($current - (float) $last) * 8 / $seconds;
+        };
+        foreach ($onus as $onu) {
+            $bytes = $traffic[$onu['frame'] . '/' . $onu['slot'] . '/' . $onu['port'] . '/' . $onu['ont_id']] ?? null;
+            $last = $before[(string) $onu['sn']] ?? null;
+            $seconds = $last && $last['counters_at'] !== null ? $now - (int) $last['counters_at'] : 0;
+            Db::exec('INSERT IGNORE INTO olt_onu_samples (olt_id,sn,sampled_at,online,rx_dbm,olt_rx_dbm,up_bps,down_bps) VALUES (?,?,?,?,?,?,?,?)', [
+                $oltId, $onu['sn'], $now, ($onu['status'] ?? '') === 'online' ? 1 : 0, $onu['rx_dbm'] ?? null, $onu['olt_rx_dbm'] ?? null,
+                $rate($bytes['up'] ?? null, $last['up_octets'] ?? null, $seconds), $rate($bytes['down'] ?? null, $last['down_octets'] ?? null, $seconds),
+            ]);
+            if ($bytes !== null) {
+                Db::exec('UPDATE olt_onus SET up_octets=?,down_octets=?,counters_at=? WHERE olt_id=? AND sn=?', [number_format($bytes['up'], 0, '.', ''), number_format($bytes['down'], 0, '.', ''), $now, $oltId, $onu['sn']]);
+            }
+        }
+        Db::exec('DELETE FROM olt_onu_samples WHERE sampled_at<? LIMIT 50000', [$now - self::RETENTION_SECONDS]);
+    }
+
+    /**
+     * How often an ONU went offline, counted from its history.
+     *
+     * @return array{day:int,week:int}
+     */
+    public static function disconnections(int $oltId, string $sn): array
+    {
+        $rows = Db::select('SELECT sampled_at,online FROM olt_onu_samples WHERE olt_id=? AND sn=? AND sampled_at>=? ORDER BY sampled_at', [$oltId, $sn, time() - 7 * 86400]);
+        $count = ['day' => 0, 'week' => 0];
+        $was = null;
+        foreach ($rows as $row) {
+            if ($was === 1 && (int) $row['online'] === 0) {
+                $count['week']++;
+                $count['day'] += (int) $row['sampled_at'] >= time() - 86400 ? 1 : 0;
+            }
+            $was = (int) $row['online'];
+        }
+        return $count;
     }
 
     /**
@@ -178,8 +232,8 @@ final class OltMonitor
             $portsByOlt[(int) $p['olt_id']][] = $p;
         }
         $rows = Db::select('SELECT t.id,t.name,t.host,t.model,t.enabled,t.telnet_enabled,t.created_at,t.last_error,t.last_mac_error,t.last_hw_error,t.last_sync_ok,UNIX_TIMESTAMP(t.last_sync_at) AS tried,
-            COUNT(o.id) AS onus,COALESCE(SUM(o.status="online"),0) AS online,COALESCE(SUM(o.status="offline"),0) AS offline,COALESCE(SUM(o.rx_dbm<? OR o.olt_rx_dbm<?),0) AS weak,UNIX_TIMESTAMP(MAX(o.seen_at)) AS good
-            FROM olts t LEFT JOIN olt_onus o ON o.olt_id=t.id GROUP BY t.id ORDER BY t.name', [self::WEAK_DBM, self::WEAK_DBM]);
+            COUNT(o.id) AS onus,COALESCE(SUM(o.status="online"),0) AS online,COALESCE(SUM(o.status="offline"),0) AS offline,COALESCE(SUM(o.rx_dbm<t.rx_warning OR o.olt_rx_dbm<t.rx_warning),0) AS weak,UNIX_TIMESTAMP(MAX(o.seen_at)) AS good
+            FROM olts t LEFT JOIN olt_onus o ON o.olt_id=t.id GROUP BY t.id ORDER BY t.name');
         foreach ($rows as $o) {
             $id = (int) $o['id'];
             $href = '/olts/' . $id;
@@ -303,10 +357,14 @@ final class OltMonitor
      * @param  array<string, string>  $columns  chart series key => column of olt_hw_samples
      * @return array{start:int,end:int,bucket:int,points:list<array<string, float|int|null>>}
      */
-    public static function hardwareSeries(int $oltId, string $range, array $columns, ?int $ifIndex = null): array
+    public static function hardwareSeries(int $oltId, string $range, array $columns, ?int $ifIndex = null, ?string $sn = null): array
     {
-        // One port's traffic comes from its own table; everything else from the OLT's hardware samples.
-        [$table, $where, $extra] = $ifIndex === null ? ['olt_hw_samples', '', []] : ['olt_port_samples', ' AND if_index=?', [$ifIndex]];
+        // One port's traffic and one ONU's history come from their own tables; everything else from the OLT's hardware samples.
+        [$table, $where, $extra] = match (true) {
+            $sn !== null => ['olt_onu_samples', ' AND sn=?', [$sn]],
+            $ifIndex !== null => ['olt_port_samples', ' AND if_index=?', [$ifIndex]],
+            default => ['olt_hw_samples', '', []],
+        };
         [$length, $bucket] = self::RANGES[$range];
         $end = intdiv(time(), $bucket) * $bucket + $bucket;
         $start = $end - $length;

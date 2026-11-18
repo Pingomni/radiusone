@@ -12,7 +12,7 @@ import AppLayout from '@/layouts/AppLayout';
 import { useCan } from '@/lib/auth';
 import type { Paginated } from '@/lib/types';
 
-type Olt = { id: number; name: string; model: string; host: string; enabled: boolean; telnet: boolean; canChange: boolean; lastSync: string | null; lastMacSync: string | null; syncRequested: boolean; error: string; macError: string };
+type Olt = { id: number; name: string; model: string; host: string; enabled: boolean; telnet: boolean; canChange: boolean; rxWarning: number; rxCritical: number; lastSync: string | null; lastMacSync: string | null; syncRequested: boolean; error: string; macError: string };
 type Counts = { total: number; online: number; offline: number; weak: number };
 
 type Graphs = { range: string; ranges: Record<string, string>; charts: { key: string; title: string; url: string; data: ChartPayload }[] };
@@ -37,6 +37,7 @@ const kbps = (v: number | string) => (v === 'off' ? 'No limit' : Number(v) >= 10
 const ACTIONS: Record<string, string> = {
     create: 'Added to the portal', update: 'Settings changed', backup: 'Configuration copied', backup_download: 'Configuration downloaded',
     cli: 'Display command run', card_restart: 'Card restarted', port_autofind_on: 'Autofind turned on', port_autofind_off: 'Autofind turned off', port_restart_onus: 'All ONUs on a port restarted', port_off: 'PON port turned off', port_on: 'PON port turned on',
+    ntp_add: 'Time server added', ntp_remove: 'Time server removed', vlan_add: 'VLAN created', vlan_remove: 'VLAN deleted', uplink_vlan_add: 'VLAN added to an uplink', uplink_vlan_remove: 'VLAN taken off an uplink',
     onu_add: 'ONU added', onu_delete: 'ONU removed', onu_reboot: 'ONU restarted', onu_disable: 'ONU turned off', onu_enable: 'ONU turned on', onu_describe: 'ONU renamed',
 };
 type Hardware = { lastRead: string | null; error: string; boards: Board[]; fans: Fan[]; ports: Port[] };
@@ -109,7 +110,7 @@ function Ports({ hardware, olt, path, range }: { hardware: Hardware; olt: Olt; p
                     ...(pon ? [
                         { header: 'ONUs online', cell: (p: Port) => (p.onus ? `${p.onus.online} / ${p.onus.total}` : '-') },
                         { header: 'Autofind', cell: (p: Port) => (p.pon?.autofind == null ? '-' : p.pon.autofind ? 'On' : <Badge tone="warning">Off</Badge>) },
-                        { header: 'Average signal', cell: (p: Port) => <OnuPower dbm={p.signal} /> },
+                        { header: 'Average signal', cell: (p: Port) => <OnuPower dbm={p.signal} weak={olt.rxWarning} veryWeak={olt.rxCritical} /> },
                         { header: 'Transmit power', cell: (p: Port) => (p.pon?.tx == null ? '-' : `${p.pon.tx.toFixed(2)} dBm`) },
                         { header: 'Module', cell: (p: Port) => (p.pon?.temperature == null ? '-' : `${p.pon.temperature} °C`) },
                         { header: 'Range', cell: (p: Port) => (p.pon?.max == null ? '-' : `${p.pon.min ?? 0} to ${p.pon.max} km`) },
@@ -193,7 +194,10 @@ function uptime(bootedAt: string | null): string {
     return days > 0 ? `${days} d ${hours} h` : `${hours} h ${Math.floor((seconds % 3600) / 60)} min`;
 }
 
-function DetailsTab({ olt, details, hardware }: { olt: Olt; details: Details; hardware: Hardware }) {
+function DetailsTab({ olt, details, hardware, path }: { olt: Olt; details: Details; hardware: Hardware; path: string }) {
+    const can = useCan();
+    const [ntp, setNtp] = useState('');
+    const mayChange = olt.canChange && can('nas.manage');
     const row = (label: string, value: React.ReactNode) => <div className="kv"><span>{label}</span><strong>{value}</strong></div>;
     const synced = details.ntp.some((n) => n.reach > 0 && !/unsync/i.test(n.status));
     return (
@@ -214,12 +218,33 @@ function DetailsTab({ olt, details, hardware }: { olt: Olt; details: Details; ha
                 {row('Saves its configuration by itself', details.autosave?.on == null ? '-' : details.autosave.on ? `Yes, ${details.autosave.minutes ?? '?'} minutes after a change` : <Badge tone="warning">No: changes are lost at a restart unless saved on the OLT</Badge>)}
                 {row('Time servers (NTP)', details.ntp.length ? <>{details.ntp.map((n) => n.server).join(', ')} {synced ? <Badge tone="success">In sync</Badge> : <Badge tone="warning">Not in sync: the OLT cannot reach them</Badge>}</> : '-')}
             </Panel>
+            {mayChange && (
+                <Panel title="Time servers">
+                    <p className="hint">The OLT stamps its logs and ONU events with its own clock. A server it can reach keeps that clock right.</p>
+                    {details.ntp.map((n) => (
+                        <div className="kv" key={n.server}>
+                            <span className="mono">{n.server} <span className="hint">{n.reach > 0 ? 'reachable' : 'not reachable'}</span></span>
+                            {can('danger.delete') && <PostButton action={`${path}/settings/ntp`} data={{ action: 'remove', server: n.server }} label="Remove" confirm={{ title: `Remove time server ${n.server}?`, message: 'The OLT stops asking this server for the time.', confirmLabel: 'Remove' }} />}
+                        </div>
+                    ))}
+                    <form className="toolbar" onSubmit={(e) => { e.preventDefault(); router.post(`${path}/settings/ntp`, { action: 'add', server: ntp }, { preserveScroll: true, onSuccess: () => setNtp('') }); }}>
+                        <Field label="Add a time server" name="server" placeholder="IPv4 address" inputMode="decimal" autoComplete="off" value={ntp} onChange={(e) => setNtp(e.target.value)} />
+                        <button className="button" disabled={!ntp.trim()}>Add</button>
+                    </form>
+                </Panel>
+            )}
             <p className="hint">Power, uptime and fans are read every minute over SNMP. Software, time servers and saving are read every 15 minutes over telnet{details.read ? <>, last <Time value={details.read} /></> : ''}.</p>
         </>
     );
 }
 
-function VlansTab({ details }: { details: Details }) {
+function VlansTab({ details, olt, hardware, path }: { details: Details; olt: Olt; hardware: Hardware; path: string }) {
+    const can = useCan();
+    const [vlan, setVlan] = useState('');
+    const [uplink, setUplink] = useState({ port: '', vlan: '' });
+    const mayChange = olt.canChange && can('nas.manage');
+    const mayRemove = mayChange && can('danger.delete');
+    const uplinks = hardware.ports.filter((p) => p.kind === 'uplink' && p.uplink);
     const profiles = (title: string, rows: Profile[]) => (
         <Panel title={title}>
             <DataTable rows={rows} rowKey={(p) => p.id} emptyText="Not read yet." columns={[
@@ -238,7 +263,32 @@ function VlansTab({ details }: { details: Details }) {
                     { header: 'Type', cell: (v) => v.type },
                     { header: 'Uplink ports', cell: (v) => v.standard },
                     { header: 'Service ports (ONUs)', cell: (v) => v.ports },
+                    ...(mayRemove ? [{ header: '', cell: (v: Details['vlans'][number]) => (v.id > 1 && v.ports === 0 ? <PostButton action={`${path}/settings/vlans`} data={{ action: 'remove', vlan: v.id }} label="Delete" confirm={{ title: `Delete VLAN ${v.id} on the OLT?`, message: 'The OLT refuses if the VLAN is still used, and the portal refuses if the OLT has its own address on it.', confirmLabel: 'Delete VLAN', typeToConfirm: String(v.id) }} /> : '') }] : []),
                 ]} />
+                {mayChange && (
+                    <form className="toolbar" onSubmit={(e) => { e.preventDefault(); router.post(`${path}/settings/vlans`, { action: 'add', vlan }, { preserveScroll: true, onSuccess: () => setVlan('') }); }}>
+                        <Field label="Create a VLAN" name="vlan" type="number" min={2} max={4093} value={vlan} onChange={(e) => setVlan(e.target.value)} />
+                        <button className="button" disabled={!vlan}>Create</button>
+                    </form>
+                )}
+            </Panel>
+            <Panel title="VLANs on uplink ports">
+                <DataTable rows={uplinks} rowKey={(p) => p.id} emptyText="Not read yet." columns={[
+                    { header: 'Port', cell: (p) => <span className="mono">{p.name}</span> },
+                    { header: 'Description', cell: (p) => p.alias || '-' },
+                    { header: 'VLANs it carries', className: 'wrap', cell: (p) => (p.uplink?.vlans.length ? p.uplink.vlans.map((v) => (
+                        <span key={v} className="mono" style={{ marginRight: '0.75rem' }}>
+                            {v}{mayRemove && v !== p.uplink?.native && <> <PostButton action={`${path}/settings/uplink-vlans`} data={{ action: 'remove', port: p.id, vlan: v }} label="remove" confirm={{ title: `Take VLAN ${v} off ${p.name}?`, message: `ONUs on VLAN ${v} lose their way out through this port.`, confirmLabel: 'Take off', typeToConfirm: String(v) }} /></>}
+                        </span>
+                    )) : '-') },
+                ]} />
+                {mayChange && uplinks.length > 0 && (
+                    <form className="toolbar" onSubmit={(e) => { e.preventDefault(); router.post(`${path}/settings/uplink-vlans`, { action: 'add', ...uplink }, { preserveScroll: true, onSuccess: () => setUplink({ port: '', vlan: '' }) }); }}>
+                        <Select label="Add a VLAN to" name="port" placeholder="Choose a port" options={uplinks.map((p) => ({ value: String(p.id), label: p.alias ? `${p.name} (${p.alias})` : p.name }))} value={uplink.port} onChange={(e) => setUplink({ ...uplink, port: e.target.value })} />
+                        <Select label="VLAN" name="vlan" placeholder="Choose" options={details.vlans.map((v) => ({ value: String(v.id), label: String(v.id) }))} value={uplink.vlan} onChange={(e) => setUplink({ ...uplink, vlan: e.target.value })} />
+                        <button className="button" disabled={!uplink.port || !uplink.vlan}>Add</button>
+                    </form>
+                )}
             </Panel>
             {profiles('Line profiles', details.lineProfiles)}
             {profiles('Service profiles', details.serviceProfiles)}
@@ -342,7 +392,7 @@ export default function OltShow({ olt, counts, filters, hardware, details, backu
                 { label: 'ONUs', value: String(counts.total), note: olt.model, tone: '' },
                 { label: 'Online', value: String(counts.online), note: olt.host, tone: '' },
                 { label: 'Offline', value: String(counts.offline), note: '', tone: counts.offline ? 'warning' : '' },
-                { label: 'Weak signal', value: String(counts.weak), note: 'Below -27 dBm', tone: counts.weak ? 'warning' : '' },
+                { label: 'Weak signal', value: String(counts.weak), note: `Below ${olt.rxWarning} dBm`, tone: counts.weak ? 'warning' : '' },
             ]} />
             <p className="hint">
                 ONU list read <Time value={olt.lastSync} /> (every 5 minutes).
@@ -380,8 +430,8 @@ export default function OltShow({ olt, counts, filters, hardware, details, backu
                         { header: 'Description', className: 'wrap', cell: (o) => o.description || '-' },
                         { header: 'Client', cell: (o) => (o.clients.length ? o.clients.map((u) => <div key={u}><Link href={`/clients/${encodeURIComponent(u)}/edit?tab=onu`}>{u}</Link></div>) : '-') },
                         { header: 'Status', cell: (o) => (o.active === false ? <Badge tone="warning">Turned off</Badge> : <OnuStatus status={o.status} />) },
-                        { header: 'Signal at ONU', cell: (o) => <OnuPower dbm={o.rx} /> },
-                        { header: 'Signal at OLT', cell: (o) => <OnuPower dbm={o.oltRx} /> },
+                        { header: 'Signal at ONU', cell: (o) => <OnuPower dbm={o.rx} weak={olt.rxWarning} veryWeak={olt.rxCritical} /> },
+                        { header: 'Signal at OLT', cell: (o) => <OnuPower dbm={o.oltRx} weak={olt.rxWarning} veryWeak={olt.rxCritical} /> },
                         { header: 'Distance', cell: (o) => (o.distance === null ? '-' : `${o.distance} m`) },
                         { header: 'Last offline', className: 'wrap', cell: (o) => (o.lastDown || o.downCause ? <>{o.lastDown && <Time value={o.lastDown} />}{o.downCause && <div>{o.downCause}</div>}</> : '-') },
                         { header: 'Model', cell: (o) => o.model || '-' },
@@ -392,7 +442,7 @@ export default function OltShow({ olt, counts, filters, hardware, details, backu
                             </>
                         ),
                     },
-                    { key: 'details', title: 'OLT details', icon: 'server', content: <DetailsTab olt={olt} details={details} hardware={hardware} /> },
+                    { key: 'details', title: 'OLT details', icon: 'server', content: <DetailsTab olt={olt} details={details} hardware={hardware} path={path} /> },
                     { key: 'ports', title: 'Ports', icon: 'signal', count: hardware.ports.length, content: <Ports hardware={hardware} olt={olt} path={path} range={graphs.range} /> },
                     { key: 'cards', title: 'Cards', icon: 'server', count: hardware.boards.length, content: <Cards hardware={hardware} olt={olt} path={path} /> },
                     {
@@ -410,7 +460,7 @@ export default function OltShow({ olt, counts, filters, hardware, details, backu
                             </>
                         ),
                     },
-                    { key: 'vlans', title: 'VLANs and profiles', icon: 'services', count: details.vlans.length, content: <VlansTab details={details} /> },
+                    { key: 'vlans', title: 'VLANs and profiles', icon: 'services', count: details.vlans.length, content: <VlansTab details={details} olt={olt} hardware={hardware} path={path} /> },
                     ...(backups ? [{ key: 'backups', title: 'Config backups', icon: 'book', count: backups.length, content: <BackupsTab olt={olt} details={details} backups={backups} path={path} /> }] : []),
                     ...(can('nas.manage') && olt.telnet ? [{ key: 'cli', title: 'Command line', icon: 'activity', content: <CommandLine path={path} /> }] : []),
                     { key: 'history', title: 'History', icon: 'logs', count: history.length, content: <HistoryTab rows={history} /> },

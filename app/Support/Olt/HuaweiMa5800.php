@@ -23,6 +23,7 @@ final class HuaweiMa5800
     /** The fan tray: each fan's speed in RPM (9.1.2), and the tray's alarms by name (3.1.2) and state (3.1.4, 1 is normal). */
     private const FAN_TRAY = '1.3.6.1.4.1.2011.6.1.1';
     private const UPTIME = '1.3.6.1.2.1.1.3.0';
+    private const SERVICE_PORT = '1.3.6.1.4.1.2011.5.14.5';
     /** The OLT's value for "no reading", for example the optical power of an offline ONU. */
     private const NO_READING = 2147483647;
     /** Enough for a full X7: 7 boards × 16 ports × 128 ONUs, and then some. */
@@ -73,6 +74,40 @@ final class HuaweiMa5800
             }
         }
         return $onus;
+    }
+
+    /**
+     * How many bytes each ONU has sent and received, added up over its service ports. The OLT counts per service port:
+     * the table at 2.1 says which ONU a service port belongs to (columns 2 to 5: frame, slot, port, ONU number), and
+     * the one at 3.1 has its counters (7 from the ONU, 8 to the ONU).
+     *
+     * @return array<string, array{up:float,down:float}> "frame/slot/port/onu" => bytes
+     */
+    public static function readTraffic(Snmp $snmp): array
+    {
+        $column = static function (string $column) use ($snmp): array {
+            $rows = [];
+            $prefix = self::SERVICE_PORT . '.' . $column;
+            foreach ($snmp->walk($prefix, self::WALK_LIMIT) as $oid => $value) {
+                $rows[substr((string) $oid, strlen($prefix) + 1)] = $value;
+            }
+            return $rows;
+        };
+        $up = $column('3.1.7');
+        if (!$up) {
+            return [];
+        }
+        $down = $column('3.1.8');
+        [$frames, $slots, $ports, $onus] = [$column('2.1.2'), $column('2.1.3'), $column('2.1.4'), $column('2.1.5')];
+        $traffic = [];
+        foreach ($onus as $index => $onu) {
+            if (!is_numeric($onu) || $onu < 0 || !is_numeric($up[$index] ?? null) || !is_numeric($down[$index] ?? null) || !isset($frames[$index], $slots[$index], $ports[$index])) {
+                continue;
+            }
+            $key = (int) $frames[$index] . '/' . (int) $slots[$index] . '/' . (int) $ports[$index] . '/' . (int) $onu;
+            $traffic[$key] = ['up' => ($traffic[$key]['up'] ?? 0.0) + (float) $up[$index], 'down' => ($traffic[$key]['down'] ?? 0.0) + (float) $down[$index]];
+        }
+        return $traffic;
     }
 
     /**

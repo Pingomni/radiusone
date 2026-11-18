@@ -77,6 +77,8 @@ final class OltController extends Controller
                 'telnet_user' => '',
                 'telnet_password' => '',
                 'manage_enabled' => (bool) ($olt['manage_enabled'] ?? false),
+                'rx_warning' => (string) (float) ($olt['rx_warning'] ?? -27),
+                'rx_critical' => (string) (float) ($olt['rx_critical'] ?? -30),
             ],
             // Secrets go one way: the page is only told whether one is saved.
             'saved' => [
@@ -102,7 +104,7 @@ final class OltController extends Controller
         }
         // Reads the OLT with the new settings on the next minute.
         Db::exec('UPDATE olts SET sync_requested_at=NOW() WHERE id=? AND enabled=1', [$saved]);
-        $public = static fn (array $o) => array_intersect_key($o, array_flip(['name', 'model', 'host', 'enabled', 'snmp_version', 'snmp_port', 'telnet_enabled', 'telnet_port', 'manage_enabled']));
+        $public = static fn (array $o) => array_intersect_key($o, array_flip(['name', 'model', 'host', 'enabled', 'snmp_version', 'snmp_port', 'telnet_enabled', 'telnet_port', 'manage_enabled', 'rx_warning', 'rx_critical']));
         Audit::log($stored ? 'update' : 'create', 'olt', (string) $saved, $stored ? $public($stored) : null, $public($values));
         return $this->ok('/olts/' . $saved, 'OLT saved. It is read within a minute. ' . ($values['manage_enabled'] ? 'Changes from the portal are allowed for this OLT.' : 'Nothing is changed on the OLT.'));
     }
@@ -158,11 +160,11 @@ final class OltController extends Controller
         [$page, $pages, $offset] = self::page($request, $total);
         $rows = Db::select('SELECT o.*,(SELECT GROUP_CONCAT(c.username ORDER BY c.username SEPARATOR "\n") FROM customer_onus l JOIN customer_profiles c ON c.id=l.customer_id WHERE l.olt_id=o.olt_id AND l.sn=o.sn) AS clients
             FROM olt_onus o' . $where . ' ORDER BY o.frame,o.slot,o.port,o.ont_id LIMIT ' . self::PAGE_SIZE . ' OFFSET ' . $offset, $params);
-        $counts = Db::row('SELECT COUNT(*) AS total,COALESCE(SUM(status="online"),0) AS online,COALESCE(SUM(status="offline"),0) AS offline,COALESCE(SUM(rx_dbm<-27 OR olt_rx_dbm<-27),0) AS weak FROM olt_onus WHERE olt_id=?', [$olt['id']]);
+        $counts = Db::row('SELECT COUNT(*) AS total,COALESCE(SUM(status="online"),0) AS online,COALESCE(SUM(status="offline"),0) AS offline,COALESCE(SUM(rx_dbm<? OR olt_rx_dbm<?),0) AS weak FROM olt_onus WHERE olt_id=?', [$olt['rx_warning'] ?? -27, $olt['rx_warning'] ?? -27, $olt['id']]);
         return Inertia::render('olts/Show', [
             'olt' => [
                 'id' => (int) $olt['id'], 'name' => (string) $olt['name'], 'model' => Olts::MODELS[$olt['model']] ?? (string) $olt['model'], 'host' => (string) $olt['host'], 'enabled' => (bool) $olt['enabled'],
-                'telnet' => (bool) $olt['telnet_enabled'], 'canChange' => OltManager::canChange($olt), 'lastSync' => $olt['last_sync_at'], 'lastMacSync' => $olt['last_mac_sync_at'],
+                'telnet' => (bool) $olt['telnet_enabled'], 'canChange' => OltManager::canChange($olt), 'rxWarning' => (float) ($olt['rx_warning'] ?? -27), 'rxCritical' => (float) ($olt['rx_critical'] ?? -30), 'lastSync' => $olt['last_sync_at'], 'lastMacSync' => $olt['last_mac_sync_at'],
                 'syncRequested' => $olt['sync_requested_at'] !== null,
                 'error' => (string) ($olt['last_error'] ?? ''), 'macError' => (string) ($olt['last_mac_error'] ?? ''),
             ],
@@ -251,6 +253,35 @@ final class OltController extends Controller
             $payload = ['ok' => false, 'error' => $e->getMessage() === 'This command is not allowed on the OLT.' ? 'Only plain "display" commands are allowed: letters, digits, spaces, "/" and "-".' : $e->getMessage()];
         }
         return response()->json($payload)->header('Cache-Control', 'no-store');
+    }
+
+    /** The OLT's own settings the portal can change: its time servers, its VLANs, and the VLANs an uplink port carries. */
+    public function setting(Request $request, string $id, string $what): RedirectResponse
+    {
+        $olt = Olts::find((int) $id);
+        abort_if(!$olt, 404, 'OLT not found.');
+        $add = (string) $request->input('action') !== 'remove';
+        if (!$add) {
+            Auth::requireCan('danger.delete');
+        }
+        set_time_limit(120);
+        try {
+            $message = match ($what) {
+                'ntp' => OltManager::ntp($olt, $add, trim((string) $request->input('server', ''))),
+                'vlans' => OltManager::vlan($olt, $add, (int) $request->input('vlan', 0)),
+                'uplink-vlans' => (static function () use ($olt, $request, $add) {
+                    $port = Db::row('SELECT name FROM olt_ports WHERE olt_id=? AND if_index=? AND kind="uplink"', [$olt['id'], (int) $request->input('port', 0)]);
+                    if (!$port || !preg_match('~(\d+)\s*/\s*(\d+)\s*/\s*(\d+)~', (string) $port['name'], $m)) {
+                        throw new RuntimeException('Choose an uplink port.');
+                    }
+                    return OltManager::uplinkVlan($olt, (int) $m[1], (int) $m[2], (int) $m[3], $add, (int) $request->input('vlan', 0));
+                })(),
+                default => throw new RuntimeException('Unknown setting.'),
+            };
+        } catch (RuntimeException $e) {
+            return $this->fail($e->getMessage());
+        }
+        return back()->with('flash', ['type' => 'success', 'message' => $message]);
     }
 
     /** Autofind on or off, restart every ONU, or turn the port off or on: for one PON port, as the OLT lists it. */

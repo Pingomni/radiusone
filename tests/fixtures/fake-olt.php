@@ -92,6 +92,10 @@ $servicePorts = [];
 foreach ($config['service_ports'] ?? [[2100, 100, '0/1/0/3'], [2101, 100, '0/2/5/12']] as [$index, $vlan, $ont]) {
     $servicePorts[$index] = ['vlan' => $vlan, 'ont' => $ont, 'gem' => 1, 'in' => 8, 'out' => 9];
 }
+$lanOff = [];
+$ntp = ['192.0.2.123'];
+$vlans = [1 => [8, 0], 100 => [1, 16]];
+$portVlans = [];
 $failing = $config['fail'] ?? [];
 $pending = null;
 $profiles = static fn (array $rows) => "  ------------------------------------------------------------------------------\n  Profile-ID  Profile-name                                Binding times\n  ------------------------------------------------------------------------------\n"
@@ -123,7 +127,7 @@ $ontInfo = static function (string $key) use (&$onts): string {
         . "  Service profile ID   : {$o['srv']}\n  Service profile name : HG8346M\n  -----------------------------------------------------------------------------\n";
 };
 // A command the command line knows beyond the first reads. Returns false for one it does not.
-$cli = static function (string $text) use (&$mode, &$state, &$onts, &$autofind, &$servicePorts, &$pending, $failing, $say, $profiles, $portRows, $ontInfo, $config): bool {
+$cli = static function (string $text) use (&$mode, &$state, &$onts, &$autofind, &$servicePorts, &$pending, &$ntp, &$vlans, &$portVlans, &$lanOff, $failing, $say, $profiles, $portRows, $ontInfo, $config): bool {
     foreach ($failing as $prefix) {
         if (str_starts_with($text, $prefix)) {
             $say("\n  Failure: Made to fail by the test\n");
@@ -164,6 +168,39 @@ $cli = static function (string $text) use (&$mode, &$state, &$onts, &$autofind, 
         return true;
     }
     if ($text === 'display ntp-service sessions') {
+        foreach ($ntp as $server) {
+            $say("\n clock source: $server\n clock stratum: 16\n clock status: configured, insane, valid, unsynced\n reference clock ID: 0.0.0.0\n reach: 0\n current poll: 1024");
+        }
+        $say("\n");
+        return true;
+    }
+    if ($mode === 'config' && preg_match('/^(undo )?ntp-service unicast-server (\S+)$/', $text, $m)) {
+        $ntp = $m[1] === '' ? array_values(array_unique([...$ntp, $m[2]])) : array_values(array_diff($ntp, [$m[2]]));
+        return true;
+    }
+    if ($text === 'display interface vlanif') {
+        $say("\nVlanif100 current state : UP (ifindex: 8388618)\nLine protocol current state : UP \nInternet Address is 10.200.0.2/24\n");
+        return true;
+    }
+    if ($mode === 'config' && preg_match('/^(?:vlan (\d+) smart|undo vlan (\d+))$/', $text, $m)) {
+        if ($m[1] !== '') {
+            $vlans[(int) $m[1]] = [0, 0];
+        } else {
+            unset($vlans[(int) $m[2]]);
+        }
+        ksort($vlans);
+        return true;
+    }
+    if ($mode === 'config' && preg_match('~^(undo )?port vlan (\d+) (\d+/\d+) (\d+)$~', $text, $m)) {
+        $key = "$m[3]/$m[4]";
+        $have = $portVlans[$key] ?? [1, 100, 200];
+        $portVlans[$key] = $m[1] === '' ? array_values(array_unique([...$have, (int) $m[2]])) : array_values(array_diff($have, [(int) $m[2]]));
+        foreach ($vlans as $id => $counts) {
+            $vlans[$id][0] = count(array_filter($portVlans, static fn (array $list) => in_array($id, $list, true)));
+        }
+        return true;
+    }
+    if ($text === 'display ntp-service sessions-unused') {
         $say("\n clock source: 192.0.2.123\n clock stratum: 16\n clock status: configured, insane, valid, unsynced\n reference clock ID: 0.0.0.0\n reach: 0\n current poll: 1024\n");
         return true;
     }
@@ -175,8 +212,9 @@ $cli = static function (string $text) use (&$mode, &$state, &$onts, &$autofind, 
         $say("\n  ---------------------------------------\n  Board Name          : H905MPLB   \n  Board Status        : Active normal\n  ---------------------------------------\n  Port  Port Optic   Native  MDI    Speed      Duplex    Flow-  Active   Link    \n        Type Status  VLAN           (Mbps)               Ctrl   State            \n  ------------------------------------------------------------------------------\n     0  GE   normal       1  normal 1000       full      off    active   online \n     1  10GE absence      1  -      10000      full      off    active   offline\n  ------------------------------------------------------------------------------\n");
         return true;
     }
-    if (preg_match('~^display port vlan \d+/\d+/\d+$~', $text)) {
-        $say("\n  ---------------------------------------\n     1    100    200\n  ---------------------------------------\n  Total: 3\n  Native VLAN: 1\n");
+    if (preg_match('~^display port vlan (\d+/\d+/\d+)$~', $text, $m)) {
+        $list = $portVlans[$m[1]] ?? [1, 100, 200];
+        $say("\n  ---------------------------------------\n   " . implode('    ', $list) . "\n  ---------------------------------------\n  Total: " . count($list) . "\n  Native VLAN: 1\n");
         return true;
     }
     if ($text === 'display current-configuration') {
@@ -249,7 +287,11 @@ $cli = static function (string $text) use (&$mode, &$state, &$onts, &$autofind, 
         return true;
     }
     if ($text === 'display vlan all') {
-        $say("\n  -----------------------------------------------------------------------\n  VLAN   Type      Attribute  STND-Port NUM   SERV-Port NUM  VLAN-Con NUM\n  -----------------------------------------------------------------------\n     1   smart     common                 8               0             -\n   100   smart     common                 1              16             -\n  -----------------------------------------------------------------------\n  Total: 2\n");
+        $say("\n  -----------------------------------------------------------------------\n  VLAN   Type      Attribute  STND-Port NUM   SERV-Port NUM  VLAN-Con NUM\n  -----------------------------------------------------------------------\n");
+        foreach ($vlans as $id => [$standard, $service]) {
+            $say(sprintf("  %4d   smart     common     %12d    %12d             -\n", $id, $standard, $service));
+        }
+        $say("  -----------------------------------------------------------------------\n  Total: " . count($vlans) . "\n");
         return true;
     }
     if ($text === 'display traffic table ip from-index 0') {
@@ -266,6 +308,48 @@ $cli = static function (string $text) use (&$mode, &$state, &$onts, &$autofind, 
     }
     if (preg_match('/^display ont-srvprofile gpon profile-id (\d+)$/', $text, $m)) {
         $say("\n  -----------------------------------------------------------------------------\n  Profile-ID  : $m[1]\n  Port-type     Port-number     Max-adaptive-number\n  -----------------------------------------------------------------------------\n  POTS          0               -\n  ETH           " . ($m[1] === '1' ? 1 : 4) . "               -\n  CATV          adaptive        1\n  Binding times : 1\n");
+        return true;
+    }
+    if (preg_match('~^display current-configuration ont (\d+/\d+)/(\d+) (\d+)$~', $text, $m)) {
+        $k = "$m[1]/$m[2]/$m[3]";
+        if (!isset($onts[$k])) {
+            $say("\n  Failure: The ONT does not exist\n");
+            return true;
+        }
+        $say("\n[MA5800V100R018: 8300]\n#\n[gpon]\n  <gpon-$m[1]>\n interface gpon $m[1]\n ont add $m[2] $m[3] sn-auth \"{$onts[$k]['sn']}\" omci ont-lineprofile-id 6 \nont-srvprofile-id 2 desc \"{$onts[$k]['desc']}\" \n ont ipconfig $m[2] $m[3] ip-index 1 dhcp vlan 100 priority 0\n#\nreturn\n");
+        return true;
+    }
+    if ($mode === 'config' && preg_match('/^service-port (\d+) inbound traffic-table index (\d+) outbound traffic-table index (\d+)$/', $text, $m)) {
+        if (!isset($servicePorts[(int) $m[1]])) {
+            $say("\n  Failure: Service virtual port does not exist\n");
+            return true;
+        }
+        $servicePorts[(int) $m[1]]['in'] = (int) $m[2];
+        $servicePorts[(int) $m[1]]['out'] = (int) $m[3];
+        return true;
+    }
+    if ($interface !== null && preg_match('/^display ont port attribute (\d+) (\d+) eth$/', $text, $m)) {
+        $say("\n  ----------------------------------------------------------------------------\n  ONT ONT     ONT       Auto-neg Speed  Duplex Port   Flow    Native Priority \n      port    port-type          (Mbps)        switch control VLAN            \n  ----------------------------------------------------------------------------\n");
+        foreach ([1, 4] as $eth) {
+            $say(sprintf("  %-3d %-7d ETH       enable   auto   auto   %-6s off     1      0       \n", $m[2], $eth, ($lanOff["$interface/$m[1]/$m[2]/$eth"] ?? false) ? 'off' : 'on'));
+        }
+        $say("  ----------------------------------------------------------------------------\n");
+        return true;
+    }
+    if ($interface !== null && preg_match('/^ont port attribute (\d+) (\d+) eth (\d+) operational-state (on|off)$/', $text, $m)) {
+        $lanOff["$interface/$m[1]/$m[2]/$m[3]"] = $m[4] === 'off';
+        return true;
+    }
+    if ($interface !== null && preg_match('/^display ont traffic (\d+) (\d+)$/', $text)) {
+        $say("\n ----------------------------------------------------------------\n  Traffic Information\n ----------------------------------------------------------------\n Up traffic (kbps)          :  83\n Down traffic (kbps)        :  6300\n ----------------------------------------------------------------\n");
+        return true;
+    }
+    if ($interface !== null && preg_match('/^ont factory-setting-restore (\d+) (\d+)$/', $text)) {
+        $state = 'question';
+        $pending = static function () use ($say): void {
+            $say("\n  The command has been sent to the ONT\n");
+        };
+        $say("\n Are you sure to restore the factory settings of the ONT? (y/n)[n]:");
         return true;
     }
     if (preg_match('/^display ont info (\d+) (\d+) (\d+) (\d+)$/', $text, $m)) {

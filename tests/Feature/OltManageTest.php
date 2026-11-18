@@ -560,6 +560,150 @@ final class OltManageTest extends TestCase
         $this->get("/olts/{$olt['id']}/graph?chart=port&port=999")->assertNotFound();
     }
 
+    public function test_time_servers_and_vlans_are_changed_with_care(): void
+    {
+        $this->startAgent();
+        $olt = $this->olt();
+        $this->ports($olt);
+        OltInventory::read($olt);
+        file_put_contents($this->log, '');
+        $this->actingAsOperator();
+        $base = "/olts/{$olt['id']}/settings";
+        $this->post("$base/ntp", ['action' => 'add', 'server' => '198.51.100.7'])->assertSessionHas('flash.type', 'success');
+        $this->post("$base/ntp", ['action' => 'remove', 'server' => '192.0.2.123'])->assertSessionHas('flash.type', 'success');
+        $this->post("$base/ntp", ['action' => 'add', 'server' => 'pool.ntp.org; undo vlan 100'])->assertSessionHas('flash.type', 'danger');
+        $this->assertSame(['198.51.100.7'], array_column(OltInventory::saved(Olts::find((int) $olt['id']))['ntp'], 'server'));
+
+        $this->post("$base/vlans", ['action' => 'add', 'vlan' => '300'])->assertSessionHas('flash.type', 'success');
+        $this->post("$base/uplink-vlans", ['action' => 'add', 'port' => 7, 'vlan' => 300])->assertSessionHas('flash.type', 'success');
+        $this->assertSame([1, 100, 200, 300], OltInventory::saved(Olts::find((int) $olt['id']))['uplinks']['0/9/0']['vlans']);
+        // Still on an uplink: not deleted.
+        $this->post("$base/vlans", ['action' => 'remove', 'vlan' => 300])->assertSessionHas('flash.message', fn (string $m) => str_contains($m, 'uplink'));
+        $this->post("$base/uplink-vlans", ['action' => 'remove', 'port' => 7, 'vlan' => 300])->assertSessionHas('flash.type', 'success');
+        $this->post("$base/vlans", ['action' => 'remove', 'vlan' => 300])->assertSessionHas('flash.type', 'success');
+        $this->assertSame(['ntp-service unicast-server 198.51.100.7', 'undo ntp-service unicast-server 192.0.2.123', 'vlan 300 smart', 'port vlan 300 0/9 0', 'undo port vlan 300 0/9 0', 'undo vlan 300'], $this->changes());
+
+        // What must never be sent: a VLAN ONUs use, the VLAN the OLT has its own address on, VLAN 1, a PON port, an unknown VLAN.
+        $this->post("$base/vlans", ['action' => 'remove', 'vlan' => 100])->assertSessionHas('flash.message', fn (string $m) => str_contains($m, 'used by 16 ONUs'));
+        $this->post("$base/uplink-vlans", ['action' => 'remove', 'port' => 7, 'vlan' => 100])->assertSessionHas('flash.message', fn (string $m) => str_contains($m, 'its own address'));
+        $this->post("$base/vlans", ['action' => 'remove', 'vlan' => 1])->assertSessionHas('flash.type', 'danger');
+        $this->post("$base/vlans", ['action' => 'add', 'vlan' => 100])->assertSessionHas('flash.type', 'danger');
+        $this->post("$base/uplink-vlans", ['action' => 'add', 'port' => self::PORT_A, 'vlan' => 100])->assertSessionHas('flash.type', 'danger');
+        $this->post("$base/uplink-vlans", ['action' => 'add', 'port' => 7, 'vlan' => 999])->assertSessionHas('flash.type', 'danger');
+        $this->assertCount(6, $this->changes());
+
+        // NOC may add, but removing is for people who may delete.
+        $this->actingAsOperator('noc');
+        $this->post("$base/ntp", ['action' => 'remove', 'server' => '198.51.100.7'])->assertForbidden();
+        $this->actingAsOperator('view');
+        $this->post("$base/vlans", ['action' => 'add', 'vlan' => 301])->assertForbidden();
+        $this->assertCount(6, $this->changes());
+    }
+
+    public function test_each_olt_has_its_own_signal_levels(): void
+    {
+        $this->startAgent();
+        $olt = $this->olt(false);
+        $onu = $this->onu($olt);
+        Db::exec('UPDATE olt_onus SET rx_dbm=-28.5 WHERE id=?', [$onu]);
+        $this->actingAsOperator();
+        $this->get('/olts/' . $olt['id'])->assertInertia(fn ($p) => $p->where('counts.weak', 1)->where('olt.rxWarning', -27)->where('olt.rxCritical', -30));
+        $input = ['name' => 'olt-1', 'model' => 'huawei_ma5800_x7', 'host' => '127.0.0.1', 'enabled' => true, 'snmp_version' => '2c', 'snmp_port' => (string) $this->snmpPort, 'telnet_enabled' => true, 'telnet_port' => (string) $this->telnetPort];
+        $this->post("/olts/{$olt['id']}/save", $input + ['rx_warning' => '-29', 'rx_critical' => '-32'])->assertSessionHas('flash.type', 'success');
+        $this->get('/olts/' . $olt['id'])->assertInertia(fn ($p) => $p->where('counts.weak', 0)->where('olt.rxWarning', -29)->where('olt.rxCritical', -32));
+        $this->post("/olts/{$olt['id']}/save", $input + ['rx_warning' => '-32', 'rx_critical' => '-29'])->assertSessionHas('flash.type', 'danger');
+        $this->post("/olts/{$olt['id']}/save", $input + ['rx_warning' => '5', 'rx_critical' => '-30'])->assertSessionHas('flash.type', 'danger');
+        $this->assertSame([], $this->commands());
+    }
+
+    public function test_the_onu_page_reads_its_config_service_ports_and_lan_ports(): void
+    {
+        $this->startAgent();
+        $olt = $this->olt(false);
+        $onu = $this->onu($olt);
+        $customer = $this->insertRow('customer_profiles', ['username' => 'gtest', 'first_name' => 'Isa', 'last_name' => 'A', 'address' => 'Flux 503', 'cell_phone' => '0038344000000', 'account_status' => 'active', 'enabled' => 1]);
+        $this->insertRow('customer_onus', ['customer_id' => $customer, 'olt_id' => $olt['id'], 'sn' => 'HWTC1234ABCD', 'source' => 'manual', 'linked_at' => date('Y-m-d H:i:s')]);
+        $this->actingAsOperator('view');
+        $this->get("/olts/{$olt['id']}/onus/$onu")->assertOk()->assertInertia(fn ($p) => $p
+            ->where('clients.0.address', 'Flux 503')->where('clients.0.phone', '0038344000000')
+            ->where('disconnections', ['day' => 0, 'week' => 0])->where('olt.rxWarning', -27)->has('ranges'));
+        $this->get("/olts/{$olt['id']}/onus/$onu/live")->assertOk()->assertJsonPath('ok', true)
+            ->assertJsonPath('data.servicePorts.0.index', 2100)->assertJsonPath('data.servicePorts.0.down', 9)->assertJsonPath('data.servicePorts.0.up', 8)
+            ->assertJsonPath('data.traffic.down', 6300)->assertJsonPath('data.lan.0.on', true)->assertJsonPath('data.lan.1.up', true)->assertJsonPath('data.lan.1.native', 1);
+        $this->get("/olts/{$olt['id']}/onus/$onu/config")->assertOk()->assertJsonPath('ok', true)
+            ->assertJsonPath('output', fn (string $o) => str_starts_with($o, '[MA5800') && str_contains($o, 'ont add 0 3 sn-auth "485754431234ABCD"') && !str_contains($o, 'MA5800-X7#'));
+        $this->assertSame([], $this->changes());
+        // The list says another serial number is there: its config is not shown as this ONU's.
+        $stale = $this->onu($olt, 'HWTC99999999', 12);
+        $this->get("/olts/{$olt['id']}/onus/$stale/config")->assertJsonPath('ok', false);
+    }
+
+    public function test_speed_lan_ports_and_factory_settings_on_an_onu(): void
+    {
+        $this->startAgent();
+        $olt = $this->olt();
+        $onu = $this->onu($olt);
+        $this->actingAsOperator();
+        $base = "/olts/{$olt['id']}/onus/$onu";
+        $this->post("$base/service-ports/2100", ['up' => 6, 'down' => 6])->assertSessionHas('flash.type', 'success');
+        $this->get("$base/live")->assertJsonPath('data.servicePorts.0.down', 6)->assertJsonPath('data.servicePorts.0.up', 6);
+        // Another ONU's service port, and a traffic table the OLT does not have.
+        $this->post("$base/service-ports/2101", ['up' => 8, 'down' => 9])->assertSessionHas('flash.message', fn (string $m) => str_contains($m, 'does not belong'));
+        $this->post("$base/service-ports/2100", ['up' => 77, 'down' => 9])->assertSessionHas('flash.message', fn (string $m) => str_contains($m, 'no such traffic table'));
+        $this->post("$base/lan/4", ['state' => 'off'])->assertSessionHas('flash.type', 'success');
+        $this->get("$base/live")->assertJsonPath('data.lan.1.on', false);
+        $this->post("$base/lan/4", ['state' => 'on'])->assertSessionHas('flash.type', 'success');
+        $this->post("$base/lan/9", ['state' => 'off'])->assertSessionHas('flash.type', 'danger');
+        $this->post("$base/factory-reset")->assertSessionHas('flash.type', 'success');
+        $this->assertSame([
+            'service-port 2100 inbound traffic-table index 6 outbound traffic-table index 6',
+            'ont port attribute 0 3 eth 4 operational-state off', 'ont port attribute 0 3 eth 4 operational-state on',
+            'ont factory-setting-restore 0 3',
+        ], $this->changes());
+        $this->assertSame(4, (int) Db::value('SELECT COUNT(*) FROM audit_logs WHERE action IN ("onu_speed","onu_lan_off","onu_lan_on","onu_factory_reset")'));
+        $this->actingAsOperator('noc');
+        $this->post("$base/factory-reset")->assertForbidden();
+        $this->actingAsOperator('view');
+        $this->post("$base/service-ports/2100", ['up' => 8, 'down' => 9])->assertForbidden();
+        $this->post("$base/lan/4", ['state' => 'off'])->assertForbidden();
+        $this->assertCount(4, $this->changes());
+    }
+
+    public function test_each_onu_keeps_a_history_of_signal_state_and_traffic(): void
+    {
+        $b = '1.3.6.1.4.1.2011.5.14.5';
+        // Two service ports of the ONU at 0/1/0:3 (rows 5 and 6), and one of another ONU.
+        $oids = [];
+        foreach ([[5, 3, 1000, 5000], [6, 3, 500, 2500], [9, 4, 7, 7]] as [$row, $ont, $up, $down]) {
+            $oids += ["$b.2.1.2.$row" => [2, 0], "$b.2.1.3.$row" => [2, 1], "$b.2.1.4.$row" => [2, 0], "$b.2.1.5.$row" => [2, $ont], "$b.3.1.7.$row" => [70, $up], "$b.3.1.8.$row" => [70, $down]];
+        }
+        $this->startAgent([], $oids);
+        $olt = $this->olt(false);
+        $this->assertSame(['up' => 1500.0, 'down' => 7500.0], HuaweiMa5800::readTraffic(Olts::snmp($olt, 60.0))['0/1/0/3']);
+
+        $onu = ['frame' => 0, 'slot' => 1, 'port' => 0, 'ont_id' => 3, 'sn' => 'HWTC1234ABCD', 'status' => 'online', 'rx_dbm' => -21.5, 'olt_rx_dbm' => -24.0];
+        $id = $this->onu($olt);
+        OltMonitor::recordOnus((int) $olt['id'], [$onu], ['0/1/0/3' => ['up' => 1500.0, 'down' => 7500.0]]);
+        // The first read has nothing to compare with.
+        $this->assertNull(Db::value('SELECT down_bps FROM olt_onu_samples'));
+        Db::exec('UPDATE olt_onus SET counters_at=counters_at-300');
+        Db::exec('UPDATE olt_onu_samples SET sampled_at=sampled_at-300');
+        OltMonitor::recordOnus((int) $olt['id'], [['status' => 'offline', 'rx_dbm' => null, 'olt_rx_dbm' => null] + $onu], ['0/1/0/3' => ['up' => 1500.0 + 37500, 'down' => 7500.0 + 3750000]]);
+        $latest = Db::row('SELECT * FROM olt_onu_samples ORDER BY sampled_at DESC LIMIT 1');
+        $this->assertEqualsWithDelta(100000, (float) $latest['down_bps'], 3000);
+        $this->assertEqualsWithDelta(1000, (float) $latest['up_bps'], 30);
+        $this->assertSame(['day' => 1, 'week' => 1], OltMonitor::disconnections((int) $olt['id'], 'HWTC1234ABCD'));
+
+        $this->actingAsOperator('view');
+        $this->get("/olts/{$olt['id']}/onus/$id/graph?chart=traffic&range=6h")->assertOk()->assertJsonStructure(['chart' => ['bucket']])->assertJsonPath('chart.unit', 'bps');
+        $this->get("/olts/{$olt['id']}/onus/$id/graph?chart=signal&range=6h")->assertOk()->assertJsonPath('chart.unit', 'dbm');
+        $this->get("/olts/{$olt['id']}/onus/$id")->assertInertia(fn ($p) => $p->where('disconnections.day', 1));
+        // The poller fills the history by itself.
+        Db::exec('DELETE FROM olt_onu_samples');
+        OltSync::run($olt);
+        $this->assertSame(2, (int) Db::value('SELECT COUNT(*) FROM olt_onu_samples'));
+    }
+
     public function test_fan_speed_power_and_uptime_come_over_snmp(): void
     {
         $tray = '1.3.6.1.4.1.2011.6.1.1';

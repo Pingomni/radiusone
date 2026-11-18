@@ -72,9 +72,14 @@ final class Olts
             'telnet_port' => self::port($input['telnet_port'] ?? 23, 'Telnet'),
             'telnet_user' => $secret('telnet_user', 'telnet_user', 'Telnet user'),
             'telnet_password' => $secret('telnet_password', 'telnet_password', 'Telnet password'),
+            'rx_warning' => self::level($input['rx_warning'] ?? ($stored['rx_warning'] ?? -27), 'weak'),
+            'rx_critical' => self::level($input['rx_critical'] ?? ($stored['rx_critical'] ?? -30), 'very weak'),
             // Changes go over telnet, so without telnet there is nothing to allow.
             'manage_enabled' => empty($input['manage_enabled']) || empty($input['telnet_enabled']) ? 0 : 1,
         ];
+        if ($values['rx_critical'] > $values['rx_warning']) {
+            throw new RuntimeException('The "very weak" signal level must be lower than the "weak" one, for example -30 and -27.');
+        }
         if ($version === '3') {
             Snmp::validateUsm(self::usm($values));
         } elseif (Secrets::reveal($values['snmp_community']) === '') {
@@ -84,6 +89,14 @@ final class Olts
             throw new RuntimeException('Telnet needs a user and a password. Turn it off to use SNMP only.');
         }
         return $values;
+    }
+
+    private static function level(mixed $value, string $label): float
+    {
+        if (!is_numeric($value) || (float) $value > -8 || (float) $value < -40) {
+            throw new RuntimeException('The "' . $label . '" signal level must be between -40 and -8 dBm.');
+        }
+        return round((float) $value, 1);
     }
 
     private static function port(mixed $value, string $label): int

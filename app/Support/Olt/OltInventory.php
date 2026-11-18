@@ -123,17 +123,9 @@ final class OltInventory
      */
     public static function backup(array $olt): bool
     {
-        $raw = str_replace("\r", '', Olts::cli($olt, 300.0)->read(['display current-configuration'])[0]);
-        // Without the command's echo and the prompt after it. A real configuration has sections and ends with "return".
-        $lines = explode("\n", trim($raw));
-        // Up to the first "[...]" line there is only the command's echo and the OLT's "press Enter" question.
-        while ($lines && !str_starts_with($lines[0], '[')) {
-            array_shift($lines);
-        }
-        if ($lines && preg_match('/[>#]\s*$/', (string) end($lines))) {
-            array_pop($lines);
-        }
-        $config = trim(implode("\n", $lines)) . "\n";
+        $raw = Olts::cli($olt, 300.0)->read(['display current-configuration'])[0];
+        // A real configuration has sections and ends with "return".
+        $config = HuaweiCli::configText($raw);
         if (!preg_match('/^\[[^\]\n]+\]\s*$/m', $config) || !preg_match('/^return\s*$/m', $config)) {
             throw new RuntimeException('The OLT did not print its configuration' . (($why = HuaweiCli::failure($raw)) ? ' (' . $why . ')' : '') . '. Check that the telnet user may run "display current-configuration".');
         }

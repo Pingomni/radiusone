@@ -529,16 +529,19 @@ final class MonitoringData
     public static function oltHardwareChart(array $olt, string $kind, string $range, ?array $port = null): array
     {
         $config = match ($kind) {
+            'onu-traffic' => ['title' => 'Traffic', 'unit' => 'bps', 'columns' => ['s0' => 'down_bps', 's1' => 'up_bps'], 'names' => ['s0' => 'Download', 's1' => 'Upload'], 'note' => ''],
+            'onu-signal' => ['title' => 'Signal', 'unit' => 'dbm', 'zero' => false, 'columns' => ['s0' => 'olt_rx_dbm', 's1' => 'rx_dbm'], 'names' => ['s0' => 'At the OLT', 's1' => 'At the ONU'], 'note' => 'dBm'],
             'port' => ['title' => 'Traffic on ' . ($port['name'] ?? 'the port'), 'unit' => 'bps', 'columns' => ['s0' => 'in_bps', 's1' => 'out_bps'], 'names' => ['s0' => 'In', 's1' => 'Out'], 'note' => ''],
             'cpu' => ['title' => 'Control card CPU and memory', 'unit' => 'pct', 'fixed_max' => 100.0, 'columns' => ['cpu' => 'cpu_pct', 'mem' => 'mem_pct'], 'names' => ['cpu' => 'CPU', 'mem' => 'Memory'], 'note' => '% used'],
             'temperature' => ['title' => 'Hottest card', 'unit' => 'celsius', 'zero' => false, 'columns' => ['s0' => 'temperature_c'], 'names' => ['s0' => 'Temperature'], 'note' => '°C'],
             default => ['title' => 'Uplink traffic', 'unit' => 'bps', 'columns' => ['s0' => 'in_bps', 's1' => 'out_bps'], 'names' => ['s0' => 'In', 's1' => 'Out'], 'note' => 'All uplinks together'],
         };
-        $series = OltMonitor::hardwareSeries((int) $olt['id'], $range, $config['columns'], $kind === 'port' ? (int) ($port['if_index'] ?? 0) : null);
+        $series = OltMonitor::hardwareSeries((int) $olt['id'], $range, $config['columns'], $kind === 'port' ? (int) ($port['if_index'] ?? 0) : null, str_starts_with($kind, 'onu-') ? (string) ($port['sn'] ?? '') : null);
         $latest = self::latestValues($series['points'], array_keys($config['columns']));
         $show = match ($config['unit']) {
             'pct' => static fn (?float $v) => self::pct($v),
             'celsius' => static fn (?float $v) => $v === null ? '-' : self::trim($v) . ' °C',
+            'dbm' => static fn (?float $v) => $v === null ? '-' : number_format($v, 2) . ' dBm',
             default => static fn (?float $v) => $v === null ? '-' : self::bpsShort($v),
         };
         $names = [];
@@ -550,8 +553,8 @@ final class MonitoringData
         return self::chart($series, $range, $config + [
             'note' => '',
             'series' => $names,
-            'empty' => 'No history yet. A point is added each minute, once the OLT reports these values.',
-            'summary' => $config['title'] . ' on ' . $olt['name'] . ', ' . strtolower(OltMonitor::RANGES[$range][2]) . ': latest ' . implode(', ', $summary) . '.',
+            'empty' => str_starts_with($kind, 'onu-') ? 'No history yet. A point is added every 5 minutes.' : 'No history yet. A point is added each minute, once the OLT reports these values.',
+            'summary' => $config['title'] . ' on ' . (str_starts_with($kind, 'onu-') ? 'ONU ' . ($port['sn'] ?? '') : $olt['name']) . ', ' . strtolower(OltMonitor::RANGES[$range][2]) . ': latest ' . implode(', ', $summary) . '.',
         ]);
     }
 
@@ -643,7 +646,7 @@ final class MonitoringData
         $label = match ($config['unit']) {
             'pct' => static fn (float $v) => self::trim($v) . '%',
             'celsius' => static fn (float $v) => self::trim($v) . '°',
-            'count' => static fn (float $v) => self::trim($v),
+            'count', 'dbm' => static fn (float $v) => self::trim($v),
             default => static fn (float $v) => self::bpsShort($v),
         };
         $span = max(1, $series['end'] - $series['start']);

@@ -12,12 +12,12 @@ export function OnuStatus({ status }: { status: string }) {
     return <Badge>Unknown</Badge>;
 }
 
-/** GPON's usual working range is about -8 to -27 dBm: outside it the number is flagged, with words as well as colour. */
-export function OnuPower({ dbm }: { dbm: number | null }) {
+/** GPON's usual working range is about -8 to -27 dBm: outside it the number is flagged, with words as well as colour. Each OLT can set its own levels. */
+export function OnuPower({ dbm, weak = -27, veryWeak = -30 }: { dbm: number | null; weak?: number; veryWeak?: number }) {
     if (dbm === null) return <>-</>;
     const text = `${dbm.toFixed(2)} dBm`;
-    if (dbm < -30) return <Badge tone="danger">{text} very weak</Badge>;
-    if (dbm < -27) return <Badge tone="warning">{text} weak</Badge>;
+    if (dbm < veryWeak) return <Badge tone="danger">{text} very weak</Badge>;
+    if (dbm < weak) return <Badge tone="warning">{text} weak</Badge>;
     if (dbm > -8) return <Badge tone="warning">{text} too strong</Badge>;
     return <span className="mono">{text}</span>;
 }

@@ -4,6 +4,15 @@ RadiusOne follows [semantic versioning](https://semver.org): **major** for chang
 upgrading, **minor** for new features, **patch** for fixes. The version is in the `VERSION` file and shows in
 the portal's sidebar and under Settings → System information.
 
+## 2.13.0 (2026-11-18)
+
+A full page for each ONU, and more OLT settings. Update with **Settings → Overview → Software update** or `sudo radiusone-update`.
+
+- **ONU page:** traffic and signal history, disconnection count, live status, running config, speed profiles per service
+  port, LAN ports on and off, and restore defaults.
+- **OLT:** signal levels per OLT, NTP servers, VLANs, and the VLANs on each uplink port.
+- **On the server:** one new table and five new columns. No OLT is changed by the update.
+
 ## 2.12.0 (2026-11-18)
 
 PON port and card actions, port graphs and a read-only command line. Update with **Settings → Overview → Software update** or `sudo radiusone-update`.

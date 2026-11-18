@@ -57,7 +57,15 @@ final class OltSync
         $snmpDue = $requested || self::listDue($olt['last_sync_at'], self::SNMP_EVERY_SECONDS);
         if ($snmpDue) {
             try {
-                self::saveOnus($olt, HuaweiMa5800::readOnus(Olts::snmp($olt)));
+                $onus = HuaweiMa5800::readOnus(Olts::snmp($olt));
+                // Traffic per ONU is for its graph only: without it the list is still good.
+                try {
+                    $traffic = HuaweiMa5800::readTraffic(Olts::snmp($olt, 120.0));
+                } catch (Throwable) {
+                    $traffic = [];
+                }
+                OltMonitor::recordOnus((int) $olt['id'], $onus, $traffic);
+                self::saveOnus($olt, $onus);
                 OltMonitor::record((int) $olt['id']);
                 Db::exec('UPDATE olts SET last_sync_at=NOW(),last_sync_ok=1,last_error=NULL WHERE id=?', [$olt['id']]);
             } catch (Throwable $e) {

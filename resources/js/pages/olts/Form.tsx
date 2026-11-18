@@ -8,7 +8,7 @@ import { bind, bindCheck } from '@/lib/form';
 type Values = {
     name: string; model: string; host: string; enabled: boolean; snmp_version: string; snmp_port: string; snmp_community: string;
     v3_user: string; v3_context: string; v3_auth_protocol: string; v3_auth_password: string; v3_priv_protocol: string; v3_priv_password: string;
-    telnet_enabled: boolean; telnet_port: string; telnet_user: string; telnet_password: string; manage_enabled: boolean;
+    telnet_enabled: boolean; telnet_port: string; telnet_user: string; telnet_password: string; manage_enabled: boolean; rx_warning: string; rx_critical: string;
 };
 type Saved = Record<'snmp_community' | 'v3_auth_password' | 'v3_priv_password' | 'telnet_user' | 'telnet_password', boolean>;
 
@@ -66,6 +66,13 @@ export default function OltForm({ id, models, authOptions, privOptions, values, 
                                 <Field label="Password" type="password" autoComplete="new-password" hint={hint(saved.telnet_password)} {...bind(form, 'telnet_password')} />
                             </>
                         )}
+                    </div>
+                </Panel>
+                <Panel title="Signal levels">
+                    <p className="hint">From which received signal an ONU is shown as weak, and as very weak. This is the portal&apos;s own setting: nothing is changed on the OLT.</p>
+                    <div className="form-grid">
+                        <Field label="Weak below (dBm)" type="number" step="0.5" min={-40} max={-8} {...bind(form, 'rx_warning')} />
+                        <Field label="Very weak below (dBm)" type="number" step="0.5" min={-40} max={-8} {...bind(form, 'rx_critical')} />
                     </div>
                 </Panel>
                 <Panel title="Changes">

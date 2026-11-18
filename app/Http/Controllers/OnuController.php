@@ -5,11 +5,14 @@ declare(strict_types=1);
 namespace App\Http\Controllers;
 
 use App\Http\Support\Clients;
+use App\Http\Support\MonitoringData;
 use App\Support\Auth;
 use App\Support\Db;
 use App\Support\Olt\HuaweiCli;
+use App\Support\Olt\OltInventory;
 use App\Support\Olt\OltManager;
 use App\Support\Olt\OltMapper;
+use App\Support\Olt\OltMonitor;
 use App\Support\Olt\Olts;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -34,11 +37,14 @@ final class OnuController extends Controller
     public function show(string $id, string $onu): Response
     {
         [$olt, $row] = self::find($id, $onu);
-        $clients = Db::select('SELECT c.username,c.first_name,c.last_name,c.company_name FROM customer_onus l JOIN customer_profiles c ON c.id=l.customer_id WHERE l.olt_id=? AND l.sn=? AND l.source<>"none" ORDER BY c.username', [$olt['id'], $row['sn']]);
+        $clients = Db::select('SELECT c.username,c.first_name,c.last_name,c.company_name,c.address,c.city,c.phone,c.cell_phone FROM customer_onus l JOIN customer_profiles c ON c.id=l.customer_id WHERE l.olt_id=? AND l.sn=? AND l.source<>"none" ORDER BY c.username', [$olt['id'], $row['sn']]);
         return Inertia::render('olts/Onu', [
-            'olt' => ['id' => (int) $olt['id'], 'name' => (string) $olt['name'], 'canRead' => OltManager::canRead($olt), 'canChange' => OltManager::canChange($olt)],
+            'olt' => ['id' => (int) $olt['id'], 'name' => (string) $olt['name'], 'canRead' => OltManager::canRead($olt), 'canChange' => OltManager::canChange($olt), 'rxWarning' => (float) ($olt['rx_warning'] ?? -27), 'rxCritical' => (float) ($olt['rx_critical'] ?? -30)],
+            'disconnections' => OltMonitor::disconnections((int) $olt['id'], (string) $row['sn']),
+            'trafficTables' => OltInventory::saved($olt)['trafficTables'] ?? [],
+            'ranges' => array_map(static fn (array $r) => $r[2], OltMonitor::RANGES),
             'onu' => OltController::onuRow($row + ['clients' => implode("\n", array_column($clients, 'username'))]),
-            'clients' => array_map(static fn (array $c) => ['username' => (string) $c['username'], 'name' => trim($c['first_name'] . ' ' . $c['last_name']) ?: (string) $c['company_name']], $clients),
+            'clients' => array_map(static fn (array $c) => ['username' => (string) $c['username'], 'name' => trim($c['first_name'] . ' ' . $c['last_name']) ?: (string) $c['company_name'], 'address' => trim($c['address'] . ' ' . $c['city']), 'phone' => trim((string) ($c['cell_phone'] ?: $c['phone']))], $clients),
         ]);
     }
 
@@ -55,10 +61,52 @@ final class OnuController extends Controller
         return response()->json($payload)->header('Cache-Control', 'no-store');
     }
 
+    /** The ONU's part of the OLT's configuration. Only reads. */
+    public function config(string $id, string $onu): JsonResponse
+    {
+        [$olt, $row] = self::find($id, $onu);
+        set_time_limit(90);
+        try {
+            $payload = ['ok' => true, 'output' => OltManager::runningConfig($olt, $row)];
+        } catch (RuntimeException $e) {
+            $payload = ['ok' => false, 'error' => $e->getMessage()];
+        }
+        return response()->json($payload)->header('Cache-Control', 'no-store');
+    }
+
+    /** The ONU's traffic or signal over time. Nothing is asked of the OLT: it comes from the regular reads. */
+    public function graph(Request $request, string $id, string $onu): JsonResponse
+    {
+        [$olt, $row] = self::find($id, $onu);
+        $range = is_string($request->query('range')) && isset(OltMonitor::RANGES[$request->query('range')]) ? $request->query('range') : '24h';
+        $chart = $request->query('chart') === 'signal' ? 'onu-signal' : 'onu-traffic';
+        return response()->json(MonitoringData::oltHardwareChart($olt, $chart, $range, ['sn' => (string) $row['sn']]))->header('Cache-Control', 'no-store');
+    }
+
+    /** A service port's speed ceiling, or a LAN port off or on. */
+    public function setting(Request $request, string $id, string $onu, string $what, string $number): RedirectResponse
+    {
+        [$olt, $row] = self::find($id, $onu);
+        set_time_limit(120);
+        try {
+            if ($what === 'service-ports') {
+                OltManager::servicePortSpeed($olt, $row, (int) $number, (int) $request->input('up', -1), (int) $request->input('down', -1));
+                $message = 'Service port ' . (int) $number . ' now uses the chosen traffic tables.';
+            } else {
+                $on = (string) $request->input('state') === 'on';
+                OltManager::lanPort($olt, $row, (int) $number, $on);
+                $message = 'LAN port ' . (int) $number . ' is turned ' . ($on ? 'on' : 'off') . '.';
+            }
+        } catch (RuntimeException $e) {
+            return $this->fail($e->getMessage());
+        }
+        return back()->with('flash', ['type' => 'success', 'message' => $message]);
+    }
+
     public function change(Request $request, string $id, string $onu, string $action): RedirectResponse
     {
         [$olt, $row] = self::find($id, $onu);
-        if ($action === 'delete') {
+        if (in_array($action, ['delete', 'factory-reset'], true)) {
             Auth::requireCan('danger.delete');
         }
         set_time_limit(120);
@@ -76,6 +124,10 @@ final class OnuController extends Controller
                 'enable' => (static function () use ($olt, $row, $where) {
                     OltManager::setActive($olt, $row, true);
                     return 'ONU ' . $where . ' is turned on. It comes online within a minute.';
+                })(),
+                'factory-reset' => (static function () use ($olt, $row, $where) {
+                    OltManager::factoryReset($olt, $row);
+                    return 'ONU ' . $where . ' is going back to its factory settings and restarting. The OLT sets its internet connection up again by itself.';
                 })(),
                 'describe' => 'The description on the OLT is now "' . OltManager::describe($olt, $row, (string) $request->input('description', '')) . '".',
                 'delete' => (static function () use ($olt, $row, $where) {
