@@ -770,6 +770,91 @@ final class OltManageTest extends TestCase
         $this->post("$base/lan-vlan/4", ['vlan' => 100])->assertForbidden();
     }
 
+    public function test_the_onus_omci_settings_are_read_from_its_running_config(): void
+    {
+        // As a real MA5800 printed them for a routing and a bridging ONU, with a line the OLT wrapped.
+        $routing = "[MA5800V100R018: 8300]\n#\n[gpon]\n  <gpon-0/1>\n interface gpon 0/1\n ont add 15 15 sn-auth \"485754433D6EF49C\" omci ont-lineprofile-id 6 ont-srvprofile-id 2 desc \"flux kabin\"\n"
+            . " ont ipconfig 15 15 ip-index 1 dhcp vlan 10 priority 0\n ont internet-config 15 15 ip-index 1\n ont wan-config 15 15 ip-index 1 profile-id 0\n ont policy-route-config 15 15 profile-id 1\n"
+            . " ont port route 15 15 eth 1 enable\n ont port route 15 15 eth 2 enable\n ont port route 15 15 eth 3 enable\n ont port route 15 15 eth 4 enable\n ont port route 15 14 eth 1 enable\n#\nreturn\n";
+        $state = HuaweiCli::onuConfig($routing, 15, 15);
+        $this->assertSame('routing', $state['mode']);
+        $this->assertSame([1 => ['mode' => 'dhcp', 'vlan' => 10, 'priority' => 0, 'user' => '', 'internet' => true, 'profile' => 0]], $state['wans']);
+        $this->assertSame(1, $state['routePolicy']);
+        $this->assertSame([1, 2, 3, 4], array_keys($state['ports']));
+        $this->assertTrue($state['ports'][4]['route']);
+
+        $bridging = " interface gpon 0/1\n ont add 15 7 sn-auth \"485754431A829575\" omci ont-lineprofile-id 6 ont-srvprofile-id 1 desc \"ILIR\"\n ont port native-vlan 15 7 eth 1 vlan 10 priority 0\n ont port vlan 15 7 eth 2 translation 20 user-vlan 20\n ont port vlan 15 7 eth 3\ntransparent\n";
+        $state = HuaweiCli::onuConfig($bridging, 15, 7);
+        $this->assertSame('bridging', $state['mode']);
+        $this->assertSame([], $state['wans']);
+        $this->assertSame(['route' => false, 'native' => 10, 'tagged' => [], 'transparent' => false], $state['ports'][1]);
+        $this->assertSame([20], $state['ports'][2]['tagged']);
+        $this->assertTrue($state['ports'][3]['transparent']);
+        $pppoe = HuaweiCli::onuConfig(" ont ipconfig 0 3 ip-index 0 pppoe vlan 30 priority 2 user-account username isa.a password \"%^%#x%^%#\"\n", 0, 3);
+        $this->assertSame(['mode' => 'pppoe', 'vlan' => 30, 'priority' => 2, 'user' => 'isa.a', 'internet' => false, 'profile' => null], $pppoe['wans'][0]);
+    }
+
+    public function test_switching_between_routing_and_bridging_and_the_ethernet_port_modes(): void
+    {
+        $this->startAgent();
+        $olt = $this->olt();
+        $onu = $this->onu($olt);
+        $this->actingAsOperator();
+        $base = "/olts/{$olt['id']}/onus/$onu";
+        $this->get("$base/omci-options")->assertJsonPath('data.state.mode', 'routing')->assertJsonPath('data.state.wans.1.vlan', 100)->assertJsonPath('data.state.ports.4.route', true)
+            ->assertJsonPath('data.trafficTables.1.id', 8);
+
+        // To bridging: exactly what the running config shows is taken off, then each of the 4 LAN ports goes on the VLAN.
+        $this->post("$base/bridge", ['vlan' => 100])->assertSessionHas('flash.type', 'success');
+        $this->assertSame([
+            'ont port route 0 3 eth 1 disable', 'ont port route 0 3 eth 4 disable', 'undo ont policy-route-config 0 3',
+            'undo ont wan-config 0 3 ip-index 1', 'undo ont internet-config 0 3 ip-index 1', 'undo ont ipconfig 0 3 ip-index 1',
+            'ont port native-vlan 0 3 eth 1 vlan 100 priority 0', 'ont port native-vlan 0 3 eth 2 vlan 100 priority 0',
+            'ont port native-vlan 0 3 eth 3 vlan 100 priority 0', 'ont port native-vlan 0 3 eth 4 vlan 100 priority 0',
+        ], $this->changes());
+        $this->get("$base/omci-options")->assertJsonPath('data.state.mode', 'bridging')->assertJsonPath('data.state.wans', [])->assertJsonPath('data.state.ports.3.native', 100);
+        $this->post("$base/bridge", ['vlan' => 333])->assertSessionHas('flash.type', 'danger');
+        $this->assertCount(10, $this->changes());
+
+        // Back to routing with the WAN form.
+        $this->post("$base/wan", ['mode' => 'dhcp', 'vlan' => 100, 'route_lan' => '1'])->assertSessionHas('flash.type', 'success');
+        $this->get("$base/omci-options")->assertJsonPath('data.state.mode', 'routing')->assertJsonPath('data.state.ports.2.route', true);
+        $this->assertCount(16, $this->changes());
+
+        // Port modes: only what differs is sent, what goes first.
+        $this->post("$base/eth/4", ['mode' => 'trunk', 'tagged' => ['100'], 'native' => '1'])->assertSessionHas('flash.type', 'success');
+        $this->post("$base/eth/4", ['mode' => 'transparent'])->assertSessionHas('flash.type', 'success');
+        $this->post("$base/eth/4", ['mode' => 'access', 'native' => '100'])->assertSessionHas('flash.type', 'success');
+        $this->post("$base/eth/4", ['mode' => 'lan'])->assertSessionHas('flash.type', 'success');
+        $this->post("$base/eth/4", ['mode' => 'lan'])->assertSessionHas('flash.message', fn (string $m) => str_contains($m, 'already'));
+        $this->assertSame([
+            'ont port route 0 3 eth 4 disable', 'ont port native-vlan 0 3 eth 4 vlan 1 priority 0', 'ont port vlan 0 3 eth 4 translation 100 user-vlan 100',
+            'undo ont port vlan 0 3 eth 4 translation 100 user-vlan 100', 'ont port vlan 0 3 eth 4 transparent',
+            'undo ont port vlan 0 3 eth 4 transparent', 'ont port native-vlan 0 3 eth 4 vlan 100 priority 0',
+            'ont port route 0 3 eth 4 enable',
+        ], array_slice($this->changes(), 16));
+        foreach ([['mode' => 'trunk'], ['mode' => 'access'], ['mode' => 'trunk', 'tagged' => ['333']], ['mode' => 'hybrid'], ['mode' => 'access', 'native' => '5000']] as $bad) {
+            $this->post("$base/eth/4", $bad)->assertSessionHas('flash.type', 'danger');
+        }
+        $this->post("$base/eth/9", ['mode' => 'lan'])->assertSessionHas('flash.type', 'danger');
+        $this->assertCount(24, $this->changes());
+        $this->assertSame(1, (int) Db::value('SELECT COUNT(*) FROM audit_logs WHERE action="onu_bridge"'));
+        $this->assertSame(4, (int) Db::value('SELECT COUNT(*) FROM audit_logs WHERE action="onu_eth_port"'));
+
+        // A speed by its size: a new traffic table, refused if the OLT has that speed already.
+        $this->post("$base/add-speed", ['mbps' => 100])->assertSessionHas('flash.message', fn (string $m) => str_contains($m, '100M as traffic table 10'));
+        $this->assertSame('traffic table ip index 10 cir 102400 pir 102400 priority 0 priority-policy local-setting', $this->changes()[24]);
+        $this->post("$base/add-speed", ['mbps' => 100])->assertSessionHas('flash.message', fn (string $m) => str_contains($m, 'already has 100M'));
+        $this->post("$base/add-speed", ['mbps' => 0])->assertSessionHas('flash.type', 'danger');
+        $this->assertCount(25, $this->changes());
+        $this->get($base)->assertInertia(fn ($p) => $p->where('trafficTables', fn ($t) => in_array(10, array_column(is_array($t) ? $t : $t->toArray(), 'id'), true)));
+
+        $this->actingAsOperator('view');
+        foreach (['bridge' => ['vlan' => 100], 'add-speed' => ['mbps' => 50], 'eth/4' => ['mode' => 'lan']] as $path => $input) {
+            $this->post("$base/$path", $input)->assertForbidden();
+        }
+    }
+
     public function test_the_onu_page_shows_its_last_day_as_a_strip(): void
     {
         $this->startAgent();

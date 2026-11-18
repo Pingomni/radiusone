@@ -4,6 +4,15 @@ RadiusOne follows [semantic versioning](https://semver.org): **major** for chang
 upgrading, **minor** for new features, **patch** for fixes. The version is in the `VERSION` file and shows in
 the portal's sidebar and under Settings → System information.
 
+## 2.15.0 (2026-11-18)
+
+Routing or bridging, Ethernet port modes, and speeds by size. Update with **Settings → Overview → Software update** or `sudo radiusone-update`.
+
+- **ONU mode:** switch between routing and bridging; the forms start from the ONU's running configuration.
+- **Ethernet ports:** LAN, Access, Trunk (hybrid with an untagged VLAN) or Transparent, per port.
+- **Speeds:** shown as 100M, 1G or Unlimited, and **Add a speed** creates a traffic table on the OLT.
+- **On the server:** no database change. No OLT is changed by the update.
+
 ## 2.14.0 (2026-11-18)
 
 A new ONU page, renaming in place, and the ONU's internet connection pushed over OMCI. Update with **Settings → Overview → Software update** or `sudo radiusone-update`.

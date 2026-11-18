@@ -27,13 +27,23 @@ type TrafficTable = { id: number; cir: string; pir: string };
 type OltInfo = { id: number; name: string; canRead: boolean; canChange: boolean; rxWarning: number; rxCritical: number };
 type Client = { username: string; name: string; address: string; phone: string; pppoe: boolean };
 type Profile = { id: number; name: string; bound: number };
-type OmciOptions = { vlans: number[]; wanProfiles: Profile[]; routeProfiles: Profile[] };
+type OmciWan = { mode: 'dhcp' | 'pppoe' | 'static'; vlan: number; priority: number; user: string; internet: boolean; profile: number | null };
+type OmciPort = { route: boolean; native: number | null; tagged: number[]; transparent: boolean };
+type OnuState = { mode: 'routing' | 'bridging' | 'none'; wans: Record<string, OmciWan>; routePolicy: number | null; ports: Record<string, OmciPort> };
+type OmciOptions = { vlans: number[]; wanProfiles: Profile[]; routeProfiles: Profile[]; trafficTables: TrafficTable[]; state: OnuState };
 type Segment = { from: number; to: number; state: 'online' | 'offline' | 'none' };
 type Timeline = { from: number; to: number; segments: Segment[] };
 type LiveState = { answer: Answer | null; busy: boolean; auto: boolean; setAuto: (on: boolean) => void; read: () => Promise<void>; enabled: boolean };
 
 const dash = (value: string | number | null | undefined, unit = '') => (value === null || value === undefined || value === '' ? '-' : `${value}${unit}`);
-const speed = (kbps: string | undefined) => (kbps === undefined ? '-' : kbps === 'off' ? 'No limit' : Number(kbps) >= 1000000 ? `${Math.round(Number(kbps) / 100000) / 10} Gbit/s` : Number(kbps) >= 1000 ? `${Math.round(Number(kbps) / 100) / 10} Mbit/s` : `${kbps} kbit/s`);
+/** A traffic table's speed as operators say it: 100M, 1G, Unlimited. The OLT counts 1024 kbit/s to the megabit. */
+const speedName = (kbps: string | undefined) => {
+    if (kbps === undefined) return '-';
+    if (kbps === 'off') return 'Unlimited';
+    const mbit = Number(kbps) / 1024;
+    if (mbit >= 1000) return `${Number((mbit / 1024).toFixed(1))}G`;
+    return mbit >= 1 ? `${Math.round(mbit)}M` : `${kbps}k`;
+};
 const rate = (kbps: number | null | undefined) => (kbps === null || kbps === undefined ? '-' : kbps >= 1000 ? `${(kbps / 1000).toFixed(1)} Mbit/s` : `${kbps} kbit/s`);
 const num = (value: string | undefined) => (value && !Number.isNaN(Number(value)) ? Number(value) : null);
 const clock = (seconds: number) => new Date(seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
@@ -245,7 +255,11 @@ function RunningConfig({ base }: { base: string }) {
 function ServicePorts({ ports, tables, base, mayChange }: { ports: ServicePort[]; tables: TrafficTable[]; base: string; mayChange: boolean }) {
     const [editing, setEditing] = useState<{ index: number; up: string; down: string } | null>(null);
     const byId = new Map(tables.map((t) => [t.id, t]));
-    const options = tables.map((t) => ({ value: String(t.id), label: `${t.id}: ${speed(t.pir)}` }));
+    const sorted = [...tables].sort((a, b) => (a.pir === 'off' ? Infinity : Number(a.pir)) - (b.pir === 'off' ? Infinity : Number(b.pir)) || a.id - b.id);
+    const options = sorted.map((t) => ({ value: String(t.id), label: `${speedName(t.pir)}  (traffic table ${t.id})` }));
+    const [mbps, setMbps] = useState('');
+    const [adding, setAdding] = useState(false);
+    const named = (id: number | null) => (id === null ? '-' : <><strong>{speedName(byId.get(id)?.pir)}</strong> <small className="onu-pending">table {id}</small></>);
     return (
         <Panel title="Speed profiles">
             <p className="hint">The OLT&apos;s own ceiling for this ONU, per service port. The customer&apos;s plan speed stays with RADIUS.</p>
@@ -257,8 +271,8 @@ function ServicePorts({ ports, tables, base, mayChange }: { ports: ServicePort[]
                     { header: 'Service port', cell: (p) => p.index },
                     { header: 'VLAN', cell: (p) => p.vlan },
                     { header: 'GEM', cell: (p) => p.gem },
-                    { header: 'Download', cell: (p) => (p.down === null ? '-' : `${speed(byId.get(p.down)?.pir)} (table ${p.down})`) },
-                    { header: 'Upload', cell: (p) => (p.up === null ? '-' : `${speed(byId.get(p.up)?.pir)} (table ${p.up})`) },
+                    { header: 'Download', cell: (p) => named(p.down) },
+                    { header: 'Upload', cell: (p) => named(p.up) },
                     { header: 'State', cell: (p) => (p.state ? <Badge tone="success">Up</Badge> : <Badge>Down</Badge>) },
                     ...(mayChange && tables.length ? [{ header: '', cell: (p: ServicePort) => <button type="button" className="button" onClick={() => setEditing({ index: p.index, up: String(p.up ?? ''), down: String(p.down ?? '') })}>Configure</button> }] : []),
                 ]}
@@ -269,6 +283,12 @@ function ServicePorts({ ports, tables, base, mayChange }: { ports: ServicePort[]
                     <Select label="Upload" name="up" placeholder="Choose" options={options} value={editing.up} onChange={(e) => setEditing({ ...editing, up: e.target.value })} />
                     <button className="button primary" disabled={!editing.up || !editing.down}>Save on the OLT</button>
                     <button type="button" className="button" onClick={() => setEditing(null)}>Cancel</button>
+                </form>
+            )}
+            {mayChange && (
+                <form className="toolbar onu-add-speed" onSubmit={(e) => { e.preventDefault(); setAdding(true); router.post(`${base}/add-speed`, { mbps }, { preserveScroll: true, onSuccess: () => setMbps(''), onFinish: () => setAdding(false) }); }}>
+                    <Field label="Add a speed to the OLT (Mbit/s)" name="mbps" type="number" min={1} max={10000} inputMode="numeric" placeholder="100" value={mbps} onChange={(e) => setMbps(e.target.value)} hint={`Speeds on the OLT: ${[...new Set(sorted.map((t) => speedName(t.pir)))].join(', ') || 'none'}.`} />
+                    <button className="button" disabled={adding || !(Number(mbps) >= 1 && Number(mbps) <= 10000)}>{adding ? 'Adding…' : 'Add speed'}</button>
                 </form>
             )}
         </Panel>
@@ -363,12 +383,15 @@ function WanForm({ base, live, clients, options, onDone }: { base: string; live:
     const routed = live?.wans.find((w) => /rout/i.test(w.type));
     const access = (routed?.access ?? '').toLowerCase();
     const radius = clients.filter((c) => c.pppoe);
+    // The running config says exactly what is set; the ONU's own report fills in the address.
+    const [index, set0] = Object.entries(options.state.wans)[0] ?? ['1', null];
+    const own = radius.find((c) => set0?.user && c.username === set0.user);
     const [busy, setBusy] = useState(false);
     const [f, setF] = useState(() => ({
-        mode: (access.includes('pppoe') ? 'pppoe' : access.includes('static') ? 'static' : 'dhcp') as WanMode,
-        vlan: routed?.vlan && options.vlans.includes(Number(routed.vlan)) ? routed.vlan : '',
-        priority: '0', ipIndex: '1', wanProfile: '', routeProfile: '', routeLan: true,
-        source: radius.length ? `client:${radius[0].username}` : 'typed', user: '', password: '',
+        mode: (set0?.mode ?? (access.includes('pppoe') ? 'pppoe' : access.includes('static') ? 'static' : 'dhcp')) as WanMode,
+        vlan: set0 && options.vlans.includes(set0.vlan) ? String(set0.vlan) : routed?.vlan && options.vlans.includes(Number(routed.vlan)) ? routed.vlan : '',
+        priority: String(set0?.priority ?? 0), ipIndex: index, wanProfile: set0?.profile != null ? String(set0.profile) : '', routeProfile: options.state.routePolicy !== null ? String(options.state.routePolicy) : '', routeLan: true,
+        source: own ? `client:${own.username}` : set0?.user ? 'typed' : radius.length ? `client:${radius[0].username}` : 'typed', user: own ? '' : set0?.user ?? '', password: '',
         ip: access.includes('static') ? routed?.ip ?? '' : '', mask: routed?.mask || '255.255.255.0', gateway: access.includes('static') ? routed?.gateway ?? '' : '',
         dns1: '', dns2: '',
     }));
@@ -401,8 +424,8 @@ function WanForm({ base, live, clients, options, onDone }: { base: string; live:
     };
 
     return (
-        <Panel title="Internet connection (WAN)">
-            <p className="hint">Set on the ONU by the OLT over OMCI, so it works on any ONU without TR-069.{routed ? <> Now: <strong>{routed.access || routed.type}</strong> on VLAN <strong>{routed.vlan || '-'}</strong>{routed.ip ? <>, <span className="mono">{routed.ip}</span></> : null}.</> : live ? ' The ONU has no routed connection now.' : ''}</p>
+        <>
+            <p className="hint">The ONU routes: it holds the internet connection and the LAN ports go through it. Set by the OLT over OMCI.{routed ? <> Now: <strong>{routed.access || routed.type}</strong> on VLAN <strong>{routed.vlan || '-'}</strong>{routed.ip ? <>, <span className="mono">{routed.ip}</span></> : null}.</> : live ? ' The ONU has no routed connection now.' : ''}</p>
             <form className="form-grid" onSubmit={(e) => void submit(e)}>
                 <fieldset className="onu-choice">
                     <legend>How the ONU gets its address</legend>
@@ -445,7 +468,7 @@ function WanForm({ base, live, clients, options, onDone }: { base: string; live:
                     <div className="form-grid">
                         <Select label="WAN profile" name="wan_profile" value={f.wanProfile} onChange={(e) => set('wanProfile', e.target.value)} options={[{ value: '', label: 'Leave as it is' }, ...options.wanProfiles.map((p) => ({ value: String(p.id), label: `${p.id}: ${p.name}` }))]} />
                         <Select label="Route policy profile" name="route_profile" value={f.routeProfile} onChange={(e) => set('routeProfile', e.target.value)} options={[{ value: '', label: 'Leave as it is' }, ...options.routeProfiles.map((p) => ({ value: String(p.id), label: `${p.id}: ${p.name}` }))]} />
-                        <Select label="Connection number (ip-index)" name="ip_index" value={f.ipIndex} onChange={(e) => set('ipIndex', e.target.value)} options={Array.from({ length: 8 }, (_, i) => ({ value: String(i), label: i === 1 ? '1 (as ONUs are added)' : String(i) }))} hint="Use the same number again to change a connection rather than add a second one." />
+                        <Select label="Connection number (ip-index)" name="ip_index" hint={`${Object.keys(options.state.wans).length ? `The ONU has connection ${Object.keys(options.state.wans).join(', ')} now. ` : ''}Use the same number to change a connection rather than add a second one.`} value={f.ipIndex} onChange={(e) => set('ipIndex', e.target.value)} options={Array.from({ length: 8 }, (_, i) => ({ value: String(i), label: i === 1 ? '1 (as ONUs are added)' : String(i) }))} />
                     </div>
                 </details>
                 <details>
@@ -457,70 +480,163 @@ function WanForm({ base, live, clients, options, onDone }: { base: string; live:
                     {!ready && <span className="hint">{f.vlan === '' ? 'Choose a VLAN.' : 'Fill in the fields above.'}</span>}
                 </div>
             </form>
-        </Panel>
+        </>
     );
 }
 
-/** The VLAN each LAN port puts untagged traffic on: what a bridged ONU needs. */
-function LanVlans({ base, live, vlans, onDone }: { base: string; live: Live; vlans: number[]; onDone: () => void }) {
-    const [chosen, setChosen] = useState<Record<number, string>>({});
-    const [busy, setBusy] = useState<number | null>(null);
+/** Turns the ONU into a bridge: what routing it has is taken off, and its LAN ports put untagged traffic on one VLAN. */
+function BridgeForm({ base, options, lanCount, onDone }: { base: string; options: OmciOptions; lanCount: number; onDone: () => void }) {
+    const ask = useConfirm();
+    const state = options.state;
+    const natives = Object.values(state.ports).map((p) => p.native).filter((v): v is number => v !== null);
+    const start = Object.values(state.wans)[0]?.vlan ?? natives[0];
+    const [vlan, setVlan] = useState(start !== undefined && options.vlans.includes(start) ? String(start) : '');
+    const [busy, setBusy] = useState(false);
+    const wans = Object.entries(state.wans);
+    const routes = Object.entries(state.ports).filter(([, p]) => p.route).map(([eth]) => eth);
+    const preview = [
+        ...routes.map((eth) => `ont port route <port> <onu> eth ${eth} disable`),
+        ...(state.routePolicy !== null ? ['undo ont policy-route-config <port> <onu>'] : []),
+        ...wans.flatMap(([i, w]) => [...(w.profile !== null ? [`undo ont wan-config <port> <onu> ip-index ${i}`] : []), ...(w.internet ? [`undo ont internet-config <port> <onu> ip-index ${i}`] : []), `undo ont ipconfig <port> <onu> ip-index ${i}`]),
+        `ont port native-vlan <port> <onu> eth 1${lanCount > 1 ? `…${lanCount}` : ''} vlan ${vlan || '?'} priority 0`,
+    ];
+    const submit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!(await ask({ title: 'Make this ONU a bridge?', message: wans.length ? 'Its internet connection is taken off the ONU: the customer\'s own router has to connect from now on. The internet drops until it does.' : 'Every LAN port puts untagged traffic on the VLAN you chose.', confirmLabel: 'Switch to bridging' }))) return;
+        setBusy(true);
+        router.post(`${base}/bridge`, { vlan }, { preserveScroll: true, onSuccess: onDone, onFinish: () => setBusy(false) });
+    };
     return (
-        <Panel title="LAN port VLANs">
-            <p className="hint">For bridging: the VLAN a LAN port puts untagged traffic on. Set by the OLT over OMCI.</p>
+        <form className="form-grid" onSubmit={(e) => void submit(e)}>
+            <p className="hint">The ONU passes traffic through: the customer&apos;s own router connects behind it. Every LAN port puts untagged traffic on the VLAN.</p>
+            <Select label="VLAN" name="vlan" placeholder="Choose" value={vlan} onChange={(e) => setVlan(e.target.value)} options={options.vlans.map((v) => ({ value: String(v), label: `VLAN ${v}` }))} />
+            {wans.length > 0 && <p className="flash warning">This takes off connection {wans.map(([i, w]) => `${i} (${w.mode.toUpperCase()} on VLAN ${w.vlan})`).join(', ')}{routes.length ? ` and routing on LAN port ${routes.join(', ')}` : ''}.</p>}
+            <details><summary>Commands the OLT will get</summary><pre className="mono onu-preview">{preview.join('\n')}</pre></details>
+            <div className="form-actions"><button className="button primary" disabled={busy || !vlan}>{busy ? 'Switching over OMCI…' : state.mode === 'bridging' ? 'Set the bridge VLAN' : 'Switch to bridging'}</button></div>
+        </form>
+    );
+}
+
+type PortMode = 'lan' | 'access' | 'trunk' | 'transparent';
+const PORT_MODES: { value: PortMode; title: string; text: string }[] = [
+    { value: 'lan', title: 'LAN', text: 'Routed through the ONU\'s connection.' },
+    { value: 'access', title: 'Access', text: 'Untagged, on one VLAN.' },
+    { value: 'trunk', title: 'Trunk', text: 'Tagged VLANs; one untagged too makes it hybrid.' },
+    { value: 'transparent', title: 'Transparent', text: 'Passes all traffic as it comes.' },
+];
+const portMode = (p: OmciPort | undefined): PortMode | null => (!p ? null : p.transparent ? 'transparent' : p.tagged.length ? 'trunk' : p.route ? 'lan' : p.native !== null ? 'access' : null);
+const portWords = (p: OmciPort | undefined) => {
+    const mode = portMode(p);
+    if (!p || !mode) return 'Not set';
+    if (mode === 'trunk') return `${p.native !== null ? 'Hybrid' : 'Trunk'}: tagged ${p.tagged.join(', ')}${p.native !== null ? `, untagged ${p.native}` : ''}`;
+    if (mode === 'access') return `Access: VLAN ${p.native}`;
+    return mode === 'lan' ? 'LAN (routed)' : 'Transparent';
+};
+
+/** Each LAN port's mode and VLANs. Only what changes is sent to the OLT. */
+function EthPorts({ base, live, options, onDone }: { base: string; live: Live | null; options: OmciOptions; onDone: () => void }) {
+    const ports = [...new Set([...(live?.lan.map((l) => l.port) ?? []), ...Object.keys(options.state.ports).map(Number)])].sort((a, b) => a - b);
+    const [edit, setEdit] = useState<{ eth: number; mode: PortMode; native: string; tagged: number[] } | null>(null);
+    const [busy, setBusy] = useState(false);
+    const open = (eth: number) => {
+        const now = options.state.ports[String(eth)];
+        setEdit({ eth, mode: portMode(now) ?? 'lan', native: now?.native != null ? String(now.native) : '', tagged: now?.tagged ?? [] });
+    };
+    const ready = edit && (edit.mode === 'access' ? edit.native !== '' : edit.mode === 'trunk' ? edit.tagged.length > 0 && edit.tagged.length <= 16 : true);
+    const save = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!edit) return;
+        setBusy(true);
+        router.post(`${base}/eth/${edit.eth}`, { mode: edit.mode, native: edit.mode === 'access' || edit.mode === 'trunk' ? edit.native : '', tagged: edit.mode === 'trunk' ? edit.tagged.map(String) : [] }, { preserveScroll: true, onSuccess: () => { setEdit(null); onDone(); }, onFinish: () => setBusy(false) });
+    };
+    const vlanOptions = options.vlans.map((v) => ({ value: String(v), label: `VLAN ${v}` }));
+    return (
+        <Panel title="Ethernet ports">
+            <p className="hint">How each LAN port carries traffic, set by the OLT over OMCI. Turn a port off or on under Ports.</p>
             <DataTable
-                rows={live.lan}
-                rowKey={(p) => p.port}
-                emptyText="The ONU did not report its LAN ports. It may be offline."
+                rows={ports}
+                rowKey={(eth) => eth}
+                emptyText="Neither the ONU nor the OLT lists LAN ports for this ONU. It may be offline."
                 columns={[
-                    { header: 'Port', cell: (p) => `LAN ${p.port}` },
-                    { header: 'Link', cell: (p) => (p.up ? <Badge tone="success">Up</Badge> : <Badge>Down</Badge>) },
-                    { header: 'Native VLAN now', cell: (p) => p.native ?? '-' },
-                    {
-                        header: 'Set to', cell: (p) => (
-                            <select aria-label={`Native VLAN for LAN ${p.port}`} value={chosen[p.port] ?? String(p.native ?? '')} onChange={(e) => setChosen({ ...chosen, [p.port]: e.target.value })}>
-                                {p.native === null && <option value="">Choose</option>}
-                                {p.native !== null && !vlans.includes(p.native) && <option value={String(p.native)}>{p.native}</option>}
-                                {vlans.map((v) => <option key={v} value={String(v)}>VLAN {v}</option>)}
-                            </select>
-                        ),
-                    },
-                    {
-                        header: '', cell: (p) => {
-                            const to = chosen[p.port];
-                            return (
-                                <button type="button" className="button" disabled={busy !== null || !to || to === String(p.native ?? '')}
-                                    onClick={() => { setBusy(p.port); router.post(`${base}/lan-vlan/${p.port}`, { vlan: to, priority: 0 }, { preserveScroll: true, onSuccess: onDone, onFinish: () => setBusy(null) }); }}>
-                                    {busy === p.port ? 'Saving…' : 'Save'}
-                                </button>
-                            );
-                        },
-                    },
+                    { header: 'Port', cell: (eth) => `LAN ${eth}` },
+                    { header: 'Link', cell: (eth) => { const l = live?.lan.find((x) => x.port === eth); return !l ? '-' : l.on === false ? <Badge tone="warning">Turned off</Badge> : l.up ? <Badge tone="success">Up{l.speed ? ` ${l.speed}M` : ''}</Badge> : <Badge>Down</Badge>; } },
+                    { header: 'Mode', className: 'wrap', cell: (eth) => portWords(options.state.ports[String(eth)]) },
+                    { header: '', cell: (eth) => <button type="button" className="button" aria-expanded={edit?.eth === eth} onClick={() => (edit?.eth === eth ? setEdit(null) : open(eth))}>{edit?.eth === eth ? 'Close' : 'Configure'}</button> },
                 ]}
             />
+            {edit && (
+                <form className="form-grid onu-port-form" onSubmit={save}>
+                    <fieldset className="onu-choice onu-choice-4">
+                        <legend>LAN {edit.eth}: mode</legend>
+                        {PORT_MODES.map((m) => (
+                            <label key={m.value} className={edit.mode === m.value ? 'on' : undefined}>
+                                <input type="radio" name="port_mode" value={m.value} checked={edit.mode === m.value} onChange={() => setEdit({ ...edit, mode: m.value })} />
+                                <strong>{m.title}</strong><small>{m.text}</small>
+                            </label>
+                        ))}
+                    </fieldset>
+                    {edit.mode === 'access' && <Select label="VLAN" name="native" placeholder="Choose" value={edit.native} onChange={(e) => setEdit({ ...edit, native: e.target.value })} options={vlanOptions} />}
+                    {edit.mode === 'trunk' && (
+                        <>
+                            <fieldset className="onu-vlan-chips span2">
+                                <legend>Tagged VLANs <small>({edit.tagged.length} of up to 16)</small></legend>
+                                {options.vlans.map((v) => (
+                                    <label key={v} className={edit.tagged.includes(v) ? 'on' : undefined}>
+                                        <input type="checkbox" checked={edit.tagged.includes(v)} onChange={(e) => setEdit({ ...edit, tagged: e.target.checked ? [...edit.tagged, v].sort((a, b) => a - b) : edit.tagged.filter((x) => x !== v) })} />{v}
+                                    </label>
+                                ))}
+                            </fieldset>
+                            <Select label="Untagged VLAN (hybrid)" name="native" value={edit.native} onChange={(e) => setEdit({ ...edit, native: e.target.value })} options={[{ value: '', label: 'None: tagged only' }, ...vlanOptions]} />
+                        </>
+                    )}
+                    <div className="form-actions">
+                        <button className="button primary" disabled={busy || !ready}>{busy ? 'Saving over OMCI…' : `Save LAN ${edit.eth}`}</button>
+                        <button type="button" className="button" onClick={() => setEdit(null)}>Cancel</button>
+                    </div>
+                </form>
+            )}
         </Panel>
     );
 }
 
 function Configure({ base, live, clients }: { base: string; live: LiveState; clients: Client[] }) {
     const [options, setOptions] = useState<{ ok: true; data: OmciOptions } | { ok: false; error: string } | null>(null);
+    const [mode, setMode] = useState<'routing' | 'bridging' | null>(null);
+    const [round, setRound] = useState(0);
     useEffect(() => {
         let alive = true;
         getJson<{ ok: true; data: OmciOptions } | { ok: false; error: string }>(`${base}/omci-options`)
             .then((answer) => { if (alive) setOptions(answer); })
             .catch(() => { if (alive) setOptions({ ok: false, error: 'The portal could not be reached. Reload the page and try again.' }); });
         return () => { alive = false; };
-    }, [base]);
-    if (!options) return <Panel><p className="hint" role="status">Reading the OLT&apos;s VLANs and profiles.</p></Panel>;
+    }, [base, round]);
+    if (!options) return <Panel><p className="hint" role="status">Reading the ONU&apos;s settings, and the OLT&apos;s VLANs and profiles.</p></Panel>;
     if (!options.ok) return <Panel><p className="flash warning" role="alert">{options.error}</p></Panel>;
-    const data = live.answer?.ok ? live.answer.data : null;
-    // The form starts from what the ONU has now, so it waits for the first read.
     if (live.enabled && !live.answer) return <Panel><p className="hint" role="status">Reading what the ONU has now.</p></Panel>;
-    const reread = () => { window.setTimeout(() => void live.read(), 3000); };
+    const data = live.answer?.ok ? live.answer.data : null;
+    const state = options.data.state;
+    const shown = mode ?? (state.mode === 'bridging' ? 'bridging' : 'routing');
+    // After a change: the settings again from the OLT, and the ONU's own report a little later.
+    const reread = () => { setRound((r) => r + 1); window.setTimeout(() => void live.read(), 3000); };
+    const lanCount = Math.max(data?.lan.length ?? 0, ...Object.keys(state.ports).map(Number), 1);
     return (
-        <div className="onu-tab-body">
-            <WanForm base={base} live={data} clients={clients} options={options.data} onDone={reread} />
-            {data ? <LanVlans base={base} live={data} vlans={options.data.vlans} onDone={reread} /> : <Waiting live={live} />}
+        <div className="onu-tab-body" key={round}>
+            <Panel title="ONU mode" actions={<Badge tone={state.mode === 'none' ? 'warning' : 'info'}>Now: {state.mode === 'routing' ? 'Routing' : state.mode === 'bridging' ? 'Bridging' : 'Not set'}</Badge>}>
+                <fieldset className="onu-choice onu-choice-2">
+                    <legend>How the ONU works</legend>
+                    {(['routing', 'bridging'] as const).map((m) => (
+                        <label key={m} className={shown === m ? 'on' : undefined}>
+                            <input type="radio" name="onu_mode" value={m} checked={shown === m} onChange={() => setMode(m)} />
+                            <strong>{m === 'routing' ? 'Routing' : 'Bridging'}{state.mode === m ? ' (now)' : ''}</strong>
+                            <small>{m === 'routing' ? 'The ONU holds the internet connection: DHCP, PPPoE or a fixed address.' : 'The ONU passes traffic through to the customer\'s own router.'}</small>
+                        </label>
+                    ))}
+                </fieldset>
+                {shown === 'routing'
+                    ? <WanForm base={base} live={data} clients={clients} options={options.data} onDone={reread} />
+                    : <BridgeForm base={base} options={options.data} lanCount={lanCount} onDone={reread} />}
+            </Panel>
+            <EthPorts base={base} live={data} options={options.data} onDone={reread} />
         </div>
     );
 }

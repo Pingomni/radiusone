@@ -2477,7 +2477,21 @@ td .list-menu > summary:hover { border-color: var(--line); background: var(--sur
 .onu-tab-body .form-grid > .form-actions { grid-column: 1 / -1; }
 .form-grid > label.onu-check { display: flex; grid-column: 1 / -1; align-items: center; gap: var(--sp-2); margin-top: 0; }
 .onu-preview { margin: 0; padding: var(--sp-2) var(--sp-3); overflow-x: auto; border-radius: var(--radius-sm); background: var(--surface); color: var(--text); font-size: var(--fs-sm); white-space: pre; }
-@media (max-width: 760px) { .onu-choice { grid-template-columns: minmax(0, 1fr); } }
+.onu-choice.onu-choice-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.onu-choice.onu-choice-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.panel > .onu-choice { margin: var(--sp-3) var(--sp-3) var(--sp-1); }
+.panel > .form-grid, .panel > .onu-port-form { padding-bottom: var(--sp-1); }
+.onu-port-form { padding-top: var(--sp-3); border-top: 1px solid var(--line); }
+.onu-vlan-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; border: 0; }
+.onu-vlan-chips > legend { width: 100%; margin-bottom: 6px; padding: 0; color: var(--text-strong); font-size: var(--fs-sm); font-weight: 600; }
+.onu-vlan-chips > legend small { color: var(--text-muted); font-weight: 400; }
+.onu-vlan-chips > label { display: inline-flex; align-items: center; gap: 6px; min-height: var(--control-h-sm); padding: 0 10px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--text); font: 600 var(--fs-sm) var(--font-mono); cursor: pointer; }
+.onu-vlan-chips > label.on { border-color: var(--accent-line); background: var(--accent-bg); color: var(--accent); }
+.onu-vlan-chips > label > input { margin: 0; accent-color: var(--accent); }
+.onu-vlan-chips > label:has(input:focus-visible) { box-shadow: var(--focus); }
+.onu-add-speed { padding-top: var(--sp-3); border-top: 1px solid var(--line); }
+@media (max-width: 1100px) { .onu-choice.onu-choice-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 760px) { .onu-choice, .onu-choice.onu-choice-2, .onu-choice.onu-choice-4 { grid-template-columns: minmax(0, 1fr); } }
 
 .onu-identity h2 { margin: 0; color: var(--text-strong); font-size: 20px; font-weight: 650; line-height: 1.2; overflow-wrap: anywhere; }
 .onu-identity p { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; color: var(--text-muted); font-size: var(--fs-md); }

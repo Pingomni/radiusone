@@ -85,7 +85,11 @@ $table = $config['mac_table'];
 // What the command line knows: ONUs already added, ONUs plugged in but not added, and service ports. Tests can replace each.
 $onts = [];
 foreach ($config['onts'] ?? [[0, 1, 0, 3, '485754431234ABCD', 'Kati 2 hyrja A', 'online'], [0, 2, 5, 12, '5A54454700C171A7', 'byname', 'offline']] as [$f, $s, $p, $n, $sn, $desc, $run]) {
-    $onts["$f/$s/$p/$n"] = ['sn' => $sn, 'desc' => $desc, 'run' => $run, 'active' => true, 'line' => 6, 'srv' => 2];
+    $onts["$f/$s/$p/$n"] = ['sn' => $sn, 'desc' => $desc, 'run' => $run, 'active' => true, 'line' => 6, 'srv' => 2, 'cfg' => [
+        'ipconfig 1' => "ont ipconfig $p $n ip-index 1 dhcp vlan 100 priority 0", 'internet 1' => "ont internet-config $p $n ip-index 1",
+        'wan 1' => "ont wan-config $p $n ip-index 1 profile-id 0", 'policy' => "ont policy-route-config $p $n profile-id 1",
+        'route 1' => "ont port route $p $n eth 1 enable", 'route 4' => "ont port route $p $n eth 4 enable",
+    ]];
 }
 $autofind = $config['autofind'] ?? [[0, 1, 0, '48575443AAAA0001', 'EG8145V5']];
 $servicePorts = [];
@@ -96,6 +100,7 @@ $lanOff = [];
 $ntp = ['192.0.2.123'];
 $vlans = [1 => [8, 0], 100 => [1, 16]];
 $portVlans = [];
+$tables = [6 => ['off', 'off'], 8 => ['1048064', '1048064'], 9 => ['1048064', '1048064']];
 $failing = $config['fail'] ?? [];
 $pending = null;
 $profiles = static fn (array $rows) => "  ------------------------------------------------------------------------------\n  Profile-ID  Profile-name                                Binding times\n  ------------------------------------------------------------------------------\n"
@@ -127,7 +132,7 @@ $ontInfo = static function (string $key) use (&$onts): string {
         . "  Service profile ID   : {$o['srv']}\n  Service profile name : HG8346M\n  -----------------------------------------------------------------------------\n";
 };
 // A command the command line knows beyond the first reads. Returns false for one it does not.
-$cli = static function (string $text) use (&$mode, &$state, &$onts, &$autofind, &$servicePorts, &$pending, &$ntp, &$vlans, &$portVlans, &$lanOff, $failing, $say, $profiles, $portRows, $ontInfo, $config): bool {
+$cli = static function (string $text) use (&$mode, &$state, &$onts, &$autofind, &$servicePorts, &$pending, &$ntp, &$vlans, &$portVlans, &$lanOff, &$tables, $failing, $say, $profiles, $portRows, $ontInfo, $config): bool {
     foreach ($failing as $prefix) {
         if (str_starts_with($text, $prefix)) {
             $say("\n  Failure: Made to fail by the test\n");
@@ -295,7 +300,20 @@ $cli = static function (string $text) use (&$mode, &$state, &$onts, &$autofind, 
         return true;
     }
     if ($text === 'display traffic table ip from-index 0') {
-        $say("\n  ---------------------------------------------------------------------------\n   TID CIR      CBS        PIR      PBS        Pri Copy-policy     Pri-Policy\n       (kbps)   (bytes)    (kbps)   (bytes)\n  ---------------------------------------------------------------------------\n     6 off      off        off      off          0 -                  tag-pri\n     8 1048064  13100800   1048064  13100800     0 -                local-pri\n     9 1048064  13100800   1048064  13100800     0 -                local-pri\n  ---------------------------------------------------------------------------\n  Total Num : 3\n");
+        $say("\n  ---------------------------------------------------------------------------\n   TID CIR      CBS        PIR      PBS        Pri Copy-policy     Pri-Policy\n       (kbps)   (bytes)    (kbps)   (bytes)\n  ---------------------------------------------------------------------------\n");
+        foreach ($tables as $id => [$cir, $pir]) {
+            $say(sprintf("    %2d %-8s %-10s %-8s %-10s   0 -                local-pri\n", $id, $cir, $cir === 'off' ? 'off' : '13100800', $pir, $pir === 'off' ? 'off' : '13100800'));
+        }
+        $say("  ---------------------------------------------------------------------------\n  Total Num : " . count($tables) . "\n");
+        return true;
+    }
+    if ($mode === 'config' && preg_match('/^traffic table ip index (\d+) cir (\d+) pir (\d+) priority 0 priority-policy local-setting$/', $text, $m)) {
+        if (isset($tables[(int) $m[1]])) {
+            $say("\n  Failure: The traffic table already exists\n");
+            return true;
+        }
+        $tables[(int) $m[1]] = [$m[2], $m[3]];
+        ksort($tables);
         return true;
     }
     if ($text === 'display service-port all') {
@@ -316,7 +334,8 @@ $cli = static function (string $text) use (&$mode, &$state, &$onts, &$autofind, 
             $say("\n  Failure: The ONT does not exist\n");
             return true;
         }
-        $say("\n[MA5800V100R018: 8300]\n#\n[gpon]\n  <gpon-$m[1]>\n interface gpon $m[1]\n ont add $m[2] $m[3] sn-auth \"{$onts[$k]['sn']}\" omci ont-lineprofile-id 6 \nont-srvprofile-id 2 desc \"{$onts[$k]['desc']}\" \n ont ipconfig $m[2] $m[3] ip-index 1 dhcp vlan 100 priority 0\n#\nreturn\n");
+        $say("\n[MA5800V100R018: 8300]\n#\n[gpon]\n  <gpon-$m[1]>\n interface gpon $m[1]\n ont add $m[2] $m[3] sn-auth \"{$onts[$k]['sn']}\" omci ont-lineprofile-id 6 \nont-srvprofile-id 2 desc \"{$onts[$k]['desc']}\" \n"
+            . implode('', array_map(static fn (string $l) => " $l\n", $onts[$k]['cfg'] ?? [])) . "#\nreturn\n");
         return true;
     }
     if ($mode === 'config' && preg_match('/^service-port (\d+) inbound traffic-table index (\d+) outbound traffic-table index (\d+)$/', $text, $m)) {
@@ -426,13 +445,45 @@ $cli = static function (string $text) use (&$mode, &$state, &$onts, &$autofind, 
         $say("\n  Number of ONTs that can be added: 1, success: 1\n  PortID :$m[1], ONTID :$id\n");
         return true;
     }
-    if (preg_match('/^ont (ipconfig|internet-config|wan-config|policy-route-config) (\d+) (\d+) (ip-index [0-7] dhcp vlan \d+ priority [0-7]|ip-index [0-7] pppoe vlan \d+ priority [0-7] user-account username \S+ password \S+|ip-index [0-7] static ip-address [\d.]+ mask [\d.]+ gateway [\d.]+ pri-dns [\d.]+( slave-dns [\d.]+)? vlan \d+ priority [0-7]|ip-index [0-7]|ip-index [0-7] profile-id \d+|profile-id \d+)$/', $text, $m)
-        || preg_match('/^ont port (route) (\d+) (\d+) eth \d+ (enable)$/', $text, $m)) {
-        return $need($key($m[2], $m[3])) || $ok();
-    }
-    if (preg_match('/^ont port native-vlan (\d+) (\d+) eth (\d+) vlan (\d+) priority [0-7]$/', $text, $m)) {
-        if ($need($key($m[1], $m[2]))) {
-            $lanOff["$interface/$m[1]/$m[2]/$m[3]#native"] = (int) $m[4];
+    // OMCI settings: each is remembered by what it sets, so an undo or a new value replaces it, as on the OLT.
+    $omci = static function (string $rest): ?string {
+        return match (true) {
+            (bool) preg_match('/^ipconfig ip-index ([0-7])( (dhcp vlan \d+ priority [0-7]|pppoe vlan \d+ priority [0-7] user-account username \S+ password \S+|static ip-address [\d.]+ mask [\d.]+ gateway [\d.]+ pri-dns [\d.]+( slave-dns [\d.]+)? vlan \d+ priority [0-7]))?$/', $rest, $r) => 'ipconfig ' . $r[1],
+            (bool) preg_match('/^internet-config ip-index ([0-7])$/', $rest, $r) => 'internet ' . $r[1],
+            (bool) preg_match('/^wan-config ip-index ([0-7])( profile-id \d+)?$/', $rest, $r) => 'wan ' . $r[1],
+            (bool) preg_match('/^policy-route-config( profile-id \d+)?$/', $rest) => 'policy',
+            (bool) preg_match('/^port route eth (\d) (enable|disable)$/', $rest, $r) => 'route ' . $r[1],
+            (bool) preg_match('/^port native-vlan eth (\d)( vlan \d+ priority [0-7])?$/', $rest, $r) => 'native ' . $r[1],
+            (bool) preg_match('/^port vlan eth (\d) transparent$/', $rest, $r) => 'vlan ' . $r[1] . ' t',
+            (bool) preg_match('/^port vlan eth (\d) translation (\d+) user-vlan \2$/', $rest, $r) => 'vlan ' . $r[1] . ' ' . $r[2],
+            default => null,
+        };
+    };
+    if ($interface !== null && preg_match('/^(undo )?ont (ipconfig|internet-config|wan-config|policy-route-config|port route|port native-vlan|port vlan) (\d+) (\d+)(.*)$/', $text, $m)) {
+        $id = $omci($m[2] . $m[5]);
+        $k = $key($m[3], $m[4]);
+        if ($id === null) {
+            return false;
+        }
+        if (!$need($k)) {
+            return true;
+        }
+        if ($m[1] !== '') {
+            if (!isset($onts[$k]['cfg'][$id])) {
+                $say("\n  Failure: The configuration does not exist\n");
+                return true;
+            }
+            unset($onts[$k]['cfg'][$id]);
+            return true;
+        }
+        $line = "ont {$m[2]} {$m[3]} {$m[4]}{$m[5]}";
+        if (str_ends_with($line, ' disable')) {
+            unset($onts[$k]['cfg'][$id]);
+        } else {
+            $onts[$k]['cfg'][$id] = $line;
+        }
+        if (str_starts_with($id, 'native ')) {
+            $lanOff["$interface/$m[3]/$m[4]/" . substr($id, 7) . '#native'] = (int) preg_replace('/^.* vlan (\d+).*$/', '$1', $line);
         }
         return true;
     }

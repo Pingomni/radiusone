@@ -88,10 +88,10 @@ final class OnuController extends Controller
     /** What the OMCI settings can be chosen from, read from the OLT. Only reads. */
     public function omciOptions(string $id, string $onu): JsonResponse
     {
-        [$olt] = self::find($id, $onu);
-        set_time_limit(90);
+        [$olt, $row] = self::find($id, $onu);
+        set_time_limit(120);
         try {
-            $payload = ['ok' => true, 'data' => OltManager::omciOptions($olt)];
+            $payload = ['ok' => true, 'data' => OltManager::omciOptions($olt, $row)];
         } catch (RuntimeException $e) {
             $payload = ['ok' => false, 'error' => $e->getMessage()];
         }
@@ -120,7 +120,11 @@ final class OnuController extends Controller
         [$olt, $row] = self::find($id, $onu);
         set_time_limit(120);
         try {
-            if ($what === 'lan-vlan') {
+            if ($what === 'eth') {
+                $native = trim((string) $request->input('native', ''));
+                $tagged = $request->input('tagged', []);
+                $message = OltManager::ethPort($olt, $row, (int) $number, (string) $request->input('mode', ''), $native === '' ? null : (int) $native, is_array($tagged) ? array_values(array_filter(array_map('intval', $tagged))) : []);
+            } elseif ($what === 'lan-vlan') {
                 OltManager::lanVlan($olt, $row, (int) $number, (int) $request->input('vlan', 0), (int) $request->input('priority', 0));
                 $message = 'LAN port ' . (int) $number . ' now puts untagged traffic on VLAN ' . (int) $request->input('vlan', 0) . '.';
             } elseif ($what === 'service-ports') {
@@ -175,6 +179,11 @@ final class OnuController extends Controller
                         }
                     }
                     return OltManager::wanConfig($olt, $row, $request->only(['mode', 'ip_index', 'vlan', 'priority', 'wan_profile', 'route_profile', 'route_lan', 'pppoe_user', 'pppoe_password', 'ip', 'mask', 'gateway', 'dns1', 'dns2']), $login);
+                })(),
+                'bridge' => OltManager::bridge($olt, $row, (int) $request->input('vlan', 0)),
+                'add-speed' => (static function () use ($olt, $request) {
+                    $table = OltManager::addSpeed($olt, (int) $request->input('mbps', 0));
+                    return 'The OLT now has ' . (int) $request->input('mbps', 0) . 'M as traffic table ' . $table['id'] . '. Choose it under Configure.';
                 })(),
                 'describe' => 'The description on the OLT is now "' . OltManager::describe($olt, $row, (string) $request->input('description', '')) . '".',
                 'delete' => (static function () use ($olt, $row, $where) {

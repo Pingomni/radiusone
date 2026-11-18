@@ -578,23 +578,242 @@ final class OltManager
     }
 
     /**
-     * What the OMCI settings can be chosen from: the OLT's VLANs and its WAN and route policy profiles. Only reads.
+     * What the OMCI settings can be chosen from (the OLT's VLANs, WAN and route policy profiles and traffic tables),
+     * and what the ONU has set now, from its running configuration. Only reads.
      *
      * @param  array<string, mixed>  $olt
-     * @return array{vlans:list<int>,wanProfiles:list<array{id:int,name:string,bound:int}>,routeProfiles:list<array{id:int,name:string,bound:int}>}
+     * @param  array<string, mixed>  $onu
+     * @return array<string, mixed>
      */
-    public static function omciOptions(array $olt): array
+    public static function omciOptions(array $olt, array $onu): array
     {
         if (!self::canRead($olt)) {
             throw new RuntimeException('This needs telnet turned on for this OLT, under Edit.');
         }
-        $out = Olts::cli($olt, 60.0)->read(['display vlan all', 'display ont wan-profile all', 'display ont policy-route-profile all']);
+        $out = Olts::cli($olt, 90.0)->read([
+            'display vlan all', 'display ont wan-profile all', 'display ont policy-route-profile all', 'display traffic table ip from-index 0',
+            sprintf('display current-configuration ont %d/%d/%d %d', $onu['frame'], $onu['slot'], $onu['port'], $onu['ont_id']),
+        ]);
         $vlans = array_column(HuaweiCli::vlans($out[0]), 'id');
         if (!$vlans) {
             throw new RuntimeException('The OLT did not list its VLANs. Check that the telnet user may read them.');
         }
         sort($vlans);
-        return ['vlans' => $vlans, 'wanProfiles' => HuaweiCli::profiles($out[1]), 'routeProfiles' => HuaweiCli::profiles($out[2])];
+        return [
+            'vlans' => $vlans, 'wanProfiles' => HuaweiCli::profiles($out[1]), 'routeProfiles' => HuaweiCli::profiles($out[2]),
+            'trafficTables' => HuaweiCli::trafficTables($out[3]), 'state' => self::stateFrom($out[4], $onu),
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $onu
+     * @return array<string, mixed> the ONU's OMCI settings, from "display current-configuration ont"
+     */
+    private static function stateFrom(string $output, array $onu): array
+    {
+        $config = HuaweiCli::configText($output);
+        if ($config === '' || !str_contains($config, HuaweiCli::serialForCli((string) $onu['sn']) ?? "\0")) {
+            throw new RuntimeException('The OLT no longer has this ONU at ' . Olts::position($onu) . '. Use Read now on the OLT\'s page.');
+        }
+        return HuaweiCli::onuConfig($config, (int) $onu['port'], (int) $onu['ont_id']);
+    }
+
+    /**
+     * @param  array<string, mixed>  $onu
+     * @return array<string, mixed>
+     */
+    private static function state(OltTelnet $t, array $onu): array
+    {
+        return self::stateFrom($t->command(sprintf('display current-configuration ont %d/%d/%d %d', $onu['frame'], $onu['slot'], $onu['port'], $onu['ont_id'])), $onu);
+    }
+
+    /** @param  list<int>  $wanted */
+    private static function requireVlans(OltTelnet $t, array $wanted): void
+    {
+        $have = array_column(HuaweiCli::vlans($t->command('display vlan all')), 'id');
+        foreach ($wanted as $vlan) {
+            if (!in_array($vlan, $have, true)) {
+                throw new RuntimeException('The OLT has no VLAN ' . $vlan . '. Add it on the OLT\'s page first. Nothing was changed.');
+            }
+        }
+    }
+
+    /**
+     * Turns a routing ONU into a bridge: takes off exactly the internet connections, route policy and LAN routing its
+     * running configuration shows, then puts each LAN port's untagged traffic on the VLAN.
+     *
+     * @param  array<string, mixed>  $olt
+     * @param  array<string, mixed>  $onu
+     */
+    public static function bridge(array $olt, array $onu, int $vlan): string
+    {
+        self::requireChange($olt);
+        if ($vlan < 1 || $vlan > 4094) {
+            throw new RuntimeException('Choose a VLAN from 1 to 4094.');
+        }
+        [$p, $n] = [(int) $onu['port'], (int) $onu['ont_id']];
+        $sent = [];
+        [$removed, $lan] = self::session($olt, static function (OltTelnet $t) use ($onu, $vlan, $p, $n, &$sent): array {
+            $info = self::verify($t, $onu);
+            self::requireVlans($t, [$vlan]);
+            $state = self::state($t, $onu);
+            $lan = 0;
+            if (preg_match('/^\d+$/', trim((string) ($info['Service profile ID'] ?? '')))) {
+                $lan = (int) HuaweiCli::ethPorts($t->command('display ont-srvprofile gpon profile-id ' . (int) trim($info['Service profile ID'])));
+            }
+            $lan = min(8, max($lan, ...array_keys($state['ports']), ...[0]));
+            if ($lan === 0) {
+                throw new RuntimeException('The OLT does not say how many LAN ports this ONU has. Nothing was changed.');
+            }
+            $t->command('config');
+            $t->command(sprintf('interface gpon %d/%d', $onu['frame'], $onu['slot']));
+            $removed = 0;
+            foreach ($state['ports'] as $eth => $port) {
+                if ($port['route']) {
+                    self::send($t, "ont port route $p $n eth $eth disable", $sent);
+                }
+            }
+            if ($state['routePolicy'] !== null) {
+                self::send($t, "undo ont policy-route-config $p $n", $sent);
+            }
+            foreach ($state['wans'] as $index => $wan) {
+                if ($wan['profile'] !== null) {
+                    self::send($t, "undo ont wan-config $p $n ip-index $index", $sent);
+                }
+                if ($wan['internet']) {
+                    self::send($t, "undo ont internet-config $p $n ip-index $index", $sent);
+                }
+                self::send($t, "undo ont ipconfig $p $n ip-index $index", $sent);
+                $removed++;
+            }
+            for ($eth = 1; $eth <= $lan; $eth++) {
+                if (($state['ports'][$eth]['native'] ?? null) !== $vlan) {
+                    self::send($t, "ont port native-vlan $p $n eth $eth vlan $vlan priority 0", $sent);
+                }
+            }
+            return [$removed, $lan];
+        });
+        self::done($olt, $onu, 'onu_bridge', $sent, ['vlan' => $vlan]);
+        return 'The ONU now bridges: ' . ($removed ? 'its internet connection was taken off, and ' : '') . 'LAN ports 1 to ' . $lan . ' put untagged traffic on VLAN ' . $vlan . '.';
+    }
+
+    /**
+     * Sets one LAN port's mode: LAN (routed through the ONU's connection), Access (untagged on one VLAN), Trunk (tagged
+     * VLANs, and untagged on one too for hybrid) or Transparent. Only what differs from the running configuration is sent.
+     *
+     * @param  array<string, mixed>  $olt
+     * @param  array<string, mixed>  $onu
+     * @param  list<int>  $tagged
+     */
+    public static function ethPort(array $olt, array $onu, int $eth, string $mode, ?int $native, array $tagged): string
+    {
+        self::requireChange($olt);
+        if (!in_array($mode, ['lan', 'access', 'trunk', 'transparent'], true)) {
+            throw new RuntimeException('Choose the port mode: LAN, Access, Trunk or Transparent.');
+        }
+        $tagged = array_values(array_unique(array_map('intval', $tagged)));
+        sort($tagged);
+        foreach ([...$tagged, ...($native === null ? [] : [$native])] as $vlan) {
+            if ($vlan < 1 || $vlan > 4094) {
+                throw new RuntimeException('VLANs go from 1 to 4094.');
+            }
+        }
+        if ($mode === 'access' && $native === null) {
+            throw new RuntimeException('Choose the VLAN for an access port.');
+        }
+        if ($mode === 'trunk' && (!$tagged || count($tagged) > 16)) {
+            throw new RuntimeException('Choose from 1 to 16 tagged VLANs for a trunk port.');
+        }
+        if ($mode !== 'trunk') {
+            $tagged = [];
+        }
+        if (!in_array($mode, ['access', 'trunk'], true)) {
+            $native = null;
+        }
+        [$p, $n] = [(int) $onu['port'], (int) $onu['ont_id']];
+        $sent = [];
+        self::session($olt, static function (OltTelnet $t) use ($onu, $eth, $mode, $native, $tagged, $p, $n, &$sent): void {
+            self::verify($t, $onu);
+            self::requireVlans($t, [...$tagged, ...($native === null ? [] : [$native])]);
+            $now = self::state($t, $onu)['ports'][$eth] ?? ['route' => false, 'native' => null, 'tagged' => [], 'transparent' => false];
+            $t->command('config');
+            $t->command(sprintf('interface gpon %d/%d', $onu['frame'], $onu['slot']));
+            if (!in_array($eth, array_column(HuaweiCli::lanSettings($t->command("display ont port attribute $p $n eth")), 'port'), true)) {
+                throw new RuntimeException('This ONU has no LAN port ' . $eth . '.');
+            }
+            // What goes first, then what comes.
+            if ($now['transparent'] && $mode !== 'transparent') {
+                self::send($t, "undo ont port vlan $p $n eth $eth transparent", $sent);
+            }
+            foreach (array_diff($now['tagged'], $tagged) as $vlan) {
+                self::send($t, "undo ont port vlan $p $n eth $eth translation $vlan user-vlan $vlan", $sent);
+            }
+            if ($now['route'] && $mode !== 'lan') {
+                self::send($t, "ont port route $p $n eth $eth disable", $sent);
+            }
+            if ($mode === 'lan' && !$now['route']) {
+                self::send($t, "ont port route $p $n eth $eth enable", $sent);
+            }
+            if ($native !== null && $now['native'] !== $native) {
+                self::send($t, "ont port native-vlan $p $n eth $eth vlan $native priority 0", $sent);
+            }
+            foreach (array_diff($tagged, $now['tagged']) as $vlan) {
+                self::send($t, "ont port vlan $p $n eth $eth translation $vlan user-vlan $vlan", $sent);
+            }
+            if ($mode === 'transparent' && !$now['transparent']) {
+                self::send($t, "ont port vlan $p $n eth $eth transparent", $sent);
+            }
+        });
+        if (!$sent) {
+            return 'LAN port ' . $eth . ' already has these settings. Nothing was sent.';
+        }
+        self::done($olt, $onu, 'onu_eth_port', $sent, ['lan_port' => $eth, 'mode' => $mode]);
+        $words = ['lan' => 'routes through the ONU', 'access' => 'puts untagged traffic on VLAN ' . $native, 'trunk' => 'carries tagged VLANs ' . implode(', ', $tagged) . ($native !== null ? ' and untagged VLAN ' . $native : ''), 'transparent' => 'passes all traffic as it comes'];
+        return 'LAN port ' . $eth . ' now ' . $words[$mode] . '.';
+    }
+
+    /**
+     * Adds a speed to the OLT: a traffic table with the same committed and peak rate. Refuses a speed the OLT already has.
+     *
+     * @param  array<string, mixed>  $olt
+     * @return array{id:int,kbps:int}
+     */
+    public static function addSpeed(array $olt, int $mbps): array
+    {
+        self::requireChange($olt);
+        if ($mbps < 1 || $mbps > 10000) {
+            throw new RuntimeException('Enter a speed from 1 to 10000 Mbit/s.');
+        }
+        $kbps = $mbps * 1024;
+        $sent = [];
+        $id = self::session($olt, static function (OltTelnet $t) use ($kbps, $mbps, &$sent): int {
+            $list = 'display traffic table ip from-index 0';
+            $tables = HuaweiCli::trafficTables($t->command($list));
+            foreach ($tables as $table) {
+                if ($table['pir'] === (string) $kbps) {
+                    throw new RuntimeException('The OLT already has ' . $mbps . 'M as traffic table ' . $table['id'] . '.');
+                }
+            }
+            $used = array_column($tables, 'id');
+            // 0 to 9 are left to the OLT's own tables.
+            for ($id = 10; in_array($id, $used, true); $id++);
+            if ($id > 65535) {
+                throw new RuntimeException('The OLT has no free traffic table number.');
+            }
+            $t->command('config');
+            self::send($t, "traffic table ip index $id cir $kbps pir $kbps priority 0 priority-policy local-setting", $sent);
+            $now = array_column(HuaweiCli::trafficTables($t->command($list)), null, 'id')[$id] ?? null;
+            if ($now === null || $now['pir'] !== (string) $kbps) {
+                throw new RuntimeException('The OLT accepted the command, but does not list traffic table ' . $id . ' at ' . $mbps . 'M.');
+            }
+            return $id;
+        });
+        // Shown at once on the ONU pages; the next inventory read replaces it with the OLT's own list.
+        $inventory = OltInventory::saved($olt);
+        $inventory['trafficTables'] = [...($inventory['trafficTables'] ?? []), ['id' => $id, 'cir' => (string) $kbps, 'pir' => (string) $kbps]];
+        Db::exec('UPDATE olts SET inventory=? WHERE id=?', [json_encode($inventory), $olt['id']]);
+        Audit::log('olt_traffic_table_add', 'olt', (string) $olt['id'], null, ['olt' => (string) $olt['name'], 'traffic_table' => $id, 'kbps' => $kbps, 'commands' => $sent]);
+        return ['id' => $id, 'kbps' => $kbps];
     }
 
     /**

@@ -222,8 +222,8 @@ Route::middleware('frweb.auth')->group(function () {
             // The only routes that change an OLT, and only for an OLT with "Allow changes from the portal" on.
             Route::get('/olts/{id}/provision', [OnuController::class, 'provision'])->whereNumber('id');
             Route::post('/olts/{id}/provision', [OnuController::class, 'add'])->whereNumber('id');
-            Route::post('/olts/{id}/onus/{onu}/{action}', [OnuController::class, 'change'])->whereNumber(['id', 'onu'])->whereIn('action', ['reboot', 'disable', 'enable', 'describe', 'wan', 'delete', 'factory-reset']);
-            Route::post('/olts/{id}/onus/{onu}/{what}/{number}', [OnuController::class, 'setting'])->whereNumber(['id', 'onu', 'number'])->whereIn('what', ['service-ports', 'lan', 'lan-vlan']);
+            Route::post('/olts/{id}/onus/{onu}/{action}', [OnuController::class, 'change'])->whereNumber(['id', 'onu'])->whereIn('action', ['reboot', 'disable', 'enable', 'describe', 'wan', 'bridge', 'add-speed', 'delete', 'factory-reset']);
+            Route::post('/olts/{id}/onus/{onu}/{what}/{number}', [OnuController::class, 'setting'])->whereNumber(['id', 'onu', 'number'])->whereIn('what', ['service-ports', 'lan', 'lan-vlan', 'eth']);
         });
         Route::get('/olts/{id}/onus/{onu}', [OnuController::class, 'show'])->whereNumber(['id', 'onu']);
         Route::get('/olts/{id}/onus/{onu}/live', [OnuController::class, 'live'])->whereNumber(['id', 'onu']);

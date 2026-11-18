@@ -305,6 +305,60 @@ final class HuaweiCli
         return $lines ? trim(implode("\n", $lines)) . "\n" : '';
     }
 
+    /**
+     * What one ONU has set over OMCI, read from its part of the running configuration: its internet connections
+     * (by ip-index), its route policy, and each LAN port's routing and VLANs. Lines the OLT wrapped are joined first.
+     *
+     * @return array{mode:string,wans:array<int,array{mode:string,vlan:int,priority:int,user:string,internet:bool,profile:?int}>,routePolicy:?int,ports:array<int,array{route:bool,native:?int,tagged:list<int>,transparent:bool}>}
+     */
+    public static function onuConfig(string $config, int $port, int $ont): array
+    {
+        $lines = [];
+        foreach (explode("\n", str_replace("\r", '', $config)) as $line) {
+            if ($lines && $line !== '' && !preg_match('/^[\s#\[<]|^return\b/', $line)) {
+                $lines[array_key_last($lines)] .= ' ' . trim($line);
+            } else {
+                $lines[] = trim($line);
+            }
+        }
+        $at = "$port $ont";
+        $ipconfig = $internet = $profiles = $route = $native = $tagged = $transparent = [];
+        $routePolicy = null;
+        foreach ($lines as $line) {
+            $line = (string) preg_replace('/\s+/', ' ', $line);
+            if (preg_match("/^ont ipconfig $at ip-index (\\d+) (dhcp|pppoe|static)\\b.*?\\bvlan (\\d+)(?: priority (\\d+))?(?:.*\\busername (\\S+))?/", $line, $m)) {
+                $ipconfig[(int) $m[1]] = ['mode' => $m[2], 'vlan' => (int) $m[3], 'priority' => (int) ($m[4] ?? 0), 'user' => trim($m[5] ?? '', '"')];
+            } elseif (preg_match("/^ont internet-config $at ip-index (\\d+)$/", $line, $m)) {
+                $internet[(int) $m[1]] = true;
+            } elseif (preg_match("/^ont wan-config $at ip-index (\\d+) profile-id (\\d+)$/", $line, $m)) {
+                $profiles[(int) $m[1]] = (int) $m[2];
+            } elseif (preg_match("/^ont policy-route-config $at profile-id (\\d+)$/", $line, $m)) {
+                $routePolicy = (int) $m[1];
+            } elseif (preg_match("/^ont port route $at eth (\\d+) (enable|disable)$/", $line, $m)) {
+                $route[(int) $m[1]] = $m[2] === 'enable';
+            } elseif (preg_match("/^ont port native-vlan $at eth (\\d+) vlan (\\d+)/", $line, $m)) {
+                $native[(int) $m[1]] = (int) $m[2];
+            } elseif (preg_match("/^ont port vlan $at eth (\\d+) transparent$/", $line, $m)) {
+                $transparent[(int) $m[1]] = true;
+            } elseif (preg_match("/^ont port vlan $at eth (\\d+) (?:translation )?(\\d+)(?: user-vlan \\d+)?$/", $line, $m)) {
+                $tagged[(int) $m[1]][] = (int) $m[2];
+            }
+        }
+        // A connection counts only with its ipconfig line: the rest of it hangs on that.
+        $wans = [];
+        foreach ($ipconfig as $index => $wan) {
+            $wans[$index] = $wan + ['internet' => isset($internet[$index]), 'profile' => $profiles[$index] ?? null];
+        }
+        ksort($wans);
+        $ports = [];
+        foreach (array_unique([...array_keys($route), ...array_keys($native), ...array_keys($tagged), ...array_keys($transparent)]) as $eth) {
+            $ports[$eth] = ['route' => $route[$eth] ?? false, 'native' => $native[$eth] ?? null, 'tagged' => $tagged[$eth] ?? [], 'transparent' => $transparent[$eth] ?? false];
+        }
+        ksort($ports);
+        $mode = $wans ? 'routing' : ($native || $tagged || $transparent ? 'bridging' : 'none');
+        return ['mode' => $mode, 'wans' => $wans, 'routePolicy' => $routePolicy, 'ports' => $ports];
+    }
+
     /** The OLT prints a dash for "nothing". */
     public static function value(string $raw): string
     {
