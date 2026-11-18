@@ -523,16 +523,18 @@ final class MonitoringData
      * The OLT's hardware graphs.
      *
      * @param  array<string, mixed>  $olt
+     * @param  array<string, mixed>|null  $port  a row of olt_ports, for one port's traffic
      * @return array<string, mixed>
      */
-    public static function oltHardwareChart(array $olt, string $kind, string $range): array
+    public static function oltHardwareChart(array $olt, string $kind, string $range, ?array $port = null): array
     {
         $config = match ($kind) {
+            'port' => ['title' => 'Traffic on ' . ($port['name'] ?? 'the port'), 'unit' => 'bps', 'columns' => ['s0' => 'in_bps', 's1' => 'out_bps'], 'names' => ['s0' => 'In', 's1' => 'Out'], 'note' => ''],
             'cpu' => ['title' => 'Control card CPU and memory', 'unit' => 'pct', 'fixed_max' => 100.0, 'columns' => ['cpu' => 'cpu_pct', 'mem' => 'mem_pct'], 'names' => ['cpu' => 'CPU', 'mem' => 'Memory'], 'note' => '% used'],
             'temperature' => ['title' => 'Hottest card', 'unit' => 'celsius', 'zero' => false, 'columns' => ['s0' => 'temperature_c'], 'names' => ['s0' => 'Temperature'], 'note' => '°C'],
             default => ['title' => 'Uplink traffic', 'unit' => 'bps', 'columns' => ['s0' => 'in_bps', 's1' => 'out_bps'], 'names' => ['s0' => 'In', 's1' => 'Out'], 'note' => 'All uplinks together'],
         };
-        $series = OltMonitor::hardwareSeries((int) $olt['id'], $range, $config['columns']);
+        $series = OltMonitor::hardwareSeries((int) $olt['id'], $range, $config['columns'], $kind === 'port' ? (int) ($port['if_index'] ?? 0) : null);
         $latest = self::latestValues($series['points'], array_keys($config['columns']));
         $show = match ($config['unit']) {
             'pct' => static fn (?float $v) => self::pct($v),

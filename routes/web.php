@@ -214,6 +214,9 @@ Route::middleware('frweb.auth')->group(function () {
             Route::post('/olts/{id}/sync', [OltController::class, 'sync'])->whereNumber('id');
             Route::post('/olts/{id}/delete', [OltController::class, 'delete'])->whereNumber('id');
             Route::post('/olts/{id}/backup', [OltController::class, 'backup'])->whereNumber('id');
+            Route::get('/olts/{id}/cli', [OltController::class, 'cli'])->whereNumber('id');
+            Route::post('/olts/{id}/ports/{ifIndex}/{action}', [OltController::class, 'port'])->whereNumber(['id', 'ifIndex'])->whereIn('action', ['autofind-on', 'autofind-off', 'restart-onus', 'off', 'on']);
+            Route::post('/olts/{id}/cards/{frame}/{slot}/restart', [OltController::class, 'card'])->whereNumber(['id', 'frame', 'slot']);
             Route::get('/olts/{id}/backups/{backup}', [OltController::class, 'backupFile'])->whereNumber(['id', 'backup']);
             // The only routes that change an OLT, and only for an OLT with "Allow changes from the portal" on.
             Route::get('/olts/{id}/provision', [OnuController::class, 'provision'])->whereNumber('id');

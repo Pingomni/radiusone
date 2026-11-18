@@ -227,6 +227,81 @@ final class OltManager
     }
 
     /**
+     * One change on a PON port: autofind on or off, every ONU restarted, or the port itself turned off or on.
+     *
+     * @param  array<string, mixed>  $olt
+     * @return string what happened, for the operator
+     */
+    public static function port(array $olt, int $frame, int $slot, int $port, string $action): string
+    {
+        self::requireChange($olt);
+        $where = "$frame/$slot/$port";
+        [$command, $confirm, $message] = match ($action) {
+            'autofind-on' => ["port $port ont-auto-find enable", false, "Autofind is on for $where: new ONUs plugged in there show under New ONUs."],
+            'autofind-off' => ["port $port ont-auto-find disable", false, "Autofind is off for $where: new ONUs plugged in there are no longer listed."],
+            'restart-onus' => ["ont reset $port all", true, "Every ONU on $where is restarting. They are back in a minute or two."],
+            'off' => ["shutdown $port", false, "PON port $where is turned off. Every ONU on it is offline until you turn it on."],
+            'on' => ["undo shutdown $port", false, "PON port $where is turned on. Its ONUs come back within a few minutes."],
+            default => throw new RuntimeException('Unknown action.'),
+        };
+        $sent = [];
+        $now = self::session($olt, static function (OltTelnet $t) use ($frame, $slot, $port, $command, $confirm, $where, &$sent): array {
+            $t->command('config');
+            $t->command("interface gpon $frame/$slot");
+            // The port must be one the OLT itself lists on that card.
+            $before = HuaweiCli::portBlocks($t->command("display port info $port"))[$where] ?? null;
+            if ($before === null) {
+                throw new RuntimeException("The OLT has no PON port $where.");
+            }
+            self::send($t, $command, $sent, $confirm);
+            $after = HuaweiCli::portBlocks($t->command("display port info $port"));
+            return array_key_exists($where, $after) ? $after[$where] : [];
+        });
+        // Believe the OLT, not the absence of an error.
+        $autofind = isset($now['Autofind']) ? strtolower($now['Autofind']) === 'enable' : null;
+        $admin = isset($now['Admin State']) ? strtolower($now['Admin State']) === 'on' : null;
+        $wrong = match ($action) {
+            'autofind-on' => $autofind === false, 'autofind-off' => $autofind === true, 'off' => $admin === true, 'on' => $admin === false, default => false,
+        };
+        if ($wrong) {
+            throw new RuntimeException("The OLT accepted the command, but port $where still shows the old setting.");
+        }
+        $inventory = OltInventory::saved($olt);
+        if (isset($inventory['pon'][$where])) {
+            $saved = (array) $inventory['pon'][$where];
+            $inventory['pon'][$where] = ['autofind' => $autofind ?? ($saved['autofind'] ?? null), 'admin' => $admin ?? ($saved['admin'] ?? null)] + $saved;
+            Db::exec('UPDATE olts SET inventory=? WHERE id=?', [json_encode($inventory, JSON_INVALID_UTF8_SUBSTITUTE), $olt['id']]);
+        }
+        Db::exec('UPDATE olts SET sync_requested_at=NOW() WHERE id=?', [$olt['id']]);
+        Audit::log('port_' . str_replace('-', '_', $action), 'olt', (string) $olt['id'], null, ['port' => $where, 'commands' => $sent]);
+        return $message;
+    }
+
+    /**
+     * Restarts one card. Everything on it is offline until it is back.
+     *
+     * @param  array<string, mixed>  $olt
+     * @param  array<string, mixed>  $board  a row of olt_boards
+     */
+    public static function restartCard(array $olt, array $board): void
+    {
+        self::requireChange($olt);
+        $where = (int) $board['frame'] . '/' . (int) $board['slot'];
+        $sent = [];
+        self::session($olt, static function (OltTelnet $t) use ($board, $where, &$sent): void {
+            // The card in that slot must still be the one the portal showed.
+            $name = HuaweiCli::fields($t->command('display board ' . $where))['Board Name'] ?? '';
+            if ($name === '' || strcasecmp(trim($name), trim((string) $board['name'])) !== 0) {
+                throw new RuntimeException('The OLT now has ' . ($name === '' ? 'no card' : 'card ' . trim($name)) . ' in slot ' . $where . ', not ' . $board['name'] . '. Nothing was restarted. Use Read now, then try again.');
+            }
+            $t->command('config');
+            self::send($t, 'board reset ' . $where, $sent, true);
+        });
+        Db::exec('UPDATE olts SET sync_requested_at=NOW() WHERE id=?', [$olt['id']]);
+        Audit::log('card_restart', 'olt', (string) $olt['id'], null, ['card' => $board['name'] . ' in ' . $where, 'commands' => $sent]);
+    }
+
+    /**
      * What the ONU says right now. Only reads, so it works with changes turned off.
      *
      * @param  array<string, mixed>  $olt

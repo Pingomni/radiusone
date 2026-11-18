@@ -84,11 +84,15 @@ final class OltMonitor
                 }
                 Db::exec('INSERT INTO olt_ports (olt_id,if_index,name,alias,kind,admin_up,oper_up,speed_mbps,in_octets,out_octets,in_bps,out_bps,in_errors,out_errors,sampled_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
                     [$id, $p['if_index'], $p['name'], $p['alias'], $p['kind'], $p['admin_up'], $p['oper_up'], $p['speed_mbps'], $p['in_octets'], $p['out_octets'], $in, $out, $p['in_errors'], $p['out_errors'], $now]);
+                if ($in !== null || $out !== null) {
+                    Db::exec('INSERT IGNORE INTO olt_port_samples (olt_id,if_index,sampled_at,in_bps,out_bps) VALUES (?,?,?,?,?)', [$id, $p['if_index'], $now, $in, $out]);
+                }
             }
             $main = self::mainBoard($read['boards']);
             $temperatures = array_filter(array_column($read['boards'], 'temperature_c'), static fn ($v) => $v !== null);
             Db::exec('INSERT IGNORE INTO olt_hw_samples (olt_id,sampled_at,cpu_pct,mem_pct,temperature_c,in_bps,out_bps) VALUES (?,?,?,?,?,?,?)', [$id, $now, $main['cpu_pct'] ?? null, $main['mem_pct'] ?? null, $temperatures ? max($temperatures) : null, $uplinkIn, $uplinkOut]);
             Db::exec('DELETE FROM olt_hw_samples WHERE sampled_at<? LIMIT 5000', [$now - self::RETENTION_SECONDS]);
+            Db::exec('DELETE FROM olt_port_samples WHERE sampled_at<? LIMIT 20000', [$now - self::RETENTION_SECONDS]);
             $uptime = $read['uptime_s'] ?? null;
             Db::exec('UPDATE olts SET power_w=?,booted_at=' . ($uptime === null ? 'booted_at' : 'FROM_UNIXTIME(?)') . ' WHERE id=?', [$read['power_w'] ?? null, ...($uptime === null ? [] : [$now - $uptime]), $id]);
             $pdo->commit();
@@ -299,13 +303,15 @@ final class OltMonitor
      * @param  array<string, string>  $columns  chart series key => column of olt_hw_samples
      * @return array{start:int,end:int,bucket:int,points:list<array<string, float|int|null>>}
      */
-    public static function hardwareSeries(int $oltId, string $range, array $columns): array
+    public static function hardwareSeries(int $oltId, string $range, array $columns, ?int $ifIndex = null): array
     {
+        // One port's traffic comes from its own table; everything else from the OLT's hardware samples.
+        [$table, $where, $extra] = $ifIndex === null ? ['olt_hw_samples', '', []] : ['olt_port_samples', ' AND if_index=?', [$ifIndex]];
         [$length, $bucket] = self::RANGES[$range];
         $end = intdiv(time(), $bucket) * $bucket + $bucket;
         $start = $end - $length;
         $select = implode(',', array_map(static fn (string $key, string $column) => "AVG($column) AS $key", array_keys($columns), $columns));
-        $rows = Db::select("SELECT FLOOR(sampled_at/?)*? AS bucket,$select FROM olt_hw_samples WHERE olt_id=? AND sampled_at>=? AND sampled_at<? GROUP BY FLOOR(sampled_at/?) ORDER BY bucket", [$bucket, $bucket, $oltId, $start, $end, $bucket]);
+        $rows = Db::select("SELECT FLOOR(sampled_at/?)*? AS bucket,$select FROM $table WHERE olt_id=?$where AND sampled_at>=? AND sampled_at<? GROUP BY FLOOR(sampled_at/?) ORDER BY bucket", [$bucket, $bucket, $oltId, ...$extra, $start, $end, $bucket]);
         $byBucket = array_column($rows, null, 'bucket');
         $points = [];
         for ($t = $start; $t < $end; $t += $bucket) {

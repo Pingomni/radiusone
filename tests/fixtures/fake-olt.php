@@ -123,7 +123,7 @@ $ontInfo = static function (string $key) use (&$onts): string {
         . "  Service profile ID   : {$o['srv']}\n  Service profile name : HG8346M\n  -----------------------------------------------------------------------------\n";
 };
 // A command the command line knows beyond the first reads. Returns false for one it does not.
-$cli = static function (string $text) use (&$mode, &$state, &$onts, &$autofind, &$servicePorts, &$pending, $failing, $say, $profiles, $portRows, $ontInfo): bool {
+$cli = static function (string $text) use (&$mode, &$state, &$onts, &$autofind, &$servicePorts, &$pending, $failing, $say, $profiles, $portRows, $ontInfo, $config): bool {
     foreach ($failing as $prefix) {
         if (str_starts_with($text, $prefix)) {
             $say("\n  Failure: Made to fail by the test\n");
@@ -191,7 +191,44 @@ $cli = static function (string $text) use (&$mode, &$state, &$onts, &$autofind, 
         $say("\n  ----------------------------------------------------------------------------\n");
         return true;
     }
+    if ($interface !== null && preg_match('/^(port (\d+) ont-auto-find (enable|disable)|(undo )?shutdown (\d+))$/', $text, $m)) {
+        // Port settings changed by a test, read back by "display port info".
+        $settings = is_file($config['log'] . '.ports') ? (array) json_decode((string) file_get_contents($config['log'] . '.ports'), true) : [];
+        if ($m[2] !== '') {
+            $settings["$interface/$m[2]"]['autofind'] = $m[3] === 'enable';
+        } else {
+            $settings["$interface/$m[5]"]['admin'] = ($m[4] ?? '') !== '';
+        }
+        file_put_contents($config['log'] . '.ports', json_encode($settings));
+        return true;
+    }
+    if ($interface !== null && preg_match('/^ont reset (\d+) all$/', $text)) {
+        $state = 'question';
+        $pending = static function () use ($say): void {
+            $say("\n  Number of ONTs that can be reset: 2, success: 2\n");
+        };
+        $say("\n Are you sure to reset the ONT(s)? (y/n)[n]:");
+        return true;
+    }
+    if ($mode === 'config' && preg_match('~^board reset \d+/\d+$~', $text)) {
+        $state = 'question';
+        $pending = static function () use ($say): void {
+            $say("\n  Board reset, please wait...\n");
+        };
+        $say("\n Are you sure to reset board? (y/n)[n]:");
+        return true;
+    }
     if ($interface !== null && preg_match('/^display port info (\d+)$/', $text, $m)) {
+        $settings = is_file($config['log'] . '.ports') ? (array) json_decode((string) file_get_contents($config['log'] . '.ports'), true) : [];
+        $set = $settings["$interface/$m[1]"] ?? [];
+        if ((int) $m[1] > 15) {
+            $say("\n  Failure: The port does not exist\n");
+            return true;
+        }
+        $say("\n  -----------------------------------------------------------\n  F/S/P                                      $interface/$m[1]\n  Min distance(km)                           0\n  Max distance(km)                           20\n  Autofind                                   " . (($set['autofind'] ?? $m[1] === '0') ? 'Enable' : 'Disable') . "\n  Admin State                                " . (($set['admin'] ?? true) ? 'On' : 'Off') . "\n  -----------------------------------------------------------\n");
+        return true;
+    }
+    if ($interface !== null && preg_match('/^display port info-unused (\d+)$/', $text, $m)) {
         $say("\n  -----------------------------------------------------------\n  F/S/P                                      $interface/$m[1]\n  Min distance(km)                           0\n  Max distance(km)                           20\n  Autofind                                   " . ($m[1] === '0' ? 'Enable' : 'Disable') . "\n  Admin State                                On\n  -----------------------------------------------------------\n");
         return true;
     }

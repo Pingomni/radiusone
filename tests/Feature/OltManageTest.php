@@ -464,6 +464,102 @@ final class OltManageTest extends TestCase
         $this->assertNotContains('display current-configuration', $this->commands());
     }
 
+    public function test_pon_port_actions_send_one_command_and_believe_the_olt(): void
+    {
+        $this->startAgent();
+        $olt = $this->olt();
+        $this->ports($olt);
+        OltInventory::read($olt);
+        file_put_contents($this->log, '');
+        $this->actingAsOperator();
+        $base = "/olts/{$olt['id']}/ports/" . self::PORT_A;
+        $this->post("$base/autofind-off")->assertSessionHas('flash.type', 'success');
+        $this->assertFalse(OltInventory::saved(Olts::find((int) $olt['id']))['pon']['0/1/0']['autofind']);
+        $this->post("$base/autofind-on")->assertSessionHas('flash.type', 'success');
+        $this->post("$base/restart-onus")->assertSessionHas('flash.type', 'success');
+        $this->post("$base/off")->assertSessionHas('flash.type', 'success');
+        $this->assertFalse(OltInventory::saved(Olts::find((int) $olt['id']))['pon']['0/1/0']['admin']);
+        $this->post("$base/on")->assertSessionHas('flash.type', 'success');
+        $this->assertSame(['port 0 ont-auto-find disable', 'port 0 ont-auto-find enable', 'ont reset 0 all', 'shutdown 0', 'undo shutdown 0'], $this->changes());
+        $this->assertSame(5, (int) Db::value('SELECT COUNT(*) FROM audit_logs WHERE action LIKE "port\_%"'));
+        $this->get('/olts/' . $olt['id'])->assertInertia(fn ($p) => $p->where('history.0.action', 'port_on')->where('history.0.detail', 'undo shutdown 0'));
+        // An uplink is not a PON port, and nothing else may be asked for.
+        $this->post("/olts/{$olt['id']}/ports/7/autofind-off")->assertNotFound();
+        $this->post("$base/delete")->assertNotFound();
+        // NOC may manage, but turning a whole port off is for people who may delete.
+        $this->actingAsOperator('noc');
+        $this->post("$base/off")->assertForbidden();
+        $this->actingAsOperator('view');
+        $this->post("$base/autofind-off")->assertForbidden();
+        $this->assertCount(5, $this->changes());
+    }
+
+    public function test_port_and_card_actions_need_changes_allowed(): void
+    {
+        $this->startAgent();
+        $olt = $this->olt(false);
+        $this->ports($olt);
+        $this->insertRow('olt_boards', ['olt_id' => $olt['id'], 'frame' => 0, 'slot' => 8, 'name' => 'H905MPLB', 'seen_at' => date('Y-m-d H:i:s')]);
+        $this->actingAsOperator();
+        $this->post("/olts/{$olt['id']}/ports/" . self::PORT_A . '/restart-onus')->assertSessionHas('flash.type', 'danger');
+        $this->post("/olts/{$olt['id']}/cards/0/8/restart")->assertSessionHas('flash.type', 'danger');
+        $this->assertSame([], $this->commands());
+    }
+
+    public function test_restarting_a_card_checks_which_card_is_in_the_slot(): void
+    {
+        $this->startAgent();
+        $olt = $this->olt();
+        $this->insertRow('olt_boards', ['olt_id' => $olt['id'], 'frame' => 0, 'slot' => 8, 'name' => 'H905MPLB', 'seen_at' => date('Y-m-d H:i:s')]);
+        $this->insertRow('olt_boards', ['olt_id' => $olt['id'], 'frame' => 0, 'slot' => 2, 'name' => 'H901GPHF', 'seen_at' => date('Y-m-d H:i:s')]);
+        $this->actingAsOperator('noc');
+        $this->post("/olts/{$olt['id']}/cards/0/8/restart")->assertForbidden();
+        $this->actingAsOperator();
+        // The portal's list says GPHF is in slot 2, but the OLT says another card is there.
+        $this->post("/olts/{$olt['id']}/cards/0/2/restart")->assertSessionHas('flash.message', fn (string $m) => str_contains($m, 'Nothing was restarted'));
+        $this->assertSame([], $this->changes());
+        $this->post("/olts/{$olt['id']}/cards/0/8/restart")->assertSessionHas('flash.type', 'success');
+        $this->assertSame(['board reset 0/8'], $this->changes());
+        $this->post("/olts/{$olt['id']}/cards/0/5/restart")->assertNotFound();
+    }
+
+    public function test_the_command_line_runs_display_commands_only(): void
+    {
+        $this->startAgent();
+        $olt = $this->olt(false);
+        $this->actingAsOperator();
+        $this->get("/olts/{$olt['id']}/cli?command=" . urlencode('display  version'))->assertOk()->assertJsonPath('ok', true)->assertJsonPath('output', fn (string $o) => str_contains($o, 'PRODUCT : MA5800-X7'));
+        $this->assertSame(1, (int) Db::value('SELECT COUNT(*) FROM audit_logs WHERE action="cli"'));
+        file_put_contents($this->log, '');
+        foreach (['ont delete 0 3', 'config', 'display version; ont delete 0 3', 'display version | include x', 'display ont info 0 1 0 3 ?', 'undo service-port 2100'] as $bad) {
+            $this->get("/olts/{$olt['id']}/cli?command=" . urlencode($bad))->assertOk()->assertJsonPath('ok', false);
+        }
+        $this->assertSame([], array_values(array_filter($this->commands(), static fn (string $c) => !in_array($c, ['enable', 'scroll', 'quit', 'y'], true))));
+        // A line break is folded into a space, so a second line can only ever be more words of the one display command.
+        $this->get("/olts/{$olt['id']}/cli?command=" . urlencode("display version\nont delete 0 3"))->assertOk();
+        $this->assertContains('display version ont delete 0 3', $this->commands());
+        $this->assertSame([], $this->changes());
+        $this->actingAsOperator('view');
+        $this->get("/olts/{$olt['id']}/cli?command=display+version")->assertForbidden();
+    }
+
+    public function test_each_ports_traffic_is_kept_for_its_graph(): void
+    {
+        $this->startAgent();
+        $olt = $this->olt(false);
+        $port = ['if_index' => 7, 'name' => 'ethernet0/9/0', 'kind' => 'uplink', 'alias' => '', 'admin_up' => 1, 'oper_up' => 1, 'speed_mbps' => 1000, 'in_errors' => 0, 'out_errors' => 0];
+        OltMonitor::saveHardware($olt, ['boards' => [], 'ports' => [$port + ['in_octets' => 1000, 'out_octets' => 1000]], 'fans' => []]);
+        // No rate from a single read.
+        $this->assertSame(0, (int) Db::value('SELECT COUNT(*) FROM olt_port_samples'));
+        Db::exec('UPDATE olt_ports SET sampled_at=sampled_at-60');
+        OltMonitor::saveHardware($olt, ['boards' => [], 'ports' => [$port + ['in_octets' => 1000 + 750000, 'out_octets' => 1000 + 75000]], 'fans' => []]);
+        $sample = Db::row('SELECT * FROM olt_port_samples');
+        $this->assertEqualsWithDelta(100000, (float) $sample['in_bps'], 4000);
+        $this->actingAsOperator('view');
+        $this->get("/olts/{$olt['id']}/graph?chart=port&port=7&range=6h")->assertOk()->assertJsonStructure(['chart' => ['bucket']]);
+        $this->get("/olts/{$olt['id']}/graph?chart=port&port=999")->assertNotFound();
+    }
+
     public function test_fan_speed_power_and_uptime_come_over_snmp(): void
     {
         $tray = '1.3.6.1.4.1.2011.6.1.1';

@@ -1,5 +1,5 @@
 import { Link, router } from '@inertiajs/react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { StatCards } from '@/components/billing';
 import { PostButton } from '@/components/confirm';
 import { ChartOrMessage, type ChartPayload } from '@/components/LineChart';
@@ -7,7 +7,7 @@ import { LivePanel } from '@/components/LivePanel';
 import { OnuPower, OnuStatus, type OnuRow } from '@/components/olt';
 import { DataTable, Pagination } from '@/components/table';
 import { Tabs } from '@/components/tabs';
-import { Badge, Field, ListPanel, Panel, Select, Time } from '@/components/ui';
+import { Badge, Field, ListPanel, Panel, RowActions, Select, Time } from '@/components/ui';
 import AppLayout from '@/layouts/AppLayout';
 import { useCan } from '@/lib/auth';
 import type { Paginated } from '@/lib/types';
@@ -36,6 +36,7 @@ type HistoryRow = { at: string; who: string; action: string; what: string; detai
 const kbps = (v: number | string) => (v === 'off' ? 'No limit' : Number(v) >= 1000 ? `${Math.round(Number(v) / 100) / 10} Mbit/s` : `${v} kbit/s`);
 const ACTIONS: Record<string, string> = {
     create: 'Added to the portal', update: 'Settings changed', backup: 'Configuration copied', backup_download: 'Configuration downloaded',
+    cli: 'Display command run', card_restart: 'Card restarted', port_autofind_on: 'Autofind turned on', port_autofind_off: 'Autofind turned off', port_restart_onus: 'All ONUs on a port restarted', port_off: 'PON port turned off', port_on: 'PON port turned on',
     onu_add: 'ONU added', onu_delete: 'ONU removed', onu_reboot: 'ONU restarted', onu_disable: 'ONU turned off', onu_enable: 'ONU turned on', onu_describe: 'ONU renamed',
 };
 type Hardware = { lastRead: string | null; error: string; boards: Board[]; fans: Fan[]; ports: Port[] };
@@ -58,7 +59,43 @@ function HardwareNote({ hardware }: { hardware: Hardware }) {
     );
 }
 
-function Ports({ hardware }: { hardware: Hardware }) {
+/** One port's traffic. Fetched when opened, as the page does not carry a graph for every port. */
+function PortGraph({ title, url }: { title: string; url: string }) {
+    const [payload, setPayload] = useState<ChartPayload | null>(null);
+    const [failed, setFailed] = useState(false);
+    useEffect(() => {
+        let alive = true;
+        fetch(url, { credentials: 'same-origin', cache: 'no-store', headers: { Accept: 'application/json' } })
+            .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+            .then((data) => { if (alive) setPayload(data as ChartPayload); })
+            .catch(() => { if (alive) setFailed(true); });
+        return () => { alive = false; };
+    }, [url]);
+    if (failed) return <Panel title={title}><p className="flash warning" role="alert">The graph could not be loaded. Reload the page and try again.</p></Panel>;
+    if (!payload) return <Panel title={title}><p className="hint" role="status">Loading the graph.</p></Panel>;
+    return <LivePanel title={title} url={url} interval={60} initial={payload} className="traffic-panel" render={(data) => <ChartOrMessage payload={data} />} />;
+}
+
+function Ports({ hardware, olt, path, range }: { hardware: Hardware; olt: Olt; path: string; range: string }) {
+    const can = useCan();
+    const [shown, setShown] = useState<Port | null>(null);
+    const mayChange = olt.canChange && can('nas.manage');
+    const actions = (p: Port) => (
+        <RowActions label={`Actions for ${p.name}`}>
+            <button type="button" className="link" onClick={() => setShown(shown?.id === p.id ? null : p)}>{shown?.id === p.id ? 'Hide traffic graph' : 'Traffic graph'}</button>
+            {mayChange && p.kind === 'pon' && (
+                <>
+                    {p.pon?.autofind === false
+                        ? <PostButton action={`${path}/ports/${p.id}/autofind-on`} label="Turn autofind on" className="link" />
+                        : <PostButton action={`${path}/ports/${p.id}/autofind-off`} label="Turn autofind off" className="link" confirm={{ title: `Turn autofind off on ${p.name}?`, message: 'New ONUs plugged in on this port will no longer show under New ONUs. ONUs already added keep working.', confirmLabel: 'Turn off' }} />}
+                    <PostButton action={`${path}/ports/${p.id}/restart-onus`} label="Restart all ONUs" confirm={{ title: `Restart every ONU on ${p.name}?`, message: `${p.onus?.online ?? 0} customers on this port lose their connection for a minute or two.`, confirmLabel: 'Restart all', typeToConfirm: p.name }} />
+                    {can('danger.delete') && (p.admin === false
+                        ? <PostButton action={`${path}/ports/${p.id}/on`} label="Turn port on" className="link" />
+                        : <PostButton action={`${path}/ports/${p.id}/off`} label="Turn port off" confirm={{ title: `Turn ${p.name} off?`, message: `Every ONU on this port (${p.onus?.total ?? 0}) is offline until you turn the port on again.`, confirmLabel: 'Turn port off', typeToConfirm: p.name }} />)}
+                </>
+            )}
+        </RowActions>
+    );
     const table = (title: string, rows: Port[], pon: boolean) => (
         <Panel title={title}>
             <DataTable
@@ -84,6 +121,7 @@ function Ports({ hardware }: { hardware: Hardware }) {
                     { header: 'In', cell: (p) => p.in ?? '-' },
                     { header: 'Out', cell: (p) => p.out ?? '-' },
                     { header: 'Errors in total', cell: (p) => p.errors ?? '-' },
+                    { header: '', cell: (p) => actions(p) },
                     { header: 'Description', className: 'wrap', cell: (p) => (p.pon?.rogue && p.pon.rogue.toLowerCase() !== 'inexistent' ? <><Badge tone="danger">Rogue ONU: {p.pon.rogue}</Badge> {p.alias}</> : p.alias || '-') },
                 ]}
             />
@@ -92,13 +130,16 @@ function Ports({ hardware }: { hardware: Hardware }) {
     return (
         <>
             <HardwareNote hardware={hardware} />
+            {shown && <PortGraph key={shown.id} title={`Traffic on ${shown.name}`} url={`${path}/graph?chart=port&port=${shown.id}&range=${range}`} />}
             {table('Uplink ports', hardware.ports.filter((p) => p.kind === 'uplink'), false)}
             {table('PON ports', hardware.ports.filter((p) => p.kind === 'pon'), true)}
         </>
     );
 }
 
-function Cards({ hardware }: { hardware: Hardware }) {
+function Cards({ hardware, olt, path }: { hardware: Hardware; olt: Olt; path: string }) {
+    const can = useCan();
+    const mayRestart = olt.canChange && can('nas.manage') && can('danger.delete');
     const value = (v: number | null, unit: string) => (v === null ? '-' : `${v} ${unit}`);
     return (
         <>
@@ -120,6 +161,10 @@ function Cards({ hardware }: { hardware: Hardware }) {
                         { header: 'Power use', cell: (b) => value(b.watts, 'W') },
                         { header: 'Power input', cell: (b) => (b.power === 'Fault' ? <Badge tone="danger">Fault</Badge> : b.power || '-') },
                         { header: 'Serial', cell: (b) => (b.serial ? <span className="mono">{b.serial}</span> : '-') },
+                        ...(mayRestart ? [{ header: '', cell: (b: Board) => (
+                            <PostButton action={`${path}/cards/${b.position}/restart`} label="Restart card"
+                                confirm={{ title: `Restart ${b.name} in slot ${b.position}?`, message: b.role ? 'This is a control card. Restarting the active one moves the OLT to the standby card, or restarts the whole OLT if there is none.' : 'Every port on this card, and every customer behind it, is offline for a few minutes.', confirmLabel: 'Restart card', typeToConfirm: b.name }} />
+                        ) }] : []),
                     ]}
                 />
             </Panel>
@@ -235,6 +280,34 @@ function BackupsTab({ olt, details, backups, path }: { olt: Olt; details: Detail
     );
 }
 
+function CommandLine({ path }: { path: string }) {
+    const [command, setCommand] = useState('display ');
+    const [answer, setAnswer] = useState<{ ok: boolean; output?: string; error?: string } | null>(null);
+    const [busy, setBusy] = useState(false);
+    const run = async () => {
+        setBusy(true);
+        try {
+            const response = await fetch(`${path}/cli?command=${encodeURIComponent(command)}`, { credentials: 'same-origin', cache: 'no-store', headers: { Accept: 'application/json' } });
+            setAnswer(response.ok ? await response.json() : { ok: false, error: `The portal answered ${response.status}. Reload the page and try again.` });
+        } catch {
+            setAnswer({ ok: false, error: 'The portal could not be reached.' });
+        } finally {
+            setBusy(false);
+        }
+    };
+    return (
+        <Panel title="Command line (read only)">
+            <p className="hint">Runs one <span className="mono">display</span> command on the OLT and shows its answer, for example <span className="mono">display board 0</span> or <span className="mono">display ont info 0 1 15 0</span>. Nothing but display commands is sent, so this cannot change the OLT. Each command is written to the audit log.</p>
+            <form className="toolbar" onSubmit={(e) => { e.preventDefault(); void run(); }}>
+                <Field label="Command" name="command" className="grow" autoComplete="off" spellCheck={false} value={command} onChange={(e) => setCommand(e.target.value)} />
+                <button className="button primary" disabled={busy || command.trim().length < 9}>{busy ? 'Asking the OLT…' : 'Run'}</button>
+            </form>
+            {answer && !answer.ok && <p className="flash warning" role="alert">{answer.error}</p>}
+            {answer?.ok && <pre className="mono" style={{ overflowX: 'auto', whiteSpace: 'pre', maxHeight: '32rem' }} tabIndex={0} aria-label="The OLT's answer">{answer.output}</pre>}
+        </Panel>
+    );
+}
+
 function HistoryTab({ rows }: { rows: HistoryRow[] }) {
     return (
         <Panel title="What was done on this OLT from the portal">
@@ -320,8 +393,8 @@ export default function OltShow({ olt, counts, filters, hardware, details, backu
                         ),
                     },
                     { key: 'details', title: 'OLT details', icon: 'server', content: <DetailsTab olt={olt} details={details} hardware={hardware} /> },
-                    { key: 'ports', title: 'Ports', icon: 'signal', count: hardware.ports.length, content: <Ports hardware={hardware} /> },
-                    { key: 'cards', title: 'Cards', icon: 'server', count: hardware.boards.length, content: <Cards hardware={hardware} /> },
+                    { key: 'ports', title: 'Ports', icon: 'signal', count: hardware.ports.length, content: <Ports hardware={hardware} olt={olt} path={path} range={graphs.range} /> },
+                    { key: 'cards', title: 'Cards', icon: 'server', count: hardware.boards.length, content: <Cards hardware={hardware} olt={olt} path={path} /> },
                     {
                         key: 'graphs', title: 'Graphs', icon: 'reports',
                         content: (
@@ -339,6 +412,7 @@ export default function OltShow({ olt, counts, filters, hardware, details, backu
                     },
                     { key: 'vlans', title: 'VLANs and profiles', icon: 'services', count: details.vlans.length, content: <VlansTab details={details} /> },
                     ...(backups ? [{ key: 'backups', title: 'Config backups', icon: 'book', count: backups.length, content: <BackupsTab olt={olt} details={details} backups={backups} path={path} /> }] : []),
+                    ...(can('nas.manage') && olt.telnet ? [{ key: 'cli', title: 'Command line', icon: 'activity', content: <CommandLine path={path} /> }] : []),
                     { key: 'history', title: 'History', icon: 'logs', count: history.length, content: <HistoryTab rows={history} /> },
                 ]}
             />

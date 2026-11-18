@@ -230,6 +230,64 @@ final class OltController extends Controller
             $rows, static fn (array $r) => [OltMapper::formatMac((string) $r['mac']), $r['vlan'], Olts::position($r), (string) $r['sn'], (string) $r['description'], (string) $r['clients'], (string) $r['seen_at']]);
     }
 
+    /** One "display" command, run on the OLT now. OltCli lets nothing else through. */
+    public function cli(Request $request, string $id): JsonResponse
+    {
+        $olt = Olts::find((int) $id);
+        abort_if(!$olt, 404, 'OLT not found.');
+        $command = trim((string) preg_replace('/\s+/', ' ', (string) $request->query('command', '')));
+        set_time_limit(150);
+        try {
+            if (!OltManager::canRead($olt)) {
+                throw new RuntimeException('The command line needs telnet turned on for this OLT, under Edit.');
+            }
+            if (!str_starts_with($command, 'display ')) {
+                throw new RuntimeException('Only commands that start with "display" can be run here. They read the OLT and change nothing.');
+            }
+            $output = str_replace("\r", '', Olts::cli($olt, 120.0)->read([$command])[0]);
+            Audit::log('cli', 'olt', (string) $olt['id'], null, ['commands' => [$command]]);
+            $payload = ['ok' => true, 'output' => mb_substr(mb_scrub($output, 'UTF-8'), 0, 400000)];
+        } catch (RuntimeException $e) {
+            $payload = ['ok' => false, 'error' => $e->getMessage() === 'This command is not allowed on the OLT.' ? 'Only plain "display" commands are allowed: letters, digits, spaces, "/" and "-".' : $e->getMessage()];
+        }
+        return response()->json($payload)->header('Cache-Control', 'no-store');
+    }
+
+    /** Autofind on or off, restart every ONU, or turn the port off or on: for one PON port, as the OLT lists it. */
+    public function port(string $id, string $ifIndex, string $action): RedirectResponse
+    {
+        $olt = Olts::find((int) $id);
+        abort_if(!$olt, 404, 'OLT not found.');
+        $port = Db::row('SELECT name FROM olt_ports WHERE olt_id=? AND if_index=? AND kind="pon"', [$olt['id'], (int) $ifIndex]);
+        abort_if(!$port || !preg_match('~(\d+)\s*/\s*(\d+)\s*/\s*(\d+)~', (string) $port['name'], $m), 404, 'PON port not found.');
+        if (in_array($action, ['off', 'on'], true)) {
+            Auth::requireCan('danger.delete');
+        }
+        set_time_limit(120);
+        try {
+            $message = OltManager::port($olt, (int) $m[1], (int) $m[2], (int) $m[3], $action);
+        } catch (RuntimeException $e) {
+            return $this->fail($e->getMessage());
+        }
+        return back()->with('flash', ['type' => 'success', 'message' => $message]);
+    }
+
+    public function card(string $id, string $frame, string $slot): RedirectResponse
+    {
+        Auth::requireCan('danger.delete');
+        $olt = Olts::find((int) $id);
+        abort_if(!$olt, 404, 'OLT not found.');
+        $board = Db::row('SELECT frame,slot,name FROM olt_boards WHERE olt_id=? AND frame=? AND slot=?', [$olt['id'], (int) $frame, (int) $slot]);
+        abort_if(!$board, 404, 'Card not found.');
+        set_time_limit(120);
+        try {
+            OltManager::restartCard($olt, $board);
+        } catch (RuntimeException $e) {
+            return $this->fail($e->getMessage());
+        }
+        return back()->with('flash', ['type' => 'success', 'message' => 'Card ' . $board['name'] . ' in slot ' . $board['frame'] . '/' . $board['slot'] . ' is restarting. Everything on it is offline for a few minutes.']);
+    }
+
     /** Takes a copy of the configuration now. Only reads from the OLT. */
     public function backup(string $id): RedirectResponse
     {
@@ -338,7 +396,13 @@ final class OltController extends Controller
         abort_if(!$olt, 404, 'OLT not found.');
         $range = self::range($request->query('range'));
         $chart = (string) $request->query('chart', 'onus');
-        $data = in_array($chart, ['cpu', 'temperature', 'traffic'], true) ? MonitoringData::oltHardwareChart($olt, $chart, $range) : MonitoringData::oltChart($olt, $range);
+        if ($chart === 'port') {
+            $port = Db::row('SELECT if_index,name FROM olt_ports WHERE olt_id=? AND if_index=?', [$olt['id'], (int) $request->query('port', 0)]);
+            abort_if(!$port, 404, 'Port not found.');
+            $data = MonitoringData::oltHardwareChart($olt, 'port', $range, $port);
+        } else {
+            $data = in_array($chart, ['cpu', 'temperature', 'traffic'], true) ? MonitoringData::oltHardwareChart($olt, $chart, $range) : MonitoringData::oltChart($olt, $range);
+        }
 
         return response()->json($data)->header('Cache-Control', 'no-store');
     }

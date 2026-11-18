@@ -4,6 +4,14 @@ RadiusOne follows [semantic versioning](https://semver.org): **major** for chang
 upgrading, **minor** for new features, **patch** for fixes. The version is in the `VERSION` file and shows in
 the portal's sidebar and under Settings → System information.
 
+## 2.12.0 (2026-11-18)
+
+PON port and card actions, port graphs and a read-only command line. Update with **Settings → Overview → Software update** or `sudo radiusone-update`.
+
+- **PON ports:** autofind on or off, restart all ONUs, turn the port off or on. **Cards:** restart a card.
+- **A traffic graph for every OLT port**, and a **command line** that runs `display` commands only.
+- **On the server:** one new table. No OLT is changed by the update.
+
 ## 2.11.0 (2026-11-18)
 
 More of the OLT on its page, all read-only. Update with **Settings → Overview → Software update** or `sudo radiusone-update`.
