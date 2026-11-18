@@ -19,6 +19,10 @@ final class HuaweiMa5800
     private const FRAME = '1.3.6.1.4.1.2011.6.3.3.1.1';
     private const FAN = '1.3.6.1.4.1.2011.5.25.31.1.1.10.1';
     private const BOARD = '1.3.6.1.4.1.2011.2.6.7.1.1.2.1';
+    private const FRAME_POWER = '1.3.6.1.4.1.2011.2.6.7.1.1.1.1';
+    /** The fan tray: each fan's speed in RPM (9.1.2), and the tray's alarms by name (3.1.2) and state (3.1.4, 1 is normal). */
+    private const FAN_TRAY = '1.3.6.1.4.1.2011.6.1.1';
+    private const UPTIME = '1.3.6.1.2.1.1.3.0';
     /** The OLT's value for "no reading", for example the optical power of an offline ONU. */
     private const NO_READING = 2147483647;
     /** Enough for a full X7: 7 boards × 16 ports × 128 ONUs, and then some. */
@@ -194,7 +198,7 @@ final class HuaweiMa5800
      * The OLT's cards and ports. Slot rows and board rows share the index <frame>.<slot>. A value the OLT reports as
      * unavailable, such as the CPU of a card without one, stays null.
      *
-     * @return array{boards:list<array<string, mixed>>,ports:list<array<string, mixed>>,fans:list<array<string, mixed>>}
+     * @return array{boards:list<array<string, mixed>>,ports:list<array<string, mixed>>,fans:list<array<string, mixed>>,power_w:?int,uptime_s:?int}
      */
     public static function readHardware(Snmp $snmp): array
     {
@@ -217,6 +221,7 @@ final class HuaweiMa5800
         $workMode = $table(self::SLOT, '6');
         $online = $table(self::BOARD, '8');
         $power = $table(self::BOARD, '17');
+        $watts = $table(self::BOARD, '11');
         $boards = [];
         foreach ($names as $index => $name) {
             $name = self::text($name, 64);
@@ -233,6 +238,7 @@ final class HuaweiMa5800
                 'online_code' => is_numeric($online[$index] ?? null) ? (int) $online[$index] : null,
                 'work_mode' => is_numeric($workMode[$index] ?? null) ? (int) $workMode[$index] : null,
                 'power_input' => is_numeric($power[$index] ?? null) ? (int) $power[$index] : null,
+                'power_w' => self::number($watts[$index] ?? null, 0, 5000),
             ];
         }
 
@@ -268,17 +274,50 @@ final class HuaweiMa5800
             ];
         }
 
-        return ['boards' => $boards, 'ports' => $ports, 'fans' => self::fans($table)];
+        // The whole frame's power use in watts, and how long the OLT has been up (hundredths of a second).
+        $frameWatts = array_filter(array_map(static fn ($v) => self::number($v, 1, 20000), $table(self::FRAME_POWER, '11')), static fn ($v) => $v !== null);
+        $ticks = $snmp->get([self::UPTIME])[self::UPTIME] ?? null;
+
+        return [
+            'boards' => $boards, 'ports' => $ports, 'fans' => self::fans($table),
+            'power_w' => $frameWatts ? array_sum($frameWatts) : null,
+            'uptime_s' => is_numeric($ticks) && $ticks >= 0 ? (int) ($ticks / 100) : null,
+        ];
     }
 
     /**
      * Fans, from the two places Huawei's MIBs have them. Many models fill in neither, and the list is then empty.
      *
-     * @return list<array{label:string,state:string,ok:int,speed_pct:?int}>
+     * An MA5800's fan tray reports each fan's speed instead, and that is used when it is there.
+     *
+     * @return list<array{label:string,state:string,ok:int,speed_pct:?int,speed_rpm?:?int}>
      */
     private static function fans(callable $table): array
     {
         $fans = [];
+        $rpm = $table(self::FAN_TRAY, '9.1.2');
+        if ($rpm) {
+            $alarms = [];
+            $states = $table(self::FAN_TRAY, '3.1.4');
+            foreach ($table(self::FAN_TRAY, '3.1.2') as $index => $name) {
+                // -1 is "not applicable", for example a power alarm on a tray without that sensor.
+                if (is_numeric($states[$index] ?? null) && !in_array((int) $states[$index], [1, -1], true)) {
+                    $alarms[(string) strtok((string) $index, '.')][] = self::text($name, 40);
+                }
+            }
+            foreach ($rpm as $index => $speed) {
+                [$frame, $fan] = array_pad(explode('.', (string) $index), 2, '0');
+                $speed = self::number($speed, 0, 100000);
+                $state = match (true) {
+                    !empty($alarms[$frame]) => implode(', ', $alarms[$frame]),
+                    $speed === 0 => 'Stopped',
+                    default => 'Normal',
+                };
+                $fans[] = ['label' => ($frame === '0' ? 'Fan ' : 'Frame ' . $frame . ' fan ') . $fan, 'state' => $state, 'ok' => $state === 'Normal' ? 1 : 0, 'speed_pct' => null, 'speed_rpm' => $speed];
+            }
+
+            return $fans;
+        }
         $state = $table(self::FAN, '7');
         $present = $table(self::FAN, '6');
         $speed = $table(self::FAN, '5');

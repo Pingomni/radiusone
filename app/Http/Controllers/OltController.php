@@ -5,11 +5,13 @@ declare(strict_types=1);
 namespace App\Http\Controllers;
 
 use App\Http\Support\Clients;
+use App\Http\Support\Csv;
 use App\Http\Support\Format;
 use App\Http\Support\MonitoringData;
 use App\Support\Audit;
 use App\Support\Auth;
 use App\Support\Db;
+use App\Support\Olt\OltInventory;
 use App\Support\Olt\OltManager;
 use App\Support\Olt\OltMapper;
 use App\Support\Olt\OltMonitor;
@@ -22,6 +24,7 @@ use Inertia\Inertia;
 use Inertia\Response;
 use PDOException;
 use RuntimeException;
+use Symfony\Component\HttpFoundation\Response as HttpResponse;
 
 /** OLTs, their ONUs and which client is on which ONU. Only reads from the OLT: changes are in OnuController. */
 final class OltController extends Controller
@@ -166,7 +169,11 @@ final class OltController extends Controller
             'counts' => array_map('intval', $counts ?? []),
             'filters' => ['q' => $q, 'status' => $status],
             'hardware' => self::hardware($olt),
-            'history' => (static function () use ($olt, $request): array {
+            'details' => self::details($olt),
+            'backups' => Auth::can('nas.manage') ? array_map(static fn (array $b) => ['id' => (int) $b['id'], 'taken' => (string) $b['taken_at'], 'checked' => (string) $b['checked_at'], 'bytes' => (int) $b['bytes']], Db::select('SELECT id,taken_at,checked_at,bytes FROM olt_config_backups WHERE olt_id=? ORDER BY taken_at DESC,id DESC', [$olt['id']])) : null,
+            'history' => array_map(static fn (array $a) => ['at' => (string) $a['created_at'], 'who' => (string) $a['actor_username'], 'action' => (string) $a['action'], 'what' => $a['entity_type'] === 'onu' ? 'ONU ' . $a['entity_id'] : 'OLT', 'detail' => implode('; ', (array) (json_decode((string) $a['after_json'], true)['commands'] ?? []))],
+                Db::select('SELECT created_at,actor_username,action,entity_type,entity_id,after_json FROM audit_logs WHERE (entity_type="olt" AND entity_id=?) OR (entity_type="onu" AND after_json LIKE ?) ORDER BY id DESC LIMIT 200', [(string) $olt['id'], '%' . addcslashes(substr((string) json_encode(['olt' => (string) $olt['name']], JSON_UNESCAPED_SLASHES), 1, -1), '%_\\') . '%'])),
+            'graphs' => (static function () use ($olt, $request): array {
                 $range = self::range($request->query('range'));
                 $graph = static fn (string $key, string $title, array $data) => ['key' => $key, 'title' => $title, 'url' => '/olts/' . (int) $olt['id'] . '/graph?chart=' . $key . '&range=' . $range, 'data' => $data];
 
@@ -182,11 +189,91 @@ final class OltController extends Controller
     }
 
     /**
+     * The OLT itself: what it is, how long it has been up, and what its command line said at the last read.
+     *
+     * @param  array<string, mixed>  $olt
+     * @return array<string, mixed>
+     */
+    private static function details(array $olt): array
+    {
+        $inventory = OltInventory::saved($olt);
+        $temperature = Db::value('SELECT MAX(temperature_c) FROM olt_boards WHERE olt_id=?', [$olt['id']]);
+        return [
+            'description' => (string) ($olt['system_description'] ?? ''),
+            'version' => $inventory['version'] ?? null,
+            'bootedAt' => $olt['booted_at'] ?? null,
+            'power' => ($olt['power_w'] ?? null) === null ? null : (int) $olt['power_w'],
+            'temperature' => $temperature === null ? null : (int) $temperature,
+            'snmp' => 'v' . $olt['snmp_version'] . ', UDP ' . $olt['snmp_port'],
+            'telnetPort' => $olt['telnet_enabled'] ? (int) $olt['telnet_port'] : null,
+            'ntp' => $inventory['ntp'] ?? [],
+            'autosave' => $inventory['autosave'] ?? null,
+            'vlans' => $inventory['vlans'] ?? [],
+            'lineProfiles' => $inventory['lineProfiles'] ?? [], 'serviceProfiles' => $inventory['serviceProfiles'] ?? [],
+            'dbaProfiles' => $inventory['dbaProfiles'] ?? [], 'trafficTables' => $inventory['trafficTables'] ?? [],
+            'read' => $olt['last_inventory_at'] ?? null,
+            'error' => (string) ($olt['last_inventory_error'] ?? ''),
+            'backupAt' => $olt['last_backup_at'] ?? null,
+            'backupError' => (string) ($olt['last_backup_error'] ?? ''),
+        ];
+    }
+
+    /** Every MAC the OLT last listed behind an ONU, with the ONU and its client, as a CSV file. */
+    public function macs(string $id): HttpResponse
+    {
+        $olt = Olts::find((int) $id);
+        abort_if(!$olt, 404, 'OLT not found.');
+        $rows = static fn () => Db::select('SELECT m.mac,m.vlan,m.frame,m.slot,m.port,m.ont_id,m.seen_at,o.sn,o.description,
+            (SELECT GROUP_CONCAT(c.username ORDER BY c.username SEPARATOR " ") FROM customer_onus l JOIN customer_profiles c ON c.id=l.customer_id WHERE l.olt_id=o.olt_id AND l.sn=o.sn AND l.source<>"none") AS clients
+            FROM olt_macs m LEFT JOIN olt_onus o ON o.olt_id=m.olt_id AND o.frame=m.frame AND o.slot=m.slot AND o.port=m.port AND o.ont_id=m.ont_id WHERE m.olt_id=? ORDER BY m.frame,m.slot,m.port,m.ont_id,m.mac', [$olt['id']]);
+        return Csv::download(preg_replace('/[^A-Za-z0-9_.-]+/', '-', (string) $olt['name']) . '-mac-table.csv', ['MAC', 'VLAN', 'Port', 'ONU serial', 'ONU description', 'Client', 'Read at'],
+            $rows, static fn (array $r) => [OltMapper::formatMac((string) $r['mac']), $r['vlan'], Olts::position($r), (string) $r['sn'], (string) $r['description'], (string) $r['clients'], (string) $r['seen_at']]);
+    }
+
+    /** Takes a copy of the configuration now. Only reads from the OLT. */
+    public function backup(string $id): RedirectResponse
+    {
+        $olt = Olts::find((int) $id);
+        abort_if(!$olt, 404, 'OLT not found.');
+        if (!OltManager::canRead($olt)) {
+            return $this->fail('Configuration copies need telnet turned on for this OLT, under Edit.');
+        }
+        set_time_limit(320);
+        try {
+            $changed = OltInventory::backup($olt);
+        } catch (RuntimeException $e) {
+            Db::exec('UPDATE olts SET last_backup_at=NOW(),last_backup_error=? WHERE id=?', [mb_substr($e->getMessage(), 0, 500), $olt['id']]);
+            return $this->fail($e->getMessage());
+        }
+        Audit::log('backup', 'olt', (string) $olt['id'], null, ['changed' => $changed]);
+        return back()->with('flash', ['type' => 'success', 'message' => $changed ? 'A copy of the configuration was saved.' : 'The configuration is the same as the last copy, so no new copy was needed.']);
+    }
+
+    /** One saved configuration, as a text file. It holds the OLT's own secrets, so only people who may manage the OLT get it. */
+    public function backupFile(string $id, string $backup): HttpResponse
+    {
+        $olt = Olts::find((int) $id);
+        abort_if(!$olt, 404, 'OLT not found.');
+        $row = Db::row('SELECT id,taken_at FROM olt_config_backups WHERE id=? AND olt_id=?', [(int) $backup, $olt['id']]);
+        abort_if(!$row, 404, 'This copy no longer exists.');
+        $text = OltInventory::backupText((int) $olt['id'], (int) $row['id']);
+        abort_if($text === null, 409, 'This copy cannot be opened. The server\'s key has changed since it was saved.');
+        Audit::log('backup_download', 'olt', (string) $olt['id'], null, ['backup' => (int) $row['id'], 'taken' => (string) $row['taken_at']]);
+        $name = preg_replace('/[^A-Za-z0-9_.-]+/', '-', $olt['name'] . '-' . str_replace([' ', ':'], ['-', ''], (string) $row['taken_at'])) . '.cfg';
+        return response($text, 200, ['Content-Type' => 'text/plain; charset=utf-8', 'Content-Disposition' => 'attachment; filename="' . $name . '"', 'Cache-Control' => 'no-store']);
+    }
+
+    /**
      * @param  array<string, mixed>  $olt
      * @return array<string, mixed>
      */
     private static function hardware(array $olt): array
     {
+        $inventory = OltInventory::saved($olt);
+        $signals = [];
+        foreach (Db::select('SELECT frame,slot,port,AVG(rx_dbm) AS rx FROM olt_onus WHERE olt_id=? AND status="online" AND rx_dbm IS NOT NULL GROUP BY frame,slot,port', [$olt['id']]) as $r) {
+            $signals[$r['frame'] . '/' . $r['slot'] . '/' . $r['port']] = round((float) $r['rx'], 2);
+        }
         $onus = [];
         foreach (Db::select('SELECT frame,slot,port,COUNT(*) AS total,SUM(status="online") AS online FROM olt_onus WHERE olt_id=? GROUP BY frame,slot,port', [$olt['id']]) as $r) {
             $onus[$r['frame'] . '/' . $r['slot'] . '/' . $r['port']] = ['total' => (int) $r['total'], 'online' => (int) $r['online']];
@@ -214,11 +301,15 @@ final class OltController extends Controller
                     'cpu' => $b['cpu_pct'] === null ? null : (int) $b['cpu_pct'],
                     'memory' => $b['mem_pct'] === null ? null : (int) $b['mem_pct'],
                     'temperature' => $b['temperature_c'] === null ? null : (int) $b['temperature_c'],
+                    'watts' => ($b['power_w'] ?? null) === null ? null : (int) $b['power_w'],
                 ];
             }, Db::select('SELECT * FROM olt_boards WHERE olt_id=? ORDER BY frame,slot', [$olt['id']])),
-            'fans' => array_map(static fn (array $f) => ['label' => (string) $f['label'], 'state' => (string) $f['state'], 'ok' => (bool) $f['ok'], 'speed' => $f['speed_pct'] === null ? null : (int) $f['speed_pct']], Db::select('SELECT * FROM olt_fans WHERE olt_id=? ORDER BY label', [$olt['id']])),
-            'ports' => array_map(static function (array $p) use ($onus, $rate) {
-                $count = preg_match('~(\\d+)\\s*/\\s*(\\d+)\\s*/\\s*(\\d+)~', (string) $p['name'], $m) ? ($onus[$m[1] . '/' . $m[2] . '/' . $m[3]] ?? null) : null;
+            'fans' => array_map(static fn (array $f) => ['label' => (string) $f['label'], 'state' => (string) $f['state'], 'ok' => (bool) $f['ok'], 'speed' => $f['speed_pct'] === null ? null : (int) $f['speed_pct'], 'rpm' => ($f['speed_rpm'] ?? null) === null ? null : (int) $f['speed_rpm']], Db::select('SELECT * FROM olt_fans WHERE olt_id=? ORDER BY label', [$olt['id']])),
+            'ports' => array_map(static function (array $p) use ($onus, $rate, $inventory, $signals) {
+                $key = preg_match('~(\\d+)\\s*/\\s*(\\d+)\\s*/\\s*(\\d+)~', (string) $p['name'], $m) ? $m[1] . '/' . $m[2] . '/' . $m[3] : '';
+                $count = $onus[$key] ?? null;
+                $pon = $p['kind'] === 'pon' ? ($inventory['pon'][$key] ?? null) : null;
+                $uplink = $p['kind'] === 'uplink' ? ($inventory['uplinks'][$key] ?? null) : null;
 
                 return [
                     'id' => (int) $p['if_index'],
@@ -231,7 +322,11 @@ final class OltController extends Controller
                     'in' => $rate($p['in_bps']),
                     'out' => $rate($p['out_bps']),
                     'errors' => $p['in_errors'] === null && $p['out_errors'] === null ? null : number_format((float) $p['in_errors'] + (float) $p['out_errors'], 0, '.', ''),
-                    'onus' => $p['kind'] === 'pon' ? $count : null,
+                    'onus' => $p['kind'] === 'pon' ? ($count ?? ['total' => 0, 'online' => 0]) : null,
+                    'signal' => $signals[$key] ?? null,
+                    // From the command line, read every 15 minutes: null until then, or with telnet off.
+                    'pon' => $pon === null ? null : ['tx' => $pon['tx'] ?? null, 'temperature' => $pon['temperature'] ?? null, 'autofind' => $pon['autofind'] ?? null, 'min' => $pon['min_km'] ?? null, 'max' => $pon['max_km'] ?? null, 'wavelength' => $pon['wavelength'] ?? null, 'rogue' => (string) ($pon['rogue'] ?? '')],
+                    'uplink' => $uplink === null ? null : ['type' => (string) ($uplink['type'] ?? ''), 'optic' => (string) ($uplink['optic'] ?? ''), 'duplex' => (string) ($uplink['duplex'] ?? ''), 'native' => $uplink['native'] ?? null, 'vlans' => array_values((array) ($uplink['vlans'] ?? []))],
                 ];
             }, Db::select('SELECT * FROM olt_ports WHERE olt_id=? ORDER BY kind DESC,if_index', [$olt['id']])),
         ];

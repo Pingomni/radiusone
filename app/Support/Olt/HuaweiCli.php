@@ -103,12 +103,103 @@ final class HuaweiCli
     }
 
     /**
-     * @return list<array{id:int,ports:int}> VLANs, with how many service ports use each
+     * @return list<array{id:int,ports:int,type:string,standard:int}> VLANs, with how many service ports and uplink ports use each
      */
     public static function vlans(string $output): array
     {
         preg_match_all('/^\s*(\d+)\s+(smart|standard|mux|super)\s+\S+\s+(\d+)\s+(\d+)/mi', $output, $rows, PREG_SET_ORDER);
-        return array_map(static fn (array $r) => ['id' => (int) $r[1], 'ports' => (int) $r[4]], $rows);
+        return array_map(static fn (array $r) => ['id' => (int) $r[1], 'ports' => (int) $r[4], 'type' => strtolower($r[2]), 'standard' => (int) $r[3]], $rows);
+    }
+
+    /**
+     * "Name    value" lines, as the port commands print them, in blocks that each start with an F/S/P line.
+     *
+     * @return array<string, array<string, string>> "0/1/15" => its lines
+     */
+    public static function portBlocks(string $output): array
+    {
+        $blocks = [];
+        $at = null;
+        foreach (preg_split('/\r?\n/', $output) ?: [] as $line) {
+            if (!preg_match('/^\s{2}(\S.*?)\s{2,}(\S.*?)\s*$/', $line, $m)) {
+                continue;
+            }
+            if ($m[1] === 'F/S/P' && preg_match('~^(\d+)\s*/\s*(\d+)\s*/\s*(\d+)$~', $m[2], $p)) {
+                $at = "$p[1]/$p[2]/$p[3]";
+                $blocks[$at] = [];
+            } elseif ($at !== null && !isset($blocks[$at][$m[1]])) {
+                $blocks[$at][$m[1]] = self::value($m[2]);
+            }
+        }
+        return $blocks;
+    }
+
+    /**
+     * The port table of an uplink card, from "display board F/S".
+     *
+     * @return list<array{port:int,type:string,optic:string,native:int,speed:string,duplex:string,active:bool,online:bool}>
+     */
+    public static function uplinkPorts(string $output): array
+    {
+        preg_match_all('/^\s+(\d+)\s+(\d*GE|FE|XGE|\d+G)\s+(\S+)\s+(\d+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(online|offline)\s*$/mi', $output, $rows, PREG_SET_ORDER);
+        return array_map(static fn (array $r) => [
+            'port' => (int) $r[1], 'type' => strtoupper($r[2]), 'optic' => strtolower($r[3]), 'native' => (int) $r[4], 'speed' => self::value($r[6]), 'duplex' => self::value($r[7]),
+            'active' => strtolower($r[9]) === 'active', 'online' => strtolower($r[10]) === 'online',
+        ], $rows);
+    }
+
+    /**
+     * @return array{vlans:list<int>,native:?int} the VLANs an uplink port carries, from "display port vlan F/S/P"
+     */
+    public static function portVlans(string $output): array
+    {
+        $vlans = [];
+        $native = null;
+        foreach (preg_split('/\r?\n/', $output) ?: [] as $line) {
+            if (preg_match('/^\s*Native VLAN\s*:\s*(\d+)/i', $line, $m)) {
+                $native = (int) $m[1];
+            } elseif (preg_match('/^\s*\d+(\s+\d+)*\s*$/', $line)) {
+                $vlans = array_merge($vlans, array_map('intval', preg_split('/\s+/', trim($line)) ?: []));
+            }
+        }
+        return ['vlans' => array_values(array_unique($vlans)), 'native' => $native];
+    }
+
+    /**
+     * @return list<array{server:string,status:string,reach:int}> time servers, from "display ntp-service sessions"
+     */
+    public static function ntp(string $output): array
+    {
+        $servers = [];
+        foreach (array_slice(preg_split('/^\s*clock source\s*:/mi', $output) ?: [], 1) as $block) {
+            $f = self::fields('clock source :' . $block);
+            if (filter_var(trim($f['clock source'] ?? ''), FILTER_VALIDATE_IP)) {
+                $servers[] = ['server' => trim($f['clock source']), 'status' => self::value($f['clock status'] ?? ''), 'reach' => (int) ($f['reach'] ?? 0)];
+            }
+        }
+        return $servers;
+    }
+
+    /**
+     * @return list<array{id:int,type:int,fix:int,assure:int,max:int,bound:int}> speeds in kbit/s
+     */
+    public static function dbaProfiles(string $output): array
+    {
+        preg_match_all('/^\s*(\d+)\s+(\d)\s+(?:Yes|No)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s*$/mi', $output, $rows, PREG_SET_ORDER);
+        return array_map(static fn (array $r) => ['id' => (int) $r[1], 'type' => (int) $r[2], 'fix' => (int) $r[3], 'assure' => (int) $r[4], 'max' => (int) $r[5], 'bound' => (int) $r[6]], $rows);
+    }
+
+    /**
+     * Whether the OLT saves a changed configuration by itself, and how many minutes after the change.
+     *
+     * @return array{on:?bool,minutes:?int}
+     */
+    public static function autosave(string $output): array
+    {
+        if (!preg_match('/autosave modified configuration switch\s*:\s*(on|off)(?:\s*\n\s*Autosave interval\s*:\s*(\d+))?/i', $output, $m)) {
+            return ['on' => null, 'minutes' => null];
+        }
+        return ['on' => strtolower($m[1]) === 'on', 'minutes' => isset($m[2]) ? (int) $m[2] : null];
     }
 
     /**

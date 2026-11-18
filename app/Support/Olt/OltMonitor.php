@@ -41,7 +41,7 @@ final class OltMonitor
 
     /**
      * @param  array<string, mixed>  $olt
-     * @param  array{boards:list<array<string, mixed>>,ports:list<array<string, mixed>>,fans?:list<array<string, mixed>>}  $read
+     * @param  array{boards:list<array<string, mixed>>,ports:list<array<string, mixed>>,fans?:list<array<string, mixed>>,power_w?:?int,uptime_s?:?int}  $read
      */
     public static function saveHardware(array $olt, array $read): void
     {
@@ -66,11 +66,11 @@ final class OltMonitor
         try {
             Db::exec('DELETE FROM olt_boards WHERE olt_id=?', [$id]);
             foreach ($read['boards'] as $b) {
-                Db::exec('INSERT INTO olt_boards (olt_id,frame,slot,name,status_code,online_code,work_mode,power_input,serial,cpu_pct,mem_pct,temperature_c,seen_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,NOW())', [$id, $b['frame'], $b['slot'], $b['name'], $b['status_code'], $b['online_code'] ?? null, $b['work_mode'] ?? null, $b['power_input'] ?? null, $b['serial'], $b['cpu_pct'], $b['mem_pct'], $b['temperature_c']]);
+                Db::exec('INSERT INTO olt_boards (olt_id,frame,slot,name,status_code,online_code,work_mode,power_input,serial,cpu_pct,mem_pct,temperature_c,power_w,seen_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,NOW())', [$id, $b['frame'], $b['slot'], $b['name'], $b['status_code'], $b['online_code'] ?? null, $b['work_mode'] ?? null, $b['power_input'] ?? null, $b['serial'], $b['cpu_pct'], $b['mem_pct'], $b['temperature_c'], $b['power_w'] ?? null]);
             }
             Db::exec('DELETE FROM olt_fans WHERE olt_id=?', [$id]);
             foreach ($read['fans'] ?? [] as $f) {
-                Db::exec('INSERT IGNORE INTO olt_fans (olt_id,label,state,ok,speed_pct) VALUES (?,?,?,?,?)', [$id, $f['label'], $f['state'], $f['ok'], $f['speed_pct']]);
+                Db::exec('INSERT IGNORE INTO olt_fans (olt_id,label,state,ok,speed_pct,speed_rpm) VALUES (?,?,?,?,?,?)', [$id, $f['label'], $f['state'], $f['ok'], $f['speed_pct'], $f['speed_rpm'] ?? null]);
             }
             Db::exec('DELETE FROM olt_ports WHERE olt_id=?', [$id]);
             foreach ($read['ports'] as $p) {
@@ -89,6 +89,8 @@ final class OltMonitor
             $temperatures = array_filter(array_column($read['boards'], 'temperature_c'), static fn ($v) => $v !== null);
             Db::exec('INSERT IGNORE INTO olt_hw_samples (olt_id,sampled_at,cpu_pct,mem_pct,temperature_c,in_bps,out_bps) VALUES (?,?,?,?,?,?,?)', [$id, $now, $main['cpu_pct'] ?? null, $main['mem_pct'] ?? null, $temperatures ? max($temperatures) : null, $uplinkIn, $uplinkOut]);
             Db::exec('DELETE FROM olt_hw_samples WHERE sampled_at<? LIMIT 5000', [$now - self::RETENTION_SECONDS]);
+            $uptime = $read['uptime_s'] ?? null;
+            Db::exec('UPDATE olts SET power_w=?,booted_at=' . ($uptime === null ? 'booted_at' : 'FROM_UNIXTIME(?)') . ' WHERE id=?', [$read['power_w'] ?? null, ...($uptime === null ? [] : [$now - $uptime]), $id]);
             $pdo->commit();
         } catch (Throwable $e) {
             $pdo->rollBack();

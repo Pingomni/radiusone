@@ -6,7 +6,10 @@ namespace Tests\Feature;
 
 use App\Support\Db;
 use App\Support\Olt\HuaweiCli;
+use App\Support\Olt\HuaweiMa5800;
+use App\Support\Olt\OltInventory;
 use App\Support\Olt\OltManager;
+use App\Support\Olt\OltMonitor;
 use App\Support\Olt\Olts;
 use App\Support\Olt\OltSync;
 use App\Support\Olt\OltTelnet;
@@ -36,7 +39,7 @@ final class OltManageTest extends TestCase
     }
 
     /** @param  array<string, mixed>  $more */
-    private function startAgent(array $more = []): void
+    private function startAgent(array $more = [], array $oids = []): void
     {
         $dir = (string) getenv('RADIUSONE_TEST_DIR');
         $this->log = $dir . '/fake-olt-' . bin2hex(random_bytes(4)) . '.log';
@@ -49,7 +52,7 @@ final class OltManageTest extends TestCase
         file_put_contents($config, json_encode($more + [
             'log' => $this->log, 'ready' => $config . '.ready', 'snmp_port' => $this->snmpPort, 'telnet_port' => $this->telnetPort,
             'community' => 'public-ro', 'user' => 'manager', 'password' => 'manage-pass', 'mac_table' => "  Total: 0\n",
-            'oids' => [
+            'oids' => $oids + [
                 '1.3.6.1.2.1.1.1.0' => $text('Huawei Integrated Access Software MA5800-X7'),
                 '1.3.6.1.2.1.2.2.1.2.' . self::PORT_A => $text('GPON 0/1/0'),
                 "$b.43.1.3." . self::PORT_A . '.3' => $text('HWTC' . hex2bin('1234ABCD')),
@@ -376,11 +379,131 @@ final class OltManageTest extends TestCase
         $this->get('/olts/' . $olt['id'])->assertInertia(fn ($p) => $p->where('result.rows.1.active', false)->where('olt.canChange', false));
     }
 
+    /** The two ports the pretend OLT's command line knows, as the SNMP read would have left them. */
+    private function ports(array $olt): void
+    {
+        foreach ([[self::PORT_A, 'GPON 0/1/0', 'pon'], [7, 'ethernet0/9/0', 'uplink']] as [$index, $name, $kind]) {
+            $this->insertRow('olt_ports', ['olt_id' => $olt['id'], 'if_index' => $index, 'name' => $name, 'kind' => $kind, 'admin_up' => 1, 'oper_up' => 1, 'sampled_at' => time()]);
+        }
+    }
+
+    public function test_the_inventory_is_read_from_the_command_line_with_reads_only(): void
+    {
+        $this->startAgent();
+        $olt = $this->olt(false);
+        $this->ports($olt);
+        $this->onu($olt);
+        $inventory = OltInventory::read($olt);
+        $this->assertSame(['software' => 'MA5800V100R018C00', 'patch' => 'SPH612', 'product' => 'MA5800-X7'], $inventory['version']);
+        $this->assertSame([1, 100], array_column($inventory['vlans'], 'id'));
+        $this->assertSame(['type' => 'GE', 'online' => true, 'vlans' => [1, 100, 200]], array_intersect_key($inventory['uplinks']['0/9/0'], array_flip(['type', 'online', 'vlans'])));
+        $this->assertSame([7.12, true, 20, 'online'], [$inventory['pon']['0/1/0']['tx'], $inventory['pon']['0/1/0']['autofind'], $inventory['pon']['0/1/0']['max_km'], $inventory['pon']['0/1/0']['state']]);
+        $this->assertSame(['on' => true, 'minutes' => 60], $inventory['autosave']);
+        $this->assertSame('192.0.2.123', $inventory['ntp'][0]['server']);
+        $this->assertSame([], $this->changes());
+        $this->assertNotContains('display current-configuration', $this->commands());
+
+        $this->actingAsOperator('view');
+        $this->get('/olts/' . $olt['id'])->assertOk()->assertInertia(fn ($p) => $p
+            ->where('details.version.product', 'MA5800-X7')->where('details.autosave.minutes', 60)->where('details.vlans.1.id', 100)
+            ->where('hardware.ports.0.kind', 'uplink')->where('hardware.ports.0.uplink.vlans', [1, 100, 200])
+            ->where('hardware.ports.1.pon.tx', 7.12)->where('hardware.ports.1.pon.autofind', true)->where('hardware.ports.1.onus.total', 1)
+            // Configuration copies are not for people who may only look.
+            ->where('backups', null));
+    }
+
+    public function test_a_configuration_copy_is_kept_sealed_and_only_when_it_changed(): void
+    {
+        $this->startAgent();
+        $olt = $this->olt(false);
+        $this->assertTrue(OltInventory::backup($olt));
+        $this->assertFalse(OltInventory::backup($olt));
+        $copy = Db::row('SELECT * FROM olt_config_backups');
+        $this->assertSame(1, (int) Db::value('SELECT COUNT(*) FROM olt_config_backups'));
+        $this->assertStringStartsWith('enc:v1:', $copy['body']);
+        $this->assertStringNotContainsString('secret-in-the-config', $copy['body']);
+        $text = OltInventory::backupText((int) $olt['id'], (int) $copy['id']);
+        $this->assertStringStartsWith('[Active: H905MPLB', $text);
+        $this->assertStringEndsWith("return\n", $text);
+        $this->assertStringNotContainsString('MA5800-X7#', $text);
+        $this->assertSame(strlen($text), (int) $copy['bytes']);
+        $this->assertSame([], $this->changes());
+
+        // The configuration changes on the OLT: the next copy is a new one.
+        file_put_contents($this->log . '.sysname', 'renamed-olt');
+        $this->actingAsOperator();
+        $this->post("/olts/{$olt['id']}/backup")->assertSessionHas('flash.message', 'A copy of the configuration was saved.');
+        $this->assertSame(2, (int) Db::value('SELECT COUNT(*) FROM olt_config_backups'));
+        $newest = (int) Db::value('SELECT MAX(id) FROM olt_config_backups');
+        $this->get("/olts/{$olt['id']}/backups/$newest")->assertOk()->assertSee('sysname renamed-olt', false)->assertHeader('Content-Disposition');
+        $this->assertSame(1, (int) Db::value('SELECT COUNT(*) FROM audit_logs WHERE action="backup_download"'));
+        $this->get('/olts/' . $olt['id'])->assertInertia(fn ($p) => $p->has('backups', 2)->where('history.0.action', 'backup_download'));
+        // Another OLT's copy cannot be fetched through this one.
+        $this->get('/olts/' . ($olt['id'] + 1) . "/backups/$newest")->assertNotFound();
+
+        $this->actingAsOperator('view');
+        $this->get("/olts/{$olt['id']}/backups/$newest")->assertForbidden();
+        $this->post("/olts/{$olt['id']}/backup")->assertForbidden();
+    }
+
+    public function test_the_poller_reads_the_inventory_and_takes_the_daily_copy(): void
+    {
+        $this->startAgent();
+        $olt = $this->olt(false);
+        OltSync::run($olt);
+        $saved = Olts::find((int) $olt['id']);
+        $this->assertNull($saved['last_inventory_error']);
+        $this->assertNull($saved['last_backup_error']);
+        $this->assertSame('MA5800-X7', OltInventory::saved($saved)['version']['product']);
+        $this->assertSame(1, (int) Db::value('SELECT COUNT(*) FROM olt_config_backups'));
+        // Asked again at once: the inventory is read again, but a day has not passed, so no second copy is tried.
+        file_put_contents($this->log, '');
+        Db::exec('UPDATE olts SET sync_requested_at=NOW()');
+        OltSync::run(Olts::find((int) $olt['id']));
+        $this->assertContains('display version', $this->commands());
+        $this->assertNotContains('display current-configuration', $this->commands());
+    }
+
+    public function test_fan_speed_power_and_uptime_come_over_snmp(): void
+    {
+        $tray = '1.3.6.1.4.1.2011.6.1.1';
+        $this->startAgent([], [
+            "$tray.9.1.2.0.0" => [2, 1950], "$tray.9.1.2.0.1" => [2, 0],
+            "$tray.3.1.2.0.0" => [4, base64_encode('Fan block')], "$tray.3.1.4.0.0" => [2, 1],
+            "$tray.3.1.2.0.3" => [4, base64_encode('Power fault')], "$tray.3.1.4.0.3" => [2, -1],
+            '1.3.6.1.4.1.2011.2.6.7.1.1.1.1.11.0' => [2, 501],
+            '1.3.6.1.4.1.2011.6.3.3.2.1.21.0.8' => [4, base64_encode('H905MPLB')], '1.3.6.1.4.1.2011.6.3.3.2.1.8.0.8' => [2, 2],
+            '1.3.6.1.4.1.2011.2.6.7.1.1.2.1.11.0.8' => [2, 125],
+            '1.3.6.1.2.1.1.3.0' => [67, 360000],
+        ]);
+        $olt = $this->olt(false);
+        $read = HuaweiMa5800::readHardware(Olts::snmp($olt, 60.0));
+        $this->assertSame([['Fan 0', 'Normal', 1, 1950], ['Fan 1', 'Stopped', 0, 0]], array_map(static fn (array $f) => [$f['label'], $f['state'], $f['ok'], $f['speed_rpm']], $read['fans']));
+        $this->assertSame([501, 3600, 125], [$read['power_w'], $read['uptime_s'], $read['boards'][0]['power_w']]);
+        OltMonitor::saveHardware($olt, $read);
+        $saved = Olts::find((int) $olt['id']);
+        $this->assertSame(501, (int) $saved['power_w']);
+        $this->assertEqualsWithDelta(time() - 3600, strtotime((string) $saved['booted_at']), 5);
+        $this->actingAsOperator();
+        $this->get('/olts/' . $olt['id'])->assertInertia(fn ($p) => $p->where('details.power', 501)->where('hardware.fans.0.rpm', 1950)->where('hardware.boards.0.watts', 125));
+    }
+
+    public function test_the_mac_table_downloads_as_a_file(): void
+    {
+        $this->startAgent();
+        $olt = $this->olt(false);
+        $this->onu($olt);
+        $this->insertRow('olt_macs', ['olt_id' => $olt['id'], 'mac' => '789a1806a44a', 'vlan' => 100, 'frame' => 0, 'slot' => 1, 'port' => 0, 'ont_id' => 3, 'seen_at' => date('Y-m-d H:i:s')]);
+        $this->actingAsOperator('view');
+        $csv = $this->get("/olts/{$olt['id']}/macs.csv")->assertOk()->streamedContent();
+        $this->assertStringContainsString('78:9A:18:06:A4:4A,100,0/1/0:3,HWTC1234ABCD', $csv);
+    }
+
     public function test_command_line_answers_are_read_as_the_olt_prints_them(): void
     {
-        $this->assertSame('HWTC25D275B6', HuaweiCli::serialFromCli('4857544325D275B6 (HWTC-25D275B6)'));
-        $this->assertSame('4857544325D275B6', HuaweiCli::serialForCli('hwtc-25d275b6'));
-        $this->assertSame('4857544325D275B6', HuaweiCli::serialForCli('4857544325D275B6'));
+        $this->assertSame('HWTCA1B2C3D4', HuaweiCli::serialFromCli('48575443A1B2C3D4 (HWTC-A1B2C3D4)'));
+        $this->assertSame('48575443A1B2C3D4', HuaweiCli::serialForCli('hwtc-a1b2c3d4'));
+        $this->assertSame('48575443A1B2C3D4', HuaweiCli::serialForCli('48575443A1B2C3D4'));
         $this->assertNull(HuaweiCli::serialForCli('HWTC25D2'));
         $this->assertSame('Failure: The ONT does not exist', HuaweiCli::failure("display ont info 15 99 \n  Failure: The ONT does not exist\n"));
         $this->assertSame("% Unknown command, the error locates at '^'", HuaweiCli::failure("display ont port state0/1150\n                           ^\n  % Unknown command, the error locates at '^'\n"));

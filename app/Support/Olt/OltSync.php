@@ -75,6 +75,23 @@ final class OltSync
                 Db::exec('UPDATE olts SET last_mac_sync_at=NOW(),last_mac_ok=0,last_mac_error=? WHERE id=?', [self::message($e), $olt['id']]);
             }
         }
+        // With the MAC table: the ports' optics and settings, VLANs and profiles. And once a day, a copy of the configuration.
+        if ($macDue) {
+            try {
+                OltInventory::read($olt);
+            } catch (Throwable $e) {
+                $ok = false;
+                Db::exec('UPDATE olts SET last_inventory_at=NOW(),last_inventory_error=? WHERE id=?', [self::message($e), $olt['id']]);
+            }
+            if (self::listDue($olt['last_backup_at'] ?? null, OltInventory::BACKUP_EVERY_SECONDS)) {
+                try {
+                    OltInventory::backup($olt);
+                } catch (Throwable $e) {
+                    $ok = false;
+                    Db::exec('UPDATE olts SET last_backup_at=NOW(),last_backup_error=? WHERE id=?', [self::message($e), $olt['id']]);
+                }
+            }
+        }
         return $ok;
     }
 

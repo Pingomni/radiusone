@@ -201,10 +201,14 @@ final class OltTest extends TestCase
         $lines = file($this->log, FILE_IGNORE_NEW_LINES);
         $this->assertNotEmpty($lines);
         $types = array_unique(array_filter($lines, static fn (string $l) => str_starts_with($l, 'snmp')));
-        // GETBULK. A SET would be a3.
-        $this->assertSame(['snmp a5'], array_values($types));
+        // GETBULK, and a GET for the uptime. A SET would be a3.
+        sort($types);
+        $this->assertSame(['snmp a0', 'snmp a5'], array_values($types));
         $commands = array_values(array_filter($lines, static fn (string $l) => str_starts_with($l, 'telnet-cmd')));
-        $this->assertSame(['telnet-cmd enable', 'telnet-cmd scroll', 'telnet-cmd display mac-address all', 'telnet-cmd quit', 'telnet-cmd y'], $commands);
+        $this->assertSame(['telnet-cmd enable', 'telnet-cmd scroll', 'telnet-cmd display mac-address all', 'telnet-cmd quit', 'telnet-cmd y'], array_slice($commands, 0, 5));
+        // After the MAC table come the inventory and the configuration copy: only "display" and the lines that reach it.
+        $this->assertSame([], array_values(array_filter($commands, static fn (string $c) => !preg_match('~^telnet-cmd (enable|scroll|config|quit|y|display [a-z0-9 /-]+|interface gpon \d+/\d+)$~', $c))));
+        $this->assertContains('telnet-cmd display current-configuration', $commands);
     }
 
     public function test_the_telnet_client_refuses_any_other_command(): void
@@ -442,7 +446,8 @@ final class OltTest extends TestCase
         $this->get('/olts/' . $olt['id'] . '?q=ZTEG')->assertInertia(fn ($p) => $p->where('result.total', 1));
         $this->get('/olts/' . $olt['id'] . '?status=offline')->assertInertia(fn ($p) => $p->where('result.rows.0.sn', 'ZTEG00C171A7'));
         $this->post('/olts/' . $olt['id'] . '/test')->assertSessionHas('flash.type', 'success');
-        $this->assertSame(1, substr_count(implode("\n", array_filter(file($this->log, FILE_IGNORE_NEW_LINES), static fn ($l) => $l === 'snmp a0')), 'snmp a0'));
+        // Two GETs: the uptime in the read above, and the system description for the test button.
+        $this->assertSame(2, substr_count(implode("\n", array_filter(file($this->log, FILE_IGNORE_NEW_LINES), static fn ($l) => $l === 'snmp a0')), 'snmp a0'));
         $this->assertStringContainsString('MA5800', (string) Db::value('SELECT system_description FROM olts'));
         $this->post('/olts/' . $olt['id'] . '/sync')->assertSessionHas('flash.type', 'success');
         $this->assertNotNull(Db::value('SELECT sync_requested_at FROM olts'));
@@ -632,7 +637,7 @@ final class OltTest extends TestCase
             ->assertJsonPath('chart.bucket', 300);
         // An unknown range falls back, and old points are removed.
         $this->getJson('/olts/' . $olt['id'] . '/graph?range=bad')->assertOk()->assertJsonPath('chart.bucket', 900);
-        $this->get('/olts/' . $olt['id'] . '?range=7d')->assertInertia(fn ($p) => $p->where('history.range', '7d')->where('history.charts.0.data.chart.bucket', 5400));
+        $this->get('/olts/' . $olt['id'] . '?range=7d')->assertInertia(fn ($p) => $p->where('graphs.range', '7d')->where('graphs.charts.0.data.chart.bucket', 5400));
         Db::exec('INSERT INTO olt_samples (olt_id,sampled_at,onus,online,offline,weak) VALUES (?,?,0,0,0,0)', [$olt['id'], time() - 900000]);
         Db::exec('UPDATE olts SET sync_requested_at=NOW() WHERE id=?', [$olt['id']]);
         sleep(1);

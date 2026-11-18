@@ -155,6 +155,46 @@ $cli = static function (string $text) use (&$mode, &$state, &$onts, &$autofind, 
         $say("\n   ----------------------------------------------------------------------------\n   The number of GPON autofind ONT is " . count($autofind) . "\n");
         return true;
     }
+    if ($text === 'display version') {
+        $say("\n  VERSION : MA5800V100R018C00\n  PATCH   : SPH612\n  PRODUCT : MA5800-X7\n\n  Uptime is 0 day(s), 11 hour(s), 17 minute(s), 11 second(s)\n");
+        return true;
+    }
+    if ($text === 'display dba-profile all') {
+        $say("\n  ----------------------------------------------------------------------------\n  Profile-ID   type   Bandwidth      Fix        Assure        Max        Bind\n                     compensation    (kbps)     (kbps)        (kbps)     times\n  ----------------------------------------------------------------------------\n           0      3           No          0       8192         20480         1\n          10      4           No          0          0       1048000         2\n  ----------------------------------------------------------------------------\n");
+        return true;
+    }
+    if ($text === 'display ntp-service sessions') {
+        $say("\n clock source: 192.0.2.123\n clock stratum: 16\n clock status: configured, insane, valid, unsynced\n reference clock ID: 0.0.0.0\n reach: 0\n current poll: 1024\n");
+        return true;
+    }
+    if ($text === 'display autosave configuration') {
+        $say("\n  System autosave interval switch: on\n  Autosave interval: 1442 minutes\n  Autosave type: data and configuration file\n  System autosave modified configuration switch: on\n  Autosave interval: 60 minutes\n  Autosave type: data and configuration file\n");
+        return true;
+    }
+    if (preg_match('~^display board (\d+/\d+)$~', $text)) {
+        $say("\n  ---------------------------------------\n  Board Name          : H905MPLB   \n  Board Status        : Active normal\n  ---------------------------------------\n  Port  Port Optic   Native  MDI    Speed      Duplex    Flow-  Active   Link    \n        Type Status  VLAN           (Mbps)               Ctrl   State            \n  ------------------------------------------------------------------------------\n     0  GE   normal       1  normal 1000       full      off    active   online \n     1  10GE absence      1  -      10000      full      off    active   offline\n  ------------------------------------------------------------------------------\n");
+        return true;
+    }
+    if (preg_match('~^display port vlan \d+/\d+/\d+$~', $text)) {
+        $say("\n  ---------------------------------------\n     1    100    200\n  ---------------------------------------\n  Total: 3\n  Native VLAN: 1\n");
+        return true;
+    }
+    if ($text === 'display current-configuration') {
+        $say("\n{ <cr>|include-default<K>|section<K>||<K> }:");
+        $state = 'config-question';
+        return true;
+    }
+    if ($interface !== null && $text === 'display port state all') {
+        foreach ([0, 5] as $p) {
+            $say("\n  ----------------------------------------------------------------------------\n  F/S/P                        $interface/$p\n  Optical Module status        Online\n  Port state                   " . ($p ? 'Offline' : 'Online') . "\n  Laser state                  Normal\n  Temperature(C)               31\n  TX Bias current(mA)          37\n  Supply Voltage(V)            3.19\n  TX power(dBm)                7.12\n  Illegal rogue ONT            Inexistent\n  Wave length(nm)              1490");
+        }
+        $say("\n  ----------------------------------------------------------------------------\n");
+        return true;
+    }
+    if ($interface !== null && preg_match('/^display port info (\d+)$/', $text, $m)) {
+        $say("\n  -----------------------------------------------------------\n  F/S/P                                      $interface/$m[1]\n  Min distance(km)                           0\n  Max distance(km)                           20\n  Autofind                                   " . ($m[1] === '0' ? 'Enable' : 'Disable') . "\n  Admin State                                On\n  -----------------------------------------------------------\n");
+        return true;
+    }
     if ($text === 'display ont-lineprofile gpon all') {
         $say("\n" . $profiles([[0, 'line-profile_default_0', 0], [6, 'SmartOLT_G', 16]]));
         return true;
@@ -304,8 +344,13 @@ $cli = static function (string $text) use (&$mode, &$state, &$onts, &$autofind, 
     }
     return false;
 };
-$line = static function (string $text) use (&$client, &$state, &$table, &$pending, $cli, $config, $say, $prompt, $log): void {
+$line = static function (string $text) use (&$client, &$state, &$table, &$pending, $cli, &$config, $say, $prompt, $log): void {
     switch ($state) {
+        case 'config-question':
+            $state = 'enable';
+            $say("\n[Active: H905MPLB; Standby: H905MPLB]\n[MA5800V100R018: 8300]\n#\n[global-config]\n  <global-config>\n sysname " . ($config['sysname'] ?? 'MA5800-X7') . "\n snmp-agent community read cipher \"secret-in-the-config\"\n#\n[gpon]\n  <gpon-0/1>\n interface gpon 0/1\n port 0 ont-auto-find enable\n#\nreturn\n");
+            $prompt();
+            return;
         case 'question':
             $log('telnet-cmd ' . $text);
             $state = 'enable';
@@ -357,6 +402,10 @@ $line = static function (string $text) use (&$client, &$state, &$table, &$pendin
             return;
     }
     $log('telnet-cmd ' . $text);
+    if ($state === 'enable' && is_file($config['log'] . '.sysname')) {
+        // A test changes the configuration by leaving a new name here.
+        $config['sysname'] = trim((string) file_get_contents($config['log'] . '.sysname'));
+    }
     if ($state === 'enable' && $cli($text)) {
         if ($state === 'enable') {
             $prompt();

@@ -264,6 +264,10 @@ configure on the OLT. After that:
 - The portal does not send `save`: check `display autosave configuration` on the OLT. If another system such as SmartOLT also
   adds ONUs to the same OLT, use only one of them for that.
 
+**More from the OLT.** Its page also shows its software, uptime, power use and fan speeds, each port's optics and VLANs, its
+VLANs and profiles, and a history of what was done from the portal. With telnet on, the portal keeps a sealed copy of the
+OLT's configuration each day it changed (**Config backups**), and **Export MAC table** downloads the MAC table as a file.
+
 **How clients are linked** (see **OLT → Client mapping**):
 
 - **From the session:** when an online client's MAC is behind exactly one ONU, the client is linked to it.

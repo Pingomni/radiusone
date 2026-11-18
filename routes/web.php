@@ -213,6 +213,8 @@ Route::middleware('frweb.auth')->group(function () {
             Route::post('/olts/{id}/test', [OltController::class, 'test'])->whereNumber('id');
             Route::post('/olts/{id}/sync', [OltController::class, 'sync'])->whereNumber('id');
             Route::post('/olts/{id}/delete', [OltController::class, 'delete'])->whereNumber('id');
+            Route::post('/olts/{id}/backup', [OltController::class, 'backup'])->whereNumber('id');
+            Route::get('/olts/{id}/backups/{backup}', [OltController::class, 'backupFile'])->whereNumber(['id', 'backup']);
             // The only routes that change an OLT, and only for an OLT with "Allow changes from the portal" on.
             Route::get('/olts/{id}/provision', [OnuController::class, 'provision'])->whereNumber('id');
             Route::post('/olts/{id}/provision', [OnuController::class, 'add'])->whereNumber('id');
@@ -222,6 +224,7 @@ Route::middleware('frweb.auth')->group(function () {
         Route::get('/olts/{id}/onus/{onu}/live', [OnuController::class, 'live'])->whereNumber(['id', 'onu']);
         Route::get('/olts/{id}', [OltController::class, 'show'])->whereNumber('id');
         Route::get('/olts/{id}/graph', [OltController::class, 'graph'])->whereNumber('id');
+        Route::get('/olts/{id}/macs.csv', [OltController::class, 'macs'])->whereNumber('id');
     });
 
     Route::middleware('permission:nas.view')->group(function () {
