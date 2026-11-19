@@ -95,7 +95,9 @@ final class OnuController extends Controller
         [$olt, $row] = self::find($id, $onu);
         set_time_limit(90);
         try {
-            $read = self::liveRead($olt, $row, $request->boolean('fresh'));
+            // "quick" is the page opening: it gets the last read at once if there is one from the last 5 minutes, and
+            // asks for a new one itself when that is more than 30 seconds old.
+            $read = self::liveRead($olt, $row, $request->boolean('fresh'), $request->boolean('quick') ? 300 : self::LIVE_SECONDS);
             $payload = ['ok' => true, 'data' => $read['data'], 'age' => time() - $read['at']];
         } catch (RuntimeException $e) {
             $payload = ['ok' => false, 'error' => $e->getMessage()];

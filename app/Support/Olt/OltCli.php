@@ -13,10 +13,11 @@ use RuntimeException;
 final class OltCli
 {
     /**
-     * enable and scroll only affect this login: scroll stops the output pausing, and nothing is saved on the OLT.
+     * enable, scroll and undo smart only affect this login: scroll stops the output pausing, undo smart stops the
+     * "press Enter" questions, and nothing is saved on the OLT.
      * config and interface gpon only move to where some display commands live.
      */
-    private const ALLOWED = ['enable', 'scroll', 'config', 'quit'];
+    private const ALLOWED = ['enable', 'scroll', 'undo smart', 'config', 'quit'];
     private const ALLOWED_PATTERNS = ['/^display [a-z0-9][a-z0-9 \/-]*$/D', '/^interface gpon \d{1,2}\/\d{1,2}$/D'];
 
     private OltTelnet $telnet;
@@ -43,6 +44,9 @@ final class OltCli
         $this->telnet->open();
         try {
             $this->send('scroll');
+            // For this login only: the OLT stops asking "press Enter for more options" after every command, which
+            // halves the time each one takes.
+            $this->send('undo smart');
             return array_map($this->send(...), $commands);
         } finally {
             $this->telnet->close();

@@ -4,6 +4,13 @@ RadiusOne follows [semantic versioning](https://semver.org): **major** for chang
 upgrading, **minor** for new features, **patch** for fixes. The version is in the `VERSION` file and shows in
 the portal's sidebar and under Settings → System information.
 
+## 2.16.2 (2026-11-19)
+
+The ONU's page opens faster. Update with **Settings → Overview → Software update** or `sudo radiusone-update`.
+
+- **About 7 seconds instead of 14** to read what an ONU has now, and the last read shows at once when it is under
+  5 minutes old. Every telnet read of an OLT is faster.
+
 ## 2.16.1 (2026-11-19)
 
 A fix for the ONU's page. Update with **Settings → Overview → Software update** or `sudo radiusone-update`.

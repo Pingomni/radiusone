@@ -98,7 +98,7 @@ final class OltManageTest extends TestCase
     /** @return list<string> only the lines that change the OLT */
     private function changes(): array
     {
-        return array_values(array_filter($this->commands(), static fn (string $c) => !preg_match('/^(enable|scroll|config|quit|y|n|display .*|interface gpon .*)$/', $c)));
+        return array_values(array_filter($this->commands(), static fn (string $c) => !preg_match('/^(enable|scroll|undo smart|config|quit|y|n|display .*|interface gpon .*)$/', $c)));
     }
 
     public function test_nothing_is_changed_until_changes_are_allowed_for_the_olt(): void
@@ -128,7 +128,7 @@ final class OltManageTest extends TestCase
         $onu = $this->onu($olt);
         $this->actingAsOperator();
         $this->post("/olts/{$olt['id']}/onus/$onu/reboot")->assertSessionHas('flash.type', 'success');
-        $this->assertSame(['enable', 'scroll', 'display ont info 0 1 0 3', 'config', 'interface gpon 0/1', 'ont reset 0 3', 'y', 'quit', 'quit', 'quit', 'y'], $this->commands());
+        $this->assertSame(['enable', 'scroll', 'undo smart', 'display ont info 0 1 0 3', 'config', 'interface gpon 0/1', 'ont reset 0 3', 'y', 'quit', 'quit', 'quit', 'y'], $this->commands());
         $audit = Db::row('SELECT * FROM audit_logs WHERE action="onu_reboot"');
         $this->assertSame('HWTC1234ABCD', $audit['entity_id']);
         $this->assertStringContainsString('ont reset 0 3', $audit['after_json']);
@@ -534,7 +534,7 @@ final class OltManageTest extends TestCase
         foreach (['ont delete 0 3', 'config', 'display version; ont delete 0 3', 'display version | include x', 'display ont info 0 1 0 3 ?', 'undo service-port 2100'] as $bad) {
             $this->get("/olts/{$olt['id']}/cli?command=" . urlencode($bad))->assertOk()->assertJsonPath('ok', false);
         }
-        $this->assertSame([], array_values(array_filter($this->commands(), static fn (string $c) => !in_array($c, ['enable', 'scroll', 'quit', 'y'], true))));
+        $this->assertSame([], array_values(array_filter($this->commands(), static fn (string $c) => !in_array($c, ['enable', 'scroll', 'undo smart', 'quit', 'y'], true))));
         // A line break is folded into a space, so a second line can only ever be more words of the one display command.
         $this->get("/olts/{$olt['id']}/cli?command=" . urlencode("display version\nont delete 0 3"))->assertOk();
         $this->assertContains('display version ont delete 0 3', $this->commands());
@@ -629,7 +629,7 @@ final class OltManageTest extends TestCase
             ->where('disconnections', ['day' => 0, 'week' => 0])->where('olt.rxWarning', -27)->has('ranges'));
         $this->get("/olts/{$olt['id']}/onus/$onu/live")->assertOk()->assertJsonPath('ok', true)
             ->assertJsonPath('data.servicePorts.0.index', 2100)->assertJsonPath('data.servicePorts.0.down', 9)->assertJsonPath('data.servicePorts.0.up', 8)
-            ->assertJsonPath('data.traffic.down', 6300)->assertJsonPath('data.lan.0.on', true)->assertJsonPath('data.lan.1.up', true)->assertJsonPath('data.lan.1.native', 1);
+            ->assertJsonPath('data.lan.0.on', true)->assertJsonPath('data.lan.1.up', true)->assertJsonPath('data.lan.1.native', 1);
         $this->get("/olts/{$olt['id']}/onus/$onu/config")->assertOk()->assertJsonPath('ok', true)
             ->assertJsonPath('output', fn (string $o) => str_starts_with($o, '[MA5800') && str_contains($o, 'ont add 0 3 sn-auth "485754431234ABCD"') && !str_contains($o, 'MA5800-X7#'));
         $this->assertSame([], $this->changes());

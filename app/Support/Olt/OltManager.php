@@ -80,6 +80,8 @@ final class OltManager
         try {
             $t->open();
             $t->command('scroll');
+            // For this login only: the OLT stops asking "press Enter for more options" after every command.
+            $t->command('undo smart');
             return $work($t);
         } finally {
             $t->close();
@@ -456,7 +458,8 @@ final class OltManager
         $out = Olts::cli($olt, 60.0)->read([
             "display ont info $f $s $p $n", "display ont wan-info $f/$s $p $n", 'config', "interface gpon $f/$s",
             "display ont optical-info $p $n", "display ont port state $p $n eth-port all", "display ont version $p $n",
-            "display ont port attribute $p $n eth", "display ont traffic $p $n", 'quit', "display service-port port $f/$s/$p ont $n",
+            // Not "display ont traffic": the OLT takes over 4 seconds to measure it, and the page has the traffic graph.
+            "display ont port attribute $p $n eth", 'quit', "display service-port port $f/$s/$p ont $n",
             // In the same login, so the Configure and Running config tabs need no login of their own.
             "display current-configuration ont $f/$s/$p $n",
         ]);
@@ -494,9 +497,9 @@ final class OltManager
                 sort($ports);
                 return $ports;
             })(),
-            'traffic' => HuaweiCli::ontTraffic($out[8]),
-            'servicePorts' => array_map(static fn (array $sp) => ['index' => $sp['index'], 'vlan' => $sp['vlan'], 'gem' => $sp['gem'], 'down' => $sp['rx'], 'up' => $sp['tx'], 'state' => $sp['up']], HuaweiCli::servicePorts($out[10])),
-            'config' => ($config = HuaweiCli::configText($out[11])),
+            'traffic' => ['up' => null, 'down' => null],
+            'servicePorts' => array_map(static fn (array $sp) => ['index' => $sp['index'], 'vlan' => $sp['vlan'], 'gem' => $sp['gem'], 'down' => $sp['rx'], 'up' => $sp['tx'], 'state' => $sp['up']], HuaweiCli::servicePorts($out[9])),
+            'config' => ($config = HuaweiCli::configText($out[10])),
             'omci' => $config !== '' && str_contains($config, HuaweiCli::serialForCli((string) $onu['sn']) ?? "\0") ? HuaweiCli::onuConfig($config, $p, $n) : null,
         ];
     }

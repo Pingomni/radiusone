@@ -205,9 +205,9 @@ final class OltTest extends TestCase
         sort($types);
         $this->assertSame(['snmp a0', 'snmp a5'], array_values($types));
         $commands = array_values(array_filter($lines, static fn (string $l) => str_starts_with($l, 'telnet-cmd')));
-        $this->assertSame(['telnet-cmd enable', 'telnet-cmd scroll', 'telnet-cmd display mac-address all', 'telnet-cmd quit', 'telnet-cmd y'], array_slice($commands, 0, 5));
+        $this->assertSame(['telnet-cmd enable', 'telnet-cmd scroll', 'telnet-cmd undo smart', 'telnet-cmd display mac-address all', 'telnet-cmd quit', 'telnet-cmd y'], array_slice($commands, 0, 6));
         // After the MAC table come the inventory and the configuration copy: only "display" and the lines that reach it.
-        $this->assertSame([], array_values(array_filter($commands, static fn (string $c) => !preg_match('~^telnet-cmd (enable|scroll|config|quit|y|display [a-z0-9 /-]+|interface gpon \d+/\d+)$~', $c))));
+        $this->assertSame([], array_values(array_filter($commands, static fn (string $c) => !preg_match('~^telnet-cmd (enable|scroll|undo smart|config|quit|y|display [a-z0-9 /-]+|interface gpon \d+/\d+)$~', $c))));
         $this->assertContains('telnet-cmd display current-configuration', $commands);
     }
 

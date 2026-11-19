@@ -74,7 +74,10 @@ function useLive(base: string, enabled: boolean): LiveState {
     const read = useCallback(async (fresh = true) => {
         setBusy(true);
         try {
-            setAnswer(await getJson<Answer>(`${base}/live${fresh ? '?fresh=1' : ''}`));
+            const first = await getJson<Answer>(`${base}/live${fresh ? '?fresh=1' : '?quick=1'}`);
+            setAnswer(first);
+            // Opening the page shows the last read at once; if that is not from just now, the OLT is asked straight after.
+            if (!fresh && first.ok && (first.age ?? 0) > 30) setAnswer(await getJson<Answer>(`${base}/live?fresh=1`));
         } catch {
             setAnswer({ ok: false, error: 'The portal could not be reached, or your session ended. Reload the page and try again.' });
         } finally {

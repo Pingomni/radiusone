@@ -141,6 +141,10 @@ $cli = static function (string $text) use (&$mode, &$state, &$onts, &$autofind, 
     }
     $interface = str_starts_with($mode, 'if:') ? substr($mode, 3) : null;
     $ok = static fn () => true;
+    if ($text === 'undo smart') {
+        $say("\n  Interactive function is disabled\n");
+        return true;
+    }
     if ($text === 'config' && $mode === '') {
         $mode = 'config';
         return true;
