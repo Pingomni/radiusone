@@ -4,6 +4,13 @@ RadiusOne follows [semantic versioning](https://semver.org): **major** for chang
 upgrading, **minor** for new features, **patch** for fixes. The version is in the `VERSION` file and shows in
 the portal's sidebar and under Settings → System information.
 
+## 2.16.1 (2026-11-19)
+
+A fix for the ONU's page. Update with **Settings → Overview → Software update** or `sudo radiusone-update`.
+
+- **The ONU's picture and status only changed after Get status or Live:** the page now reads again every 30 seconds by
+  itself (10 with Live on), and Live no longer stops after the page was in the background.
+
 ## 2.16.0 (2026-11-19)
 
 A live console on the OLT, a new OLT page, and a faster ONU page. Update with **Settings → Overview → Software update** or `sudo radiusone-update`.

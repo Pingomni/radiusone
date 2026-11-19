@@ -1,5 +1,5 @@
 import { Link, router } from '@inertiajs/react';
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { DeleteButton, PostButton, useConfirm } from '@/components/confirm';
 import Icon from '@/components/Icon';
 import { ChartOrMessage, type ChartPayload } from '@/components/LineChart';
@@ -65,7 +65,7 @@ async function getJson<T>(url: string): Promise<T> {
     return (await response.json()) as T;
 }
 
-/** One read of the OLT shared by the whole page. Live asks again 10 seconds after each answer while the page is in view. */
+/** One read of the OLT shared by the whole page, repeated while the page is in view. */
 function useLive(base: string, enabled: boolean): LiveState {
     const [answer, setAnswer] = useState<Answer | null>(null);
     const [busy, setBusy] = useState(false);
@@ -82,11 +82,21 @@ function useLive(base: string, enabled: boolean): LiveState {
         }
     }, [base]);
     useEffect(() => { if (enabled) void read(false); }, [enabled, read]);
+    // The page keeps itself up to date: every 30 seconds, or every 10 with Live on. A check each second finds when the
+    // next read is due, so a page that was in the background reads again as soon as it is looked at, and an answer
+    // that is still on its way is never asked for twice.
+    const busyNow = useRef(false);
+    busyNow.current = busy;
+    const lastRead = useRef(Date.now());
+    useEffect(() => { if (!busy) lastRead.current = Date.now(); }, [busy]);
     useEffect(() => {
-        if (!enabled || !auto || busy) return undefined;
-        const timer = window.setTimeout(() => { if (!document.hidden) void read(); }, 10000);
-        return () => window.clearTimeout(timer);
-    }, [enabled, auto, busy, read]);
+        if (!enabled) return undefined;
+        const every = auto ? 10000 : 30000;
+        const timer = window.setInterval(() => {
+            if (!document.hidden && !busyNow.current && Date.now() - lastRead.current >= every) void read();
+        }, 1000);
+        return () => window.clearInterval(timer);
+    }, [enabled, auto, read]);
     return { answer, busy, auto, setAuto, read, enabled };
 }
 
