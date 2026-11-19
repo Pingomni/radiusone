@@ -768,8 +768,8 @@ export default function OnuPage({ olt, onu, clients, disconnections, timeline, s
                         {live.answer?.ok && live.answer.failed && <p className="onu-device-note" role="alert">The last read failed, so this is from the read before: {live.answer.failed}</p>}
                     </div>
                     <div className="onu-meters">
-                        <SignalMeter label="ONU receives, 1490 nm" dbm={rx} weak={olt.rxWarning} veryWeak={olt.rxCritical} note={data?.optical.tx ? `Transmits ${data.optical.tx} dBm` : undefined} />
-                        <SignalMeter label="OLT receives, 1310 nm" dbm={oltRx} weak={olt.rxWarning} veryWeak={olt.rxCritical} />
+                        <SignalMeter label="ONU receives" dbm={rx} weak={olt.rxWarning} veryWeak={olt.rxCritical} note={data?.optical.tx ? `Transmits ${data.optical.tx} dBm` : undefined} />
+                        <SignalMeter label="OLT receives" dbm={oltRx} weak={olt.rxWarning} veryWeak={olt.rxCritical} />
                         <div className="onu-meter onu-traffic">
                             <div className="onu-meter-head"><span>Traffic</span><small>last 5 minutes</small></div>
                             <div className="onu-traffic-rows">
