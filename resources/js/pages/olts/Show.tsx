@@ -8,7 +8,7 @@ import OltConsole from '@/components/OltConsole';
 import { OnuPower, OnuStatus, type OnuRow } from '@/components/olt';
 import { DataTable, Pagination } from '@/components/table';
 import { Tabs } from '@/components/tabs';
-import { Badge, Field, ListPanel, Panel, RowActions, Select, Time } from '@/components/ui';
+import { Badge, Check, Field, ListPanel, Panel, RowActions, Select, Time } from '@/components/ui';
 import AppLayout from '@/layouts/AppLayout';
 import { useCan } from '@/lib/auth';
 import type { Paginated } from '@/lib/types';
@@ -27,10 +27,11 @@ type Profile = { id: number; name: string; bound: number };
 type Details = {
     description: string; version: { software: string; patch: string; product: string } | null; bootedAt: string | null; power: number | null; temperature: number | null;
     snmp: string; telnetPort: number | null; ntp: { server: string; status: string; reach: number }[]; autosave: { on: boolean | null; minutes: number | null } | null;
-    vlans: { id: number; ports: number; type: string; standard: number }[]; lineProfiles: Profile[]; serviceProfiles: Profile[];
+    vlans: Vlan[]; lineProfiles: Profile[]; serviceProfiles: Profile[];
     dbaProfiles: { id: number; type: number; fix: number; assure: number; max: number; bound: number }[]; trafficTables: { id: number; cir: string; pir: string }[];
     read: string | null; error: string; backupAt: string | null; backupError: string;
 };
+type Vlan = { id: number; ports: number; type: string; standard: number; name: string; desc: string; own: boolean };
 type Backup = { id: number; taken: string; checked: string; bytes: number };
 type HistoryRow = { at: string; who: string; action: string; what: string; detail: string };
 
@@ -38,7 +39,7 @@ const kbps = (v: number | string) => (v === 'off' ? 'No limit' : Number(v) >= 10
 const ACTIONS: Record<string, string> = {
     create: 'Added to the portal', update: 'Settings changed', backup: 'Configuration copied', backup_download: 'Configuration downloaded',
     cli: 'Display command run', card_restart: 'Card restarted', port_autofind_on: 'Autofind turned on', port_autofind_off: 'Autofind turned off', port_restart_onus: 'All ONUs on a port restarted', port_off: 'PON port turned off', port_on: 'PON port turned on',
-    ntp_add: 'Time server added', ntp_remove: 'Time server removed', vlan_add: 'VLAN created', vlan_remove: 'VLAN deleted', uplink_vlan_add: 'VLAN added to an uplink', uplink_vlan_remove: 'VLAN taken off an uplink',
+    ntp_add: 'Time server added', ntp_remove: 'Time server removed', vlan_add: 'VLAN created', vlan_edit: 'VLAN changed', vlan_remove: 'VLAN deleted', uplink_vlan_add: 'VLAN added to an uplink', uplink_vlan_remove: 'VLAN taken off an uplink',
     onu_add: 'ONU added', onu_delete: 'ONU removed', onu_reboot: 'ONU restarted', onu_disable: 'ONU turned off', onu_enable: 'ONU turned on', onu_describe: 'ONU renamed',
     onu_wan: 'ONU internet connection set', onu_bridge: 'ONU switched to bridging', onu_eth_port: 'ONU Ethernet port set', onu_lan_vlan: 'ONU LAN VLAN set', onu_speed: 'ONU speed changed',
     onu_lan_on: 'ONU LAN port turned on', onu_lan_off: 'ONU LAN port turned off', onu_factory_reset: 'ONU reset to factory settings', olt_traffic_table_add: 'Speed added', olt_terminal: 'Terminal command',
@@ -241,69 +242,184 @@ function DetailsTab({ olt, details, hardware, path }: { olt: Olt; details: Detai
     );
 }
 
+const shortPort = (p: Port) => p.name.replace(/^[a-z]+/i, '');
+const portLabel = (p: Port) => `${shortPort(p)}${p.alias ? ` ${p.alias}` : ''}`;
+const VLAN_NAME = /^[A-Za-z0-9_.-]{1,15}$/;
+const quoteDesc = (d: string) => (d.includes(' ') ? `"${d}"` : d);
+
+/** The uplink ports as chips to tick, each with its link state. */
+function UplinkChoice({ uplinks, chosen, onChange, locked, legend }: { uplinks: Port[]; chosen: number[]; onChange: (next: number[]) => void; locked?: (p: Port) => string | null; legend: string }) {
+    return (
+        <fieldset className="onu-vlan-chips span2">
+            <legend>{legend}</legend>
+            {uplinks.length === 0 && <span className="hint">The OLT has not reported its uplink ports yet.</span>}
+            {uplinks.map((p) => {
+                const on = chosen.includes(p.id);
+                const why = locked?.(p) ?? null;
+                return (
+                    <label key={p.id} className={on ? 'on' : undefined} title={why ?? (p.oper ? 'Link up' : 'No link')}>
+                        <input type="checkbox" checked={on} disabled={why !== null} onChange={() => onChange(on ? chosen.filter((x) => x !== p.id) : [...chosen, p.id])} />
+                        {portLabel(p)} {p.oper ? <Badge tone="success">up</Badge> : <Badge>down</Badge>}
+                    </label>
+                );
+            })}
+        </fieldset>
+    );
+}
+
+function AddVlan({ path, vlans, uplinks, onClose }: { path: string; vlans: Vlan[]; uplinks: Port[]; onClose: () => void }) {
+    const [f, setF] = useState({ id: '', range: false, to: '', type: 'smart', name: '', desc: '' });
+    // The uplinks with a link are where a new VLAN usually has to go.
+    const [chosen, setChosen] = useState<number[]>(() => uplinks.filter((p) => p.oper).map((p) => p.id));
+    const [busy, setBusy] = useState(false);
+    const set = (key: keyof typeof f, value: string | boolean) => setF((x) => ({ ...x, [key]: value }));
+    const from = Number(f.id);
+    const to = f.range ? Number(f.to) : from;
+    const have = new Set(vlans.map((v) => v.id));
+    const taken = Number.isInteger(from) && Number.isInteger(to) && to >= from ? Array.from({ length: Math.min(to - from + 1, 64) }, (_, i) => from + i).filter((v) => have.has(v)) : [];
+    const problem = !f.id ? '' : !Number.isInteger(from) || from < 2 || from > 4093 ? 'A VLAN is a number from 2 to 4093.'
+        : f.range && (!f.to || !Number.isInteger(to) || to <= from || to > 4093) ? 'The last VLAN of the range must be higher than the first, and at most 4093.'
+            : f.range && to - from >= 64 ? 'Create up to 64 VLANs at once.'
+                : taken.length ? `The OLT already has VLAN ${taken.slice(0, 8).join(', ')}.`
+                    : f.name && !VLAN_NAME.test(f.name) ? 'A name is up to 15 letters, digits, "_", "-" or ".", without spaces.' : '';
+    const list = f.range ? `${f.id} to ${f.to || '?'}` : f.id || '?';
+    const ports = uplinks.filter((p) => chosen.includes(p.id));
+    const commands = [
+        `vlan ${list} ${f.type}`,
+        ...(!f.range && f.name ? [`vlan name ${f.id} ${f.name}`] : []),
+        ...(!f.range && f.desc.trim() ? [`vlan desc ${f.id} description ${quoteDesc(f.desc.trim())}`] : []),
+        ...ports.map((p) => { const [fr, sl, po] = shortPort(p).split('/'); return `port vlan ${list} ${fr}/${sl} ${po}`; }),
+    ];
+    const save = (e: React.FormEvent) => {
+        e.preventDefault();
+        setBusy(true);
+        router.post(`${path}/settings/vlans`, { action: 'add', vlan: f.id, to: f.range ? f.to : '', type: f.type, name: f.range ? '' : f.name, desc: f.range ? '' : f.desc, uplinks: chosen.map(String) },
+            { preserveScroll: true, preserveState: true, onSuccess: (page) => { if ((page.props as { flash?: { type?: string } }).flash?.type !== 'danger') onClose(); }, onFinish: () => setBusy(false) });
+    };
+    return (
+        <Panel title="Add a VLAN" actions={<button type="button" className="button" onClick={onClose}>Cancel</button>}>
+            <form onSubmit={save}>
+                <div className="form-grid">
+                    <Field label={f.range ? 'First VLAN' : 'VLAN ID'} name="vlan" type="number" min={2} max={4093} required autoFocus value={f.id} onChange={(e) => set('id', e.target.value)} hint="2 to 4093." />
+                    {f.range
+                        ? <Field label="Last VLAN" name="to" type="number" min={3} max={4093} required value={f.to} onChange={(e) => set('to', e.target.value)} hint="Up to 64 VLANs at once." />
+                        : <Select label="Type" name="type" value={f.type} onChange={(e) => set('type', e.target.value)} options={{ smart: 'Smart: for ONU service (usual)', standard: 'Standard: uplink ports only' }} />}
+                    <Check label="Create a range of VLANs" className="check span2" checked={f.range} onChange={(e) => set('range', e.target.checked)} />
+                    {f.range && <Select label="Type" name="type" value={f.type} onChange={(e) => set('type', e.target.value)} options={{ smart: 'Smart: for ONU service (usual)', standard: 'Standard: uplink ports only' }} />}
+                    {!f.range && (
+                        <>
+                            <Field label="Name (optional)" name="name" maxLength={15} autoComplete="off" value={f.name} onChange={(e) => set('name', e.target.value)} hint="Up to 15 letters, digits, _ - . Without a name the OLT calls it VLAN_0300." />
+                            <Field label="Description (optional)" name="desc" maxLength={32} autoComplete="off" value={f.desc} onChange={(e) => set('desc', e.target.value)} hint="Up to 32 characters, for example the service or the area." />
+                        </>
+                    )}
+                    <UplinkChoice legend="Carry it on these uplink ports" uplinks={uplinks} chosen={chosen} onChange={setChosen} />
+                    {!chosen.length && <p className="hint span2">On no uplink port, the VLAN goes nowhere: ONUs on it have no way out until it is added to one.</p>}
+                    {problem && <p className="field-error span2" role="alert">{problem}</p>}
+                    <details><summary>Commands the OLT will get</summary><pre className="mono onu-preview">{commands.join('\n')}</pre></details>
+                </div>
+                <div className="form-actions"><button className="button primary" disabled={busy || !f.id || problem !== ''}>{busy ? 'Creating on the OLT…' : f.range ? `Create VLANs ${list}` : `Create VLAN ${f.id || ''}`}</button></div>
+            </form>
+        </Panel>
+    );
+}
+
+function EditVlan({ path, vlan, uplinks, canRemove, onClose }: { path: string; vlan: Vlan; uplinks: Port[]; canRemove: boolean; onClose: () => void }) {
+    const carrying = uplinks.filter((p) => p.uplink?.vlans.includes(vlan.id) && p.uplink.native !== vlan.id).map((p) => p.id);
+    const [name, setName] = useState(vlan.name);
+    const [desc, setDesc] = useState(vlan.desc);
+    const [chosen, setChosen] = useState<number[]>(carrying);
+    const [busy, setBusy] = useState(false);
+    const bad = name !== '' && !VLAN_NAME.test(name);
+    const changed = name !== vlan.name || desc.trim() !== vlan.desc || chosen.length !== carrying.length || chosen.some((id) => !carrying.includes(id));
+    const save = (e: React.FormEvent) => {
+        e.preventDefault();
+        setBusy(true);
+        router.post(`${path}/settings/vlan-edit`, { vlan: vlan.id, name, desc, uplinks: chosen.map(String) },
+            { preserveScroll: true, preserveState: true, onSuccess: (page) => { if ((page.props as { flash?: { type?: string } }).flash?.type !== 'danger') onClose(); }, onFinish: () => setBusy(false) });
+    };
+    // Taking the OLT's own VLAN off an uplink could cut the portal off from the OLT.
+    const locked = (p: Port) => (!carrying.includes(p.id) ? null : vlan.own ? 'The OLT has its own address on this VLAN' : !canRemove ? 'Taking a VLAN off a port needs the right to delete' : null);
+    return (
+        <Panel title={`Edit VLAN ${vlan.id}`} actions={<button type="button" className="button" onClick={onClose}>Cancel</button>}>
+            <form onSubmit={save}>
+                <div className="form-grid">
+                    <Field label="Name" name="name" maxLength={15} autoComplete="off" value={name} onChange={(e) => setName(e.target.value)} error={bad ? 'Up to 15 letters, digits, _ - . without spaces.' : undefined} hint={vlan.name ? undefined : `Now the OLT's default, VLAN_${String(vlan.id).padStart(4, '0')}.`} />
+                    <Field label="Description" name="desc" maxLength={32} autoComplete="off" value={desc} onChange={(e) => setDesc(e.target.value)} hint="Leave empty to remove it." />
+                    <UplinkChoice legend="Carried on these uplink ports" uplinks={uplinks} chosen={chosen} onChange={setChosen} locked={locked} />
+                </div>
+                {vlan.ports > 0 && chosen.length === 0 && <p className="flash warning">{vlan.ports} ONU service port{vlan.ports === 1 ? '' : 's'} use this VLAN: on no uplink port, those customers have no internet.</p>}
+                <div className="form-actions"><button className="button primary" disabled={busy || bad || !changed}>{busy ? 'Saving on the OLT…' : 'Save on the OLT'}</button></div>
+            </form>
+        </Panel>
+    );
+}
+
 function VlansTab({ details, olt, hardware, path }: { details: Details; olt: Olt; hardware: Hardware; path: string }) {
     const can = useCan();
-    const [vlan, setVlan] = useState('');
-    const [uplink, setUplink] = useState({ port: '', vlan: '' });
+    const [adding, setAdding] = useState(false);
+    const [editing, setEditing] = useState<number | null>(null);
     const mayChange = olt.canChange && can('nas.manage');
     const mayRemove = mayChange && can('danger.delete');
     const uplinks = hardware.ports.filter((p) => p.kind === 'uplink' && p.uplink);
-    const profiles = (title: string, rows: Profile[]) => (
+    const carriedOn = (v: Vlan) => uplinks.filter((p) => p.uplink?.vlans.includes(v.id));
+    const edited = details.vlans.find((v) => v.id === editing) ?? null;
+    return (
+        <>
+            <div className="toolbar">
+                <p className="hint">As the OLT has them, read every 15 minutes over telnet{details.read ? <>, last <Time value={details.read} /></> : ''}, and at once after a change made here.</p>
+                {mayChange && !adding && <button type="button" className="button primary" onClick={() => { setEditing(null); setAdding(true); }}><Icon name="plus" />Add VLAN</button>}
+            </div>
+            {adding && <AddVlan path={path} vlans={details.vlans} uplinks={uplinks} onClose={() => setAdding(false)} />}
+            {edited && <EditVlan key={edited.id} path={path} vlan={edited} uplinks={uplinks} canRemove={mayRemove} onClose={() => setEditing(null)} />}
+            <Panel title="VLANs">
+                <DataTable rows={details.vlans} rowKey={(v) => v.id} exportRows emptyText="Not read yet. VLANs show once telnet is on and the OLT has been read." columns={[
+                    { header: 'VLAN', cell: (v) => <strong className="mono">{v.id}</strong> },
+                    { header: 'Name', cell: (v) => v.name || <span className="hint mono">VLAN_{String(v.id).padStart(4, '0')}</span> },
+                    { header: 'Description', className: 'wrap', cell: (v) => v.desc || '-' },
+                    { header: 'Type', cell: (v) => v.type },
+                    { header: 'Uplink ports', className: 'wrap', cell: (v) => { const on = carriedOn(v); return on.length ? on.map((p) => <span key={p.id} className="mono" style={{ marginRight: '0.6rem' }} title={p.alias || undefined}>{shortPort(p)}{p.uplink?.native === v.id ? ' (native)' : ''}</span>) : v.ports > 0 ? <Badge tone="warning">None: its ONUs have no way out</Badge> : <span className="hint">None</span>; } },
+                    { header: 'ONUs', cell: (v) => v.ports },
+                    { header: '', cell: (v) => (v.own ? <Badge tone="info">OLT management</Badge> : '') },
+                    ...(mayChange ? [{ header: '', cell: (v: Vlan) => (
+                        <div className="toolbar">
+                            {v.id > 1 && <button type="button" className="button" onClick={() => { setAdding(false); setEditing(v.id); }}>Edit</button>}
+                            {mayRemove && v.id > 1 && !v.own && v.ports === 0 && (v.standard > 0
+                                ? <span className="hint" title="Take it off its uplink ports with Edit first">On uplinks</span>
+                                : <PostButton action={`${path}/settings/vlans`} data={{ action: 'remove', vlan: v.id }} preserveState label="Delete" confirm={{ title: `Delete VLAN ${v.id} on the OLT?`, message: 'No ONU and no uplink port uses it.', confirmLabel: 'Delete VLAN', typeToConfirm: String(v.id) }} />)}
+                        </div>
+                    ) }] : []),
+                ]} />
+            </Panel>
+        </>
+    );
+}
+
+function ProfilesTab({ details }: { details: Details }) {
+    const profiles = (title: string, hint: string, rows: Profile[]) => (
         <Panel title={title}>
-            <DataTable rows={rows} rowKey={(p) => p.id} emptyText="Not read yet." columns={[
+            <p className="hint">{hint}</p>
+            <DataTable rows={rows} rowKey={(p) => p.id} exportRows emptyText="Not read yet." columns={[
                 { header: 'ID', cell: (p) => p.id },
                 { header: 'Name', cell: (p) => p.name },
-                { header: 'ONUs using it', cell: (p) => p.bound },
+                { header: 'ONUs using it', cell: (p) => (p.bound ? p.bound : <span className="hint">0</span>) },
             ]} />
         </Panel>
     );
     return (
         <>
-            <p className="hint">As the OLT has them, read every 15 minutes over telnet{details.read ? <>, last <Time value={details.read} /></> : ''}. They are created on the OLT; the portal uses them when you add an ONU.</p>
-            <Panel title="VLANs">
-                <DataTable rows={details.vlans} rowKey={(v) => v.id} emptyText="Not read yet. VLANs show once telnet is on and the OLT has been read." columns={[
-                    { header: 'VLAN', cell: (v) => v.id },
-                    { header: 'Type', cell: (v) => v.type },
-                    { header: 'Uplink ports', cell: (v) => v.standard },
-                    { header: 'Service ports (ONUs)', cell: (v) => v.ports },
-                    ...(mayRemove ? [{ header: '', cell: (v: Details['vlans'][number]) => (v.id > 1 && v.ports === 0 ? <PostButton action={`${path}/settings/vlans`} data={{ action: 'remove', vlan: v.id }} label="Delete" confirm={{ title: `Delete VLAN ${v.id} on the OLT?`, message: 'The OLT refuses if the VLAN is still used, and the portal refuses if the OLT has its own address on it.', confirmLabel: 'Delete VLAN', typeToConfirm: String(v.id) }} /> : '') }] : []),
-                ]} />
-                {mayChange && (
-                    <form className="toolbar" onSubmit={(e) => { e.preventDefault(); router.post(`${path}/settings/vlans`, { action: 'add', vlan }, { preserveScroll: true, onSuccess: () => setVlan('') }); }}>
-                        <Field label="Create a VLAN" name="vlan" type="number" min={2} max={4093} value={vlan} onChange={(e) => setVlan(e.target.value)} />
-                        <button className="button" disabled={!vlan}>Create</button>
-                    </form>
-                )}
-            </Panel>
-            <Panel title="VLANs on uplink ports">
-                <DataTable rows={uplinks} rowKey={(p) => p.id} emptyText="Not read yet." columns={[
-                    { header: 'Port', cell: (p) => <span className="mono">{p.name}</span> },
-                    { header: 'Description', cell: (p) => p.alias || '-' },
-                    { header: 'VLANs it carries', className: 'wrap', cell: (p) => (p.uplink?.vlans.length ? p.uplink.vlans.map((v) => (
-                        <span key={v} className="mono" style={{ marginRight: '0.75rem' }}>
-                            {v}{mayRemove && v !== p.uplink?.native && <> <PostButton action={`${path}/settings/uplink-vlans`} data={{ action: 'remove', port: p.id, vlan: v }} label="remove" confirm={{ title: `Take VLAN ${v} off ${p.name}?`, message: `ONUs on VLAN ${v} lose their way out through this port.`, confirmLabel: 'Take off', typeToConfirm: String(v) }} /></>}
-                        </span>
-                    )) : '-') },
-                ]} />
-                {mayChange && uplinks.length > 0 && (
-                    <form className="toolbar" onSubmit={(e) => { e.preventDefault(); router.post(`${path}/settings/uplink-vlans`, { action: 'add', ...uplink }, { preserveScroll: true, onSuccess: () => setUplink({ port: '', vlan: '' }) }); }}>
-                        <Select label="Add a VLAN to" name="port" placeholder="Choose a port" options={uplinks.map((p) => ({ value: String(p.id), label: p.alias ? `${p.name} (${p.alias})` : p.name }))} value={uplink.port} onChange={(e) => setUplink({ ...uplink, port: e.target.value })} />
-                        <Select label="VLAN" name="vlan" placeholder="Choose" options={details.vlans.map((v) => ({ value: String(v.id), label: String(v.id) }))} value={uplink.vlan} onChange={(e) => setUplink({ ...uplink, vlan: e.target.value })} />
-                        <button className="button" disabled={!uplink.port || !uplink.vlan}>Add</button>
-                    </form>
-                )}
-            </Panel>
-            {profiles('Line profiles', details.lineProfiles)}
-            {profiles('Service profiles', details.serviceProfiles)}
-            <Panel title="Traffic tables">
-                <DataTable rows={details.trafficTables} rowKey={(t) => t.id} emptyText="Not read yet." columns={[
+            <p className="hint">As the OLT has them, read every 15 minutes over telnet{details.read ? <>, last <Time value={details.read} /></> : ''}. The portal offers them when you add or configure an ONU.</p>
+            {profiles('Line profiles', 'How an ONU talks to the OLT: its T-CONTs, GEM ports and upstream bandwidth.', details.lineProfiles)}
+            {profiles('Service profiles', 'What an ONU model has: its number of LAN and phone ports.', details.serviceProfiles)}
+            <Panel title="Traffic tables (speeds)">
+                <p className="hint">The OLT&apos;s speed ceilings for service ports. The customer&apos;s plan speed stays with RADIUS.</p>
+                <DataTable rows={details.trafficTables} rowKey={(t) => t.id} exportRows emptyText="Not read yet." columns={[
                     { header: 'ID', cell: (t) => t.id },
                     { header: 'Guaranteed', cell: (t) => kbps(t.cir) },
                     { header: 'Maximum', cell: (t) => kbps(t.pir) },
                 ]} />
             </Panel>
             <Panel title="DBA profiles (upstream)">
-                <DataTable rows={details.dbaProfiles} rowKey={(d) => d.id} emptyText="Not read yet." columns={[
+                <DataTable rows={details.dbaProfiles} rowKey={(d) => d.id} exportRows emptyText="Not read yet." columns={[
                     { header: 'ID', cell: (d) => d.id },
                     { header: 'Type', cell: (d) => d.type },
                     { header: 'Fixed', cell: (d) => (d.fix ? kbps(d.fix) : '-') },
@@ -638,7 +754,8 @@ export default function OltShow({ olt, counts, filters, hardware, details, backu
                             </>
                         ),
                     },
-                    { key: 'vlans', title: 'VLANs and profiles', icon: 'services', count: details.vlans.length, content: <VlansTab details={details} olt={olt} hardware={hardware} path={path} /> },
+                    { key: 'vlans', title: 'VLANs', icon: 'services', count: details.vlans.length, content: <VlansTab details={details} olt={olt} hardware={hardware} path={path} /> },
+                    { key: 'profiles', title: 'Profiles', icon: 'book', count: details.lineProfiles.length + details.serviceProfiles.length, content: <ProfilesTab details={details} /> },
                     ...(backups ? [{ key: 'backups', title: 'Config backups', icon: 'book', count: backups.length, content: <BackupsTab olt={olt} details={details} backups={backups} path={path} /> }] : []),
                     ...(can('nas.manage') && olt.telnet ? [can('danger.delete') && olt.canChange
                         ? { key: 'cli', title: 'Terminal', icon: 'activity', content: <OltConsole path={path} name={olt.name} start={typeof window === 'undefined' ? undefined : new URLSearchParams(window.location.search).get('at') ?? undefined} /> }

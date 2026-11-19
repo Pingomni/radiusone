@@ -33,7 +33,8 @@ final class OltInventory
             }
         }
         $commands = ['display version', 'display vlan all', 'display ont-lineprofile gpon all', 'display ont-srvprofile gpon all', 'display dba-profile all',
-            'display traffic table ip from-index 0', 'display ntp-service sessions', 'display autosave configuration'];
+            'display traffic table ip from-index 0', 'display ntp-service sessions', 'display autosave configuration',
+            'display current-configuration section vlan-config', 'display interface vlanif'];
         $global = count($commands);
         $want = [];
         foreach ($ports['uplink'] as $card => $list) {
@@ -70,6 +71,8 @@ final class OltInventory
             'lineProfiles' => HuaweiCli::profiles($out[2]), 'serviceProfiles' => HuaweiCli::profiles($out[3]),
             'dbaProfiles' => HuaweiCli::dbaProfiles($out[4]), 'trafficTables' => HuaweiCli::trafficTables($out[5]),
             'ntp' => HuaweiCli::ntp($out[6]), 'autosave' => HuaweiCli::autosave($out[7]),
+            // Each VLAN's name and description, and the VLANs the OLT's own management address is on.
+            'vlanInfo' => HuaweiCli::vlanConfig($out[8])['vlans'], 'ownVlans' => HuaweiCli::ownVlans($out[9]),
             'uplinks' => [], 'pon' => [],
         ];
         foreach ($want as $i => [$what, $card, $port]) {

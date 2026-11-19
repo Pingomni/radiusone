@@ -99,7 +99,8 @@ foreach ($config['service_ports'] ?? [[2100, 100, '0/1/0/3'], [2101, 100, '0/2/5
 $lanOff = [];
 $ntp = ['192.0.2.123'];
 $vlans = [1 => [8, 0], 100 => [1, 16]];
-$portVlans = [];
+$portVlans = ['0/9/0' => [1, 100, 200]];
+$vlanMeta = [100 => ['type' => 'smart', 'name' => 'internet', 'desc' => 'Customers']];
 $tables = [6 => ['off', 'off'], 8 => ['1048064', '1048064'], 9 => ['1048064', '1048064']];
 $failing = $config['fail'] ?? [];
 $pending = null;
@@ -132,7 +133,7 @@ $ontInfo = static function (string $key) use (&$onts): string {
         . "  Service profile ID   : {$o['srv']}\n  Service profile name : HG8346M\n  -----------------------------------------------------------------------------\n";
 };
 // A command the command line knows beyond the first reads. Returns false for one it does not.
-$cli = static function (string $text) use (&$mode, &$state, &$onts, &$autofind, &$servicePorts, &$pending, &$ntp, &$vlans, &$portVlans, &$lanOff, &$tables, $failing, $say, $profiles, $portRows, $ontInfo, $config): bool {
+$cli = static function (string $text) use (&$mode, &$state, &$onts, &$autofind, &$servicePorts, &$pending, &$ntp, &$vlans, &$portVlans, &$vlanMeta, &$lanOff, &$tables, $failing, $say, $profiles, $portRows, $ontInfo, $config): bool {
     foreach ($failing as $prefix) {
         if (str_starts_with($text, $prefix)) {
             $say("\n  Failure: Made to fail by the test\n");
@@ -191,19 +192,71 @@ $cli = static function (string $text) use (&$mode, &$state, &$onts, &$autofind, 
         $say("\nVlanif100 current state : UP (ifindex: 8388618)\nLine protocol current state : UP \nInternet Address is 10.200.0.2/24\n");
         return true;
     }
-    if ($mode === 'config' && preg_match('/^(?:vlan (\d+) smart|undo vlan (\d+))$/', $text, $m)) {
-        if ($m[1] !== '') {
-            $vlans[(int) $m[1]] = [0, 0];
-        } else {
-            unset($vlans[(int) $m[2]]);
+    if ($mode === 'config' && preg_match('/^(undo )?vlan (\d+)(?: to (\d+))?(?: (smart|standard))?$/', $text, $m) && ($m[1] === '') === (($m[4] ?? '') !== '')) {
+        $ids = range((int) $m[2], (int) (($m[3] ?? '') !== '' ? $m[3] : $m[2]));
+        if ($m[1] === '' && array_intersect($ids, array_keys($vlans))) {
+            $say("\n  Failure: The VLAN already exists\n");
+            return true;
+        }
+        foreach ($ids as $id) {
+            if ($m[1] === '') {
+                $vlans[$id] = [0, 0];
+                $vlanMeta[$id] = ['type' => $m[4], 'name' => '', 'desc' => ''];
+            } else {
+                unset($vlans[$id], $vlanMeta[$id]);
+            }
         }
         ksort($vlans);
         return true;
     }
-    if ($mode === 'config' && preg_match('~^(undo )?port vlan (\d+) (\d+/\d+) (\d+)$~', $text, $m)) {
-        $key = "$m[3]/$m[4]";
+    if ($mode === 'config' && preg_match('/^vlan name (\d+) (\S{1,15})$/', $text, $m)) {
+        if (!isset($vlans[(int) $m[1]])) {
+            $say("\n  Failure: The VLAN does not exist\n");
+            return true;
+        }
+        $vlanMeta[(int) $m[1]]['name'] = $m[2];
+        return true;
+    }
+    if ($mode === 'config' && preg_match('/^(?:vlan desc (\d+) description ("[^"]{1,32}"|\S{1,32})|undo vlan desc (\d+))$/', $text, $m)) {
+        $id = (int) (($m[3] ?? '') !== '' ? $m[3] : $m[1]);
+        $vlanMeta[$id]['desc'] = ($m[3] ?? '') !== '' ? '' : trim($m[2], '"');
+        return true;
+    }
+    if ($text === 'display current-configuration section vlan-config') {
+        $say("\n[MA5800V100R018: 8300]\n#\n[vlan-config]\n  <vlan-config>\n");
+        foreach ($vlans as $id => $counts) {
+            if ($id > 1) {
+                $say(" vlan $id " . ($vlanMeta[$id]['type'] ?? 'smart') . "\n");
+            }
+        }
+        foreach ($vlanMeta as $id => $meta) {
+            if (($meta['name'] ?? '') !== '') {
+                $say(" vlan name $id {$meta['name']}\n");
+            }
+            if (($meta['desc'] ?? '') !== '') {
+                $say(" vlan desc $id description " . (str_contains($meta['desc'], ' ') ? '"' . $meta['desc'] . '"' : $meta['desc']) . "\n");
+            }
+        }
+        foreach ($portVlans as $key => $list) {
+            [$f, $sl, $p] = explode('/', $key);
+            foreach ($list as $id) {
+                if ($id > 1) {
+                    $say(" port vlan $id $f/$sl $p\n");
+                }
+            }
+        }
+        $say("#\nreturn\n");
+        return true;
+    }
+    if ($mode === 'config' && preg_match('~^(undo )?port vlan (\d+)(?: to (\d+))? (\d+/\d+) (\d+)$~', $text, $m)) {
+        $key = "$m[4]/$m[5]";
+        $ids = range((int) $m[2], (int) (($m[3] ?? '') !== '' ? $m[3] : $m[2]));
+        if (array_diff($ids, array_keys($vlans))) {
+            $say("\n  Failure: The VLAN does not exist\n");
+            return true;
+        }
         $have = $portVlans[$key] ?? [1, 100, 200];
-        $portVlans[$key] = $m[1] === '' ? array_values(array_unique([...$have, (int) $m[2]])) : array_values(array_diff($have, [(int) $m[2]]));
+        $portVlans[$key] = $m[1] === '' ? array_values(array_unique([...$have, ...$ids])) : array_values(array_diff($have, $ids));
         foreach ($vlans as $id => $counts) {
             $vlans[$id][0] = count(array_filter($portVlans, static fn (array $list) => in_array($id, $list, true)));
         }

@@ -4,6 +4,14 @@ RadiusOne follows [semantic versioning](https://semver.org): **major** for chang
 upgrading, **minor** for new features, **patch** for fixes. The version is in the `VERSION` file and shows in
 the portal's sidebar and under Settings → System information.
 
+## 2.17.0 (2026-11-19)
+
+VLANs and profiles on their own pages. Update with **Settings → Overview → Software update** or `sudo radiusone-update`.
+
+- **VLANs:** names, descriptions, types and uplink ports at a glance; **Add VLAN** creates one or a range with its name,
+  description and uplink ports in one go, undone if a step fails; **Edit** sends only what changed.
+- **Profiles:** line and service profiles, traffic tables and DBA profiles on their own tab.
+
 ## 2.16.4 (2026-11-19)
 
 A fix for the ONU's page. Update with **Settings → Overview → Software update** or `sudo radiusone-update`.

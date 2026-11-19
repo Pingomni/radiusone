@@ -121,6 +121,70 @@ final class HuaweiCli
     }
 
     /**
+     * The OLT's VLANs as its "vlan-config" section has them: type, name and description of each, and which uplink
+     * ports carry which VLANs. A VLAN's default name (VLAN_0010) is not in the configuration, so it has none here.
+     *
+     * @return array{vlans:array<int, array{type:string,name:string,desc:string}>,ports:array<string, list<int>>}
+     */
+    public static function vlanConfig(string $output): array
+    {
+        $range = static function (string $from, string $to): array {
+            $to = $to === '' ? $from : $to;
+            return (int) $to - (int) $from > 4093 ? [] : range((int) $from, max((int) $from, (int) $to));
+        };
+        $vlans = [];
+        $ports = [];
+        foreach (preg_split('/\r?\n/', $output) ?: [] as $line) {
+            if (preg_match('/^\s*vlan (\d+)(?: to (\d+))? (smart|standard|mux|super)\s*$/i', $line, $m)) {
+                foreach ($range($m[1], $m[2]) as $id) {
+                    $vlans[$id] = ['type' => strtolower($m[3]), 'name' => '', 'desc' => ''] + ($vlans[$id] ?? []);
+                }
+            } elseif (preg_match('/^\s*vlan name (\d+) (\S+)\s*$/i', $line, $m)) {
+                $vlans[(int) $m[1]] = ['name' => self::value(trim($m[2], '"'))] + ($vlans[(int) $m[1]] ?? ['type' => '', 'desc' => '']);
+            } elseif (preg_match('/^\s*vlan desc (\d+) description (.+?)\s*$/i', $line, $m)) {
+                $vlans[(int) $m[1]] = ['desc' => self::value(trim($m[2], '"'))] + ($vlans[(int) $m[1]] ?? ['type' => '', 'name' => '']);
+            } elseif (preg_match('~^\s*port vlan (\d+)(?: to (\d+))? (\d+/\d+) ([\d,\-]+)\s*$~i', $line, $m)) {
+                foreach (explode(',', $m[4]) as $part) {
+                    [$a, $b] = array_pad(explode('-', $part), 2, '');
+                    foreach ($range($a, $b) as $port) {
+                        $ports["$m[3]/$port"] = array_merge($ports["$m[3]/$port"] ?? [], $range($m[1], $m[2]));
+                    }
+                }
+            }
+        }
+        foreach ($ports as $key => $list) {
+            $list = array_values(array_unique($list));
+            sort($list);
+            $ports[$key] = $list;
+        }
+        ksort($vlans);
+        $vlans = array_map(static fn (array $v) => ['type' => $v['type'], 'name' => $v['name'], 'desc' => $v['desc']], $vlans);
+        return ['vlans' => $vlans, 'ports' => $ports];
+    }
+
+    /** @return list<int> the VLANs the OLT has an address of its own on, from "display interface vlanif" */
+    public static function ownVlans(string $output): array
+    {
+        preg_match_all('/^\s*Vlanif(\d+)\b/mi', $output, $m);
+        return array_values(array_unique(array_map('intval', $m[1])));
+    }
+
+    /** A VLAN name the OLT accepts, or '' when what was typed is not one: up to 15 letters, digits, "_", "-" or ".". */
+    public static function vlanName(string $typed): string
+    {
+        $typed = trim($typed);
+        return preg_match('/^[A-Za-z0-9_.-]{1,15}$/D', $typed) ? $typed : '';
+    }
+
+    /** A VLAN description the OLT accepts: plain letters, digits, spaces and simple punctuation, up to 32 characters. */
+    public static function vlanDescription(string $typed): string
+    {
+        $plain = @iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', (string) preg_replace('/\s+/u', ' ', $typed));
+        $plain = (string) preg_replace('/[^A-Za-z0-9 _.,@#()+\/-]/', '', $plain === false ? $typed : $plain);
+        return trim(substr((string) preg_replace('/\s+/', ' ', $plain), 0, 32));
+    }
+
+    /**
      * "Name    value" lines, as the port commands print them, in blocks that each start with an F/S/P line.
      *
      * @return array<string, array<string, string>> "0/1/15" => its lines

@@ -213,7 +213,11 @@ final class OltController extends Controller
             'telnetPort' => $olt['telnet_enabled'] ? (int) $olt['telnet_port'] : null,
             'ntp' => $inventory['ntp'] ?? [],
             'autosave' => $inventory['autosave'] ?? null,
-            'vlans' => $inventory['vlans'] ?? [],
+            'vlans' => array_map(static fn (array $v) => $v + [
+                'name' => (string) ($inventory['vlanInfo'][$v['id']]['name'] ?? ''),
+                'desc' => (string) ($inventory['vlanInfo'][$v['id']]['desc'] ?? ''),
+                'own' => in_array($v['id'], (array) ($inventory['ownVlans'] ?? []), true),
+            ], (array) ($inventory['vlans'] ?? [])),
             'lineProfiles' => $inventory['lineProfiles'] ?? [], 'serviceProfiles' => $inventory['serviceProfiles'] ?? [],
             'dbaProfiles' => $inventory['dbaProfiles'] ?? [], 'trafficTables' => $inventory['trafficTables'] ?? [],
             'read' => $olt['last_inventory_at'] ?? null,
@@ -337,7 +341,10 @@ final class OltController extends Controller
         try {
             $message = match ($what) {
                 'ntp' => OltManager::ntp($olt, $add, trim((string) $request->input('server', ''))),
-                'vlans' => OltManager::vlan($olt, $add, (int) $request->input('vlan', 0)),
+                'vlans' => $add
+                    ? OltManager::vlanCreate($olt, (int) $request->input('vlan', 0), (int) ($request->input('to') ?: 0), (string) $request->input('type', 'smart'), (string) $request->input('name', ''), (string) $request->input('desc', ''), self::uplinkKeys($olt, (array) $request->input('uplinks', [])))
+                    : OltManager::vlan($olt, false, (int) $request->input('vlan', 0)),
+                'vlan-edit' => OltManager::vlanUpdate($olt, (int) $request->input('vlan', 0), (string) $request->input('name', ''), (string) $request->input('desc', ''), self::uplinkKeys($olt, (array) $request->input('uplinks', [])), Auth::can('danger.delete')),
                 'uplink-vlans' => (static function () use ($olt, $request, $add) {
                     $port = Db::row('SELECT name FROM olt_ports WHERE olt_id=? AND if_index=? AND kind="uplink"', [$olt['id'], (int) $request->input('port', 0)]);
                     if (!$port || !preg_match('~(\d+)\s*/\s*(\d+)\s*/\s*(\d+)~', (string) $port['name'], $m)) {
@@ -353,6 +360,32 @@ final class OltController extends Controller
         // The ONU pages offer the OLT's VLANs to choose from.
         Cache::forget('olt-omci-choices:' . (int) $olt['id']);
         return back()->with('flash', ['type' => 'success', 'message' => $message]);
+    }
+
+    /**
+     * Uplink ports chosen on the page, by their SNMP index, as the "frame/slot/port" the command line uses. Only the
+     * OLT's own uplink ports: anything else is refused before the OLT is asked.
+     *
+     * @param  array<string, mixed>  $olt
+     * @param  array<mixed>  $chosen
+     * @return list<string>
+     */
+    private static function uplinkKeys(array $olt, array $chosen): array
+    {
+        $known = [];
+        foreach (Db::select('SELECT if_index,name FROM olt_ports WHERE olt_id=? AND kind="uplink"', [$olt['id']]) as $p) {
+            if (preg_match('~(\d+)\s*/\s*(\d+)\s*/\s*(\d+)~', (string) $p['name'], $m)) {
+                $known[(string) $p['if_index']] = "$m[1]/$m[2]/$m[3]";
+            }
+        }
+        $keys = [];
+        foreach ($chosen as $index) {
+            if (!is_scalar($index) || !isset($known[(string) $index])) {
+                throw new RuntimeException('Choose uplink ports of this OLT.');
+            }
+            $keys[] = $known[(string) $index];
+        }
+        return array_values(array_unique($keys));
     }
 
     /** Autofind on or off, restart every ONU, or turn the port off or on: for one PON port, as the OLT lists it. */

@@ -370,8 +370,183 @@ final class OltManager
             }
             return $now;
         });
-        self::settled($olt, static fn (array $i) => ['vlans' => $vlans] + $i, $add ? 'vlan_add' : 'vlan_remove', $sent, ['vlan' => $vlan]);
+        self::settled($olt, static function (array $i) use ($vlans, $vlan): array {
+            unset($i['vlanInfo'][$vlan]);
+            return ['vlans' => $vlans] + $i;
+        }, $add ? 'vlan_add' : 'vlan_remove', $sent, ['vlan' => $vlan]);
         return $add ? 'VLAN ' . $vlan . ' was created. Add it to an uplink port before using it for ONUs.' : 'VLAN ' . $vlan . ' was deleted.';
+    }
+
+    /**
+     * What the OLT has now for its VLANs, read in the same login after a change: the list, each one's name and
+     * description, and the VLANs on each uplink port.
+     *
+     * @return array{vlans:list<array{id:int,ports:int,type:string,standard:int}>,info:array<int, array{type:string,name:string,desc:string}>,ports:array<string, list<int>>}
+     */
+    private static function vlanState(OltTelnet $t): array
+    {
+        $config = HuaweiCli::vlanConfig($t->command('display current-configuration section vlan-config'));
+        return ['vlans' => HuaweiCli::vlans($t->command('display vlan all')), 'info' => $config['vlans'], 'ports' => $config['ports']];
+    }
+
+    /**
+     * The page's copy of the OLT's VLANs, brought up to date from vlanState().
+     *
+     * @param  array<string, mixed>  $inventory
+     * @param  array{vlans:list<array<string, mixed>>,info:array<int, array<string, string>>,ports:array<string, list<int>>}  $state
+     * @return array<string, mixed>
+     */
+    private static function withVlans(array $inventory, array $state): array
+    {
+        $inventory['vlans'] = $state['vlans'];
+        $inventory['vlanInfo'] = $state['info'];
+        foreach ((array) ($inventory['uplinks'] ?? []) as $key => $uplink) {
+            // The configuration does not list a port's native VLAN, which "display port vlan" does.
+            $native = isset($uplink['native']) ? [(int) $uplink['native']] : [];
+            $list = array_values(array_unique([...$native, ...($state['ports'][$key] ?? [])]));
+            sort($list);
+            $inventory['uplinks'][$key]['vlans'] = $list;
+        }
+        return $inventory;
+    }
+
+    /**
+     * Creates a VLAN, or a range of them, names and describes it, and puts it on the uplink ports chosen, in one go.
+     * If a step fails, what was done is taken off again.
+     *
+     * @param  array<string, mixed>  $olt
+     * @param  list<string>  $uplinks  "frame/slot/port" of the OLT's uplink ports
+     */
+    public static function vlanCreate(array $olt, int $from, int $to, string $type, string $name, string $desc, array $uplinks): string
+    {
+        self::requireChange($olt);
+        $to = $to === 0 ? $from : $to;
+        if ($from < 2 || $from > 4093 || $to < $from || $to > 4093) {
+            throw new RuntimeException('Enter a VLAN from 2 to 4093' . ($to !== $from ? ', and the last one of the range no lower than the first' : '') . '.');
+        }
+        if ($to - $from >= 64) {
+            throw new RuntimeException('Create up to 64 VLANs at once.');
+        }
+        if (!in_array($type, ['smart', 'standard'], true)) {
+            throw new RuntimeException('Choose the VLAN type.');
+        }
+        $cleanName = HuaweiCli::vlanName($name);
+        if (trim($name) !== '' && $cleanName === '') {
+            throw new RuntimeException('A VLAN name is up to 15 letters, digits, "_", "-" or ".", without spaces.');
+        }
+        $cleanDesc = HuaweiCli::vlanDescription($desc);
+        if (trim($desc) !== '' && $cleanDesc === '') {
+            throw new RuntimeException('Enter a description of letters and digits (up to 32 characters).');
+        }
+        if ($to !== $from && ($cleanName !== '' || $cleanDesc !== '')) {
+            throw new RuntimeException('A name and a description are for one VLAN. Create the range without them, then edit each VLAN.');
+        }
+        $list = $to === $from ? (string) $from : "$from to $to";
+        $sent = [];
+        $state = self::session($olt, static function (OltTelnet $t) use ($from, $to, $list, $type, $cleanName, $cleanDesc, $uplinks, &$sent): array {
+            $have = array_column(HuaweiCli::vlans($t->command('display vlan all')), 'id');
+            $taken = array_values(array_intersect($have, range($from, $to)));
+            if ($taken) {
+                throw new RuntimeException('The OLT already has VLAN ' . implode(', ', array_slice($taken, 0, 10)) . (count($taken) > 10 ? ' and more' : '') . '. Nothing was created.');
+            }
+            $t->command('config');
+            self::send($t, "vlan $list $type", $sent);
+            $done = [];
+            try {
+                if ($cleanName !== '') {
+                    self::send($t, "vlan name $from $cleanName", $sent);
+                }
+                if ($cleanDesc !== '') {
+                    self::send($t, "vlan desc $from description " . (str_contains($cleanDesc, ' ') ? '"' . $cleanDesc . '"' : $cleanDesc), $sent);
+                }
+                foreach ($uplinks as $key) {
+                    [$f, $s, $p] = explode('/', $key);
+                    self::send($t, "port vlan $list $f/$s $p", $sent);
+                    $done[] = "$f/$s $p";
+                }
+            } catch (Throwable $e) {
+                $why = $e instanceof RuntimeException ? $e->getMessage() : 'an internal error';
+                try {
+                    foreach ($done as $port) {
+                        self::send($t, "undo port vlan $list $port", $sent);
+                    }
+                    self::send($t, "undo vlan $list", $sent);
+                } catch (Throwable) {
+                    throw new RuntimeException($why . ' VLAN ' . $list . ' was created and could NOT be taken off again: check it on the OLT.');
+                }
+                throw new RuntimeException($why . ' VLAN ' . $list . ' was taken off the OLT again, so nothing is left half done.');
+            }
+            $state = self::vlanState($t);
+            $missing = array_diff(range($from, $to), array_column($state['vlans'], 'id'));
+            if ($missing) {
+                throw new RuntimeException('The OLT accepted the commands, but does not list VLAN ' . implode(', ', array_slice($missing, 0, 10)) . '.');
+            }
+            return $state;
+        });
+        self::settled($olt, static fn (array $i) => self::withVlans($i, $state), 'vlan_add', $sent, ['vlan' => $list, 'uplinks' => $uplinks]);
+        $what = $to === $from ? "VLAN $from" : "VLANs $from to $to";
+        return $what . ' ' . ($to === $from ? 'was' : 'were') . ' created' . ($uplinks ? ' and ' . ($to === $from ? 'is' : 'are') . ' carried on ' . implode(', ', $uplinks) . '.' : '. Add ' . ($to === $from ? 'it' : 'them') . ' to an uplink port before using ' . ($to === $from ? 'it' : 'them') . ' for ONUs.');
+    }
+
+    /**
+     * Changes a VLAN's name and description, and the uplink ports that carry it. Only what differs is sent.
+     *
+     * @param  array<string, mixed>  $olt
+     * @param  list<string>  $uplinks  the uplink ports that should carry it, as "frame/slot/port"
+     * @param  bool  $mayRemove  whether this operator may take it off an uplink port
+     */
+    public static function vlanUpdate(array $olt, int $vlan, string $name, string $desc, array $uplinks, bool $mayRemove): string
+    {
+        self::requireChange($olt);
+        if ($vlan < 1 || $vlan > 4093) {
+            throw new RuntimeException('Choose a VLAN.');
+        }
+        $cleanName = HuaweiCli::vlanName($name);
+        if (trim($name) !== '' && $cleanName === '') {
+            throw new RuntimeException('A VLAN name is up to 15 letters, digits, "_", "-" or ".", without spaces.');
+        }
+        $cleanDesc = HuaweiCli::vlanDescription($desc);
+        if (trim($desc) !== '' && $cleanDesc === '') {
+            throw new RuntimeException('Enter a description of letters and digits (up to 32 characters).');
+        }
+        $sent = [];
+        $state = self::session($olt, static function (OltTelnet $t) use ($vlan, $cleanName, $cleanDesc, $uplinks, $mayRemove, &$sent): array {
+            $before = self::vlanState($t);
+            if (!in_array($vlan, array_column($before['vlans'], 'id'), true)) {
+                throw new RuntimeException('The OLT has no VLAN ' . $vlan . '.');
+            }
+            $on = array_keys(array_filter($before['ports'], static fn (array $list) => in_array($vlan, $list, true)));
+            $add = array_values(array_diff($uplinks, $on));
+            $remove = array_values(array_diff($on, $uplinks));
+            if ($remove && !$mayRemove) {
+                throw new RuntimeException('Taking VLAN ' . $vlan . ' off an uplink port needs the right to delete. Nothing was changed.');
+            }
+            if ($remove && in_array($vlan, HuaweiCli::ownVlans($t->command('display interface vlanif')), true)) {
+                throw new RuntimeException('The OLT has its own address on VLAN ' . $vlan . ', so taking it off an uplink could cut the OLT off. Nothing was changed. Do this on the OLT itself.');
+            }
+            $info = $before['info'][$vlan] ?? ['type' => '', 'name' => '', 'desc' => ''];
+            $t->command('config');
+            if ($cleanName !== '' && $cleanName !== $info['name']) {
+                self::send($t, "vlan name $vlan $cleanName", $sent);
+            }
+            if ($cleanDesc !== $info['desc']) {
+                self::send($t, $cleanDesc === '' ? "undo vlan desc $vlan" : "vlan desc $vlan description " . (str_contains($cleanDesc, ' ') ? '"' . $cleanDesc . '"' : $cleanDesc), $sent);
+            }
+            foreach ($add as $key) {
+                [$f, $s, $p] = explode('/', $key);
+                self::send($t, "port vlan $vlan $f/$s $p", $sent);
+            }
+            foreach ($remove as $key) {
+                [$f, $s, $p] = explode('/', $key);
+                self::send($t, "undo port vlan $vlan $f/$s $p", $sent);
+            }
+            return self::vlanState($t);
+        });
+        if (!$sent) {
+            return 'Nothing to change: VLAN ' . $vlan . ' already has these settings.';
+        }
+        self::settled($olt, static fn (array $i) => self::withVlans($i, $state), 'vlan_edit', $sent, ['vlan' => $vlan]);
+        return 'VLAN ' . $vlan . ' was saved on the OLT.';
     }
 
     /**

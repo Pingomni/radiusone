@@ -600,6 +600,79 @@ final class OltManageTest extends TestCase
         $this->assertCount(6, $this->changes());
     }
 
+    public function test_a_vlan_is_created_with_its_name_description_and_uplinks_in_one_go(): void
+    {
+        $this->startAgent();
+        $olt = $this->olt();
+        $this->ports($olt);
+        OltInventory::read($olt);
+        $this->actingAsOperator('view');
+        $this->get('/olts/' . $olt['id'])->assertInertia(fn ($p) => $p
+            ->where('details.vlans.1.id', 100)->where('details.vlans.1.name', 'internet')->where('details.vlans.1.desc', 'Customers')->where('details.vlans.1.own', true)
+            ->where('details.vlans.0.own', false));
+        file_put_contents($this->log, '');
+        $this->actingAsOperator('noc');
+        $base = "/olts/{$olt['id']}/settings";
+        $this->post("$base/vlans", ['action' => 'add', 'vlan' => '300', 'type' => 'smart', 'name' => 'office', 'desc' => 'Main office', 'uplinks' => ['7']])->assertSessionHas('flash.message', 'VLAN 300 was created and is carried on 0/9/0.');
+        $this->assertSame(['vlan 300 smart', 'vlan name 300 office', 'vlan desc 300 description "Main office"', 'port vlan 300 0/9 0'], $this->changes());
+        $saved = OltInventory::saved(Olts::find((int) $olt['id']));
+        $this->assertSame(['type' => 'smart', 'name' => 'office', 'desc' => 'Main office'], $saved['vlanInfo'][300]);
+        $this->assertContains(300, $saved['uplinks']['0/9/0']['vlans']);
+        $this->assertContains(1, $saved['uplinks']['0/9/0']['vlans']);
+
+        // A range, without a name.
+        $this->post("$base/vlans", ['action' => 'add', 'vlan' => '400', 'to' => '403', 'type' => 'standard', 'uplinks' => ['7']])->assertSessionHas('flash.type', 'success');
+        $this->assertSame(['vlan 400 to 403 standard', 'port vlan 400 to 403 0/9 0'], array_slice($this->changes(), 4));
+        $this->assertSame([300, 400, 401, 402, 403], array_values(array_filter(array_column(OltInventory::saved(Olts::find((int) $olt['id']))['vlans'], 'id'), static fn ($v) => $v >= 300)));
+
+        // Refused before the OLT is asked: taken, out of range, a name with a space, too many, a port that is not an uplink.
+        foreach ([['vlan' => '300'], ['vlan' => '402'], ['vlan' => '1'], ['vlan' => '5000'], ['vlan' => '500', 'name' => 'two words'], ['vlan' => '500', 'to' => '600'],
+            ['vlan' => '500', 'to' => '502', 'name' => 'x'], ['vlan' => '500', 'uplinks' => [(string) self::PORT_A]], ['vlan' => '500', 'type' => 'super']] as $bad) {
+            $this->post("$base/vlans", ['action' => 'add'] + $bad)->assertSessionHas('flash.type', 'danger');
+        }
+        $this->assertCount(6, $this->changes());
+    }
+
+    public function test_a_vlan_that_cannot_be_finished_is_taken_off_again(): void
+    {
+        $this->startAgent(['fail' => ['port vlan 300']]);
+        $olt = $this->olt();
+        $this->ports($olt);
+        $this->actingAsOperator();
+        $this->post("/olts/{$olt['id']}/settings/vlans", ['action' => 'add', 'vlan' => '300', 'name' => 'office', 'uplinks' => ['7']])
+            ->assertSessionHas('flash.message', fn (string $m) => str_contains($m, 'Made to fail by the test') && str_contains($m, 'taken off the OLT again'));
+        $this->assertSame(['vlan 300 smart', 'vlan name 300 office', 'port vlan 300 0/9 0', 'undo vlan 300'], $this->changes());
+        $this->assertSame(0, (int) Db::value('SELECT COUNT(*) FROM audit_logs WHERE action="vlan_add"'));
+    }
+
+    public function test_editing_a_vlan_sends_only_what_changed(): void
+    {
+        $this->startAgent();
+        $olt = $this->olt();
+        $this->ports($olt);
+        OltInventory::read($olt);
+        $this->actingAsOperator();
+        $base = "/olts/{$olt['id']}/settings";
+        $this->post("$base/vlans", ['action' => 'add', 'vlan' => '300'])->assertSessionHas('flash.type', 'success');
+        file_put_contents($this->log, '');
+        $this->post("$base/vlan-edit", ['vlan' => 300, 'name' => 'office', 'desc' => 'Main office', 'uplinks' => ['7']])->assertSessionHas('flash.message', 'VLAN 300 was saved on the OLT.');
+        $this->post("$base/vlan-edit", ['vlan' => 300, 'name' => 'office', 'desc' => 'Main office', 'uplinks' => ['7']])->assertSessionHas('flash.message', fn (string $m) => str_contains($m, 'Nothing to change'));
+        $this->post("$base/vlan-edit", ['vlan' => 300, 'name' => 'office', 'desc' => '', 'uplinks' => []])->assertSessionHas('flash.type', 'success');
+        $this->assertSame(['vlan name 300 office', 'vlan desc 300 description "Main office"', 'port vlan 300 0/9 0', 'undo vlan desc 300', 'undo port vlan 300 0/9 0'], $this->changes());
+        $this->assertSame(['type' => 'smart', 'name' => 'office', 'desc' => ''], OltInventory::saved(Olts::find((int) $olt['id']))['vlanInfo'][300]);
+        $this->get('/olts/' . $olt['id'])->assertInertia(fn ($p) => $p->where('history.0.action', 'vlan_edit'));
+
+        // The OLT's own VLAN never comes off an uplink, and NOC may add a port but not take one off.
+        $this->post("$base/vlan-edit", ['vlan' => 100, 'name' => 'internet', 'desc' => 'Customers', 'uplinks' => []])->assertSessionHas('flash.message', fn (string $m) => str_contains($m, 'its own address'));
+        $this->post("$base/vlan-edit", ['vlan' => 300, 'name' => 'office', 'desc' => '', 'uplinks' => ['7']])->assertSessionHas('flash.type', 'success');
+        $this->actingAsOperator('noc');
+        $this->post("$base/vlan-edit", ['vlan' => 300, 'name' => 'office', 'desc' => '', 'uplinks' => []])->assertSessionHas('flash.message', fn (string $m) => str_contains($m, 'right to delete'));
+        $this->post("$base/vlan-edit", ['vlan' => 300, 'name' => 'two words', 'uplinks' => ['7']])->assertSessionHas('flash.type', 'danger');
+        $this->assertSame(['port vlan 300 0/9 0'], array_slice($this->changes(), 5));
+        $this->actingAsOperator('view');
+        $this->post("$base/vlan-edit", ['vlan' => 300, 'name' => 'x', 'uplinks' => ['7']])->assertForbidden();
+    }
+
     public function test_each_olt_has_its_own_signal_levels(): void
     {
         $this->startAgent();
