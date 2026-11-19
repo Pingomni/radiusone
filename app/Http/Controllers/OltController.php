@@ -22,6 +22,7 @@ use App\Support\Snmp;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Inertia\Inertia;
 use Inertia\Response;
 use PDOException;
@@ -349,6 +350,8 @@ final class OltController extends Controller
         } catch (RuntimeException $e) {
             return $this->fail($e->getMessage());
         }
+        // The ONU pages offer the OLT's VLANs to choose from.
+        Cache::forget('olt-omci-choices:' . (int) $olt['id']);
         return back()->with('flash', ['type' => 'success', 'message' => $message]);
     }
 

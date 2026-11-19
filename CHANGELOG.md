@@ -4,6 +4,14 @@ RadiusOne follows [semantic versioning](https://semver.org): **major** for chang
 upgrading, **minor** for new features, **patch** for fixes. The version is in the `VERSION` file and shows in
 the portal's sidebar and under Settings → System information.
 
+## 2.16.3 (2026-11-19)
+
+The ONU's page stays where you are. Update with **Settings → Overview → Software update** or `sudo radiusone-update`.
+
+- **An action no longer rebuilds the page** or jumps to the top, and the tabs open at once: one read serves the whole
+  page, the last read shows straight away, and Configure's choices are fetched ahead.
+- **Fixed:** Traffic at the top of the ONU's page showed a dash in 2.16.2.
+
 ## 2.16.2 (2026-11-19)
 
 The ONU's page opens faster. Update with **Settings → Overview → Software update** or `sudo radiusone-update`.

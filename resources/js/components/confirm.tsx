@@ -96,11 +96,14 @@ type PostProps = {
     className?: string;
     disabled?: boolean;
     preserveScroll?: boolean;
+    /** Keep the page as it is (what it has read, what is open) and only take the new data. */
+    preserveState?: boolean;
+    onSuccess?: () => void;
     title?: string;
 };
 
 /** A button that POSTs (with CSRF via Inertia) after an optional confirmation. */
-export function PostButton({ action, label, data = {}, confirm, className = 'link danger-text', disabled, preserveScroll = true, title }: PostProps) {
+export function PostButton({ action, label, data = {}, confirm, className = 'link danger-text', disabled, preserveScroll = true, preserveState = false, onSuccess, title }: PostProps) {
     const ask = useConfirm();
     const [busy, setBusy] = useState(false);
     return (
@@ -116,6 +119,8 @@ export function PostButton({ action, label, data = {}, confirm, className = 'lin
                 }
                 router.post(action, data as never, {
                     preserveScroll,
+                    preserveState,
+                    onSuccess,
                     onStart: () => setBusy(true),
                     onFinish: () => setBusy(false),
                 });

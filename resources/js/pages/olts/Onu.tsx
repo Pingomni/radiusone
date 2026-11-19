@@ -21,8 +21,11 @@ type Live = {
     lan: Lan[];
     traffic: { up: number | null; down: number | null };
     servicePorts: ServicePort[];
+    /** The ONU's part of the OLT's configuration, and what it sets, read in the same login. */
+    config?: string;
+    omci?: OnuState | null;
 };
-type Answer = { ok: true; data: Live; age?: number } | { ok: false; error: string };
+type Answer = { ok: true; data: Live; age?: number; failed?: string } | { ok: false; error: string };
 type TrafficTable = { id: number; cir: string; pir: string };
 type OltInfo = { id: number; name: string; canRead: boolean; canChange: boolean; rxWarning: number; rxCritical: number };
 type Client = { username: string; name: string; address: string; phone: string; pppoe: boolean };
@@ -34,6 +37,13 @@ type OmciOptions = { vlans: number[]; wanProfiles: Profile[]; routeProfiles: Pro
 type Segment = { from: number; to: number; state: 'online' | 'offline' | 'none' };
 type Timeline = { from: number; to: number; segments: Segment[] };
 type LiveState = { answer: Answer | null; busy: boolean; auto: boolean; setAuto: (on: boolean) => void; read: (fresh?: boolean) => Promise<void>; enabled: boolean };
+type Choices = { ok: true; data: OmciOptions } | { ok: false; error: string };
+
+/**
+ * What this browser tab has read, by ONU. A page opened again, or rebuilt after an action, starts from here at once and
+ * is brought up to date in the background, instead of waiting on the OLT with nothing to show.
+ */
+const kept: { live: Map<string, Answer>; choices: Map<string, Choices>; graphs: Map<string, ChartPayload> } = { live: new Map(), choices: new Map(), graphs: new Map() };
 
 const dash = (value: string | number | null | undefined, unit = '') => (value === null || value === undefined || value === '' ? '-' : `${value}${unit}`);
 /** A traffic table's speed as operators say it: 100M, 1G, Unlimited. The OLT counts 1024 kbit/s to the megabit. */
@@ -67,9 +77,14 @@ async function getJson<T>(url: string): Promise<T> {
 
 /** One read of the OLT shared by the whole page, repeated while the page is in view. */
 function useLive(base: string, enabled: boolean): LiveState {
-    const [answer, setAnswer] = useState<Answer | null>(null);
+    const [answer, setAnswerState] = useState<Answer | null>(() => kept.live.get(base) ?? null);
     const [busy, setBusy] = useState(false);
     const [auto, setAuto] = useState(false);
+    // A failed read does not wipe a good one: the page keeps what it had and says the last read failed.
+    const setAnswer = useCallback((next: Answer) => {
+        if (next.ok) kept.live.set(base, next);
+        setAnswerState((before) => (next.ok || !before?.ok ? next : { ...before, failed: next.error }));
+    }, [base]);
     // The first read may come from the last 30 seconds; Get status and Live always ask the OLT.
     const read = useCallback(async (fresh = true) => {
         setBusy(true);
@@ -83,7 +98,7 @@ function useLive(base: string, enabled: boolean): LiveState {
         } finally {
             setBusy(false);
         }
-    }, [base]);
+    }, [base, setAnswer]);
     useEffect(() => { if (enabled) void read(false); }, [enabled, read]);
     // The page keeps itself up to date: every 30 seconds, or every 10 with Live on. A check each second finds when the
     // next read is due, so a page that was in the background reads again as soon as it is looked at, and an answer
@@ -218,10 +233,11 @@ const Fact = ({ label, children, mono = false }: { label: string; children: Reac
 
 /** A graph from the portal's own history. Fetched when shown and again every 5 minutes. */
 function HistoryGraph({ title, url }: { title: string; url: string }) {
-    const [payload, setPayload] = useState<ChartPayload | null>(null);
+    const [payload, setPayload] = useState<ChartPayload | null>(() => kept.graphs.get(url) ?? null);
     useEffect(() => {
         let alive = true;
-        const load = () => getJson<ChartPayload>(url).then((data) => { if (alive) setPayload(data); }).catch(() => undefined);
+        setPayload(kept.graphs.get(url) ?? null);
+        const load = () => getJson<ChartPayload>(url).then((data) => { kept.graphs.set(url, data); if (alive) setPayload(data); }).catch(() => undefined);
         void load();
         const timer = window.setInterval(load, 300000);
         return () => { alive = false; window.clearInterval(timer); };
@@ -242,31 +258,17 @@ function Graphs({ base, ranges }: { base: string; ranges: Record<string, string>
     );
 }
 
-/** Asked for when the tab opens, not with the page: it is a slower read. */
-function RunningConfig({ base }: { base: string }) {
-    const [config, setConfig] = useState<{ ok: boolean; output?: string; error?: string } | null>(null);
-    const [busy, setBusy] = useState(false);
-    const load = useCallback(async (fresh = false) => {
-        setBusy(true);
-        try {
-            setConfig(await getJson(`${base}/config${fresh ? '?fresh=1' : ''}`));
-        } catch {
-            setConfig({ ok: false, error: 'The portal could not be reached. Reload the page and try again.' });
-        } finally {
-            setBusy(false);
-        }
-    }, [base]);
-    useEffect(() => { void load(); }, [load]);
+/** The ONU's part of the OLT's configuration. It comes with the page's own read, so the tab opens at once. */
+function RunningConfig({ live }: { live: LiveState }) {
+    const config = live.answer?.ok ? live.answer.data.config ?? '' : '';
     return (
-        <Panel title="Running config on the OLT" actions={<button type="button" className="button" disabled={busy} onClick={() => void load(true)}><Icon name="refresh" />{busy ? 'Asking the OLT…' : 'Read again'}</button>}>
-            {!config ? <p className="hint" role="status">Asking the OLT. This takes a few seconds.</p>
-                : config.ok ? <pre className="mono onu-config" tabIndex={0}>{config.output}</pre>
-                    : <p className="flash warning" role="alert">{config.error}</p>}
+        <Panel title="Running config on the OLT" actions={<button type="button" className="button" disabled={live.busy} onClick={() => void live.read()}><Icon name="refresh" />{live.busy ? 'Asking the OLT…' : 'Read again'}</button>}>
+            {config !== '' ? <pre className="mono onu-config" tabIndex={0}>{config}</pre> : <p className="hint" role="status">{live.answer ? 'The OLT did not print a configuration for this ONU.' : 'Asking the OLT. This takes a few seconds.'}</p>}
         </Panel>
     );
 }
 
-function ServicePorts({ ports, tables, base, mayChange }: { ports: ServicePort[]; tables: TrafficTable[]; base: string; mayChange: boolean }) {
+function ServicePorts({ ports, tables, base, mayChange, onDone }: { ports: ServicePort[]; tables: TrafficTable[]; base: string; mayChange: boolean; onDone: () => void }) {
     const [editing, setEditing] = useState<{ index: number; up: string; down: string } | null>(null);
     const byId = new Map(tables.map((t) => [t.id, t]));
     const sorted = [...tables].sort((a, b) => (a.pir === 'off' ? Infinity : Number(a.pir)) - (b.pir === 'off' ? Infinity : Number(b.pir)) || a.id - b.id);
@@ -292,7 +294,7 @@ function ServicePorts({ ports, tables, base, mayChange }: { ports: ServicePort[]
                 ]}
             />
             {editing && (
-                <form className="toolbar" onSubmit={(e) => { e.preventDefault(); router.post(`${base}/service-ports/${editing.index}`, { up: editing.up, down: editing.down }, { preserveScroll: true, onSuccess: () => setEditing(null) }); }}>
+                <form className="toolbar" onSubmit={(e) => { e.preventDefault(); router.post(`${base}/service-ports/${editing.index}`, { up: editing.up, down: editing.down }, { preserveScroll: true, preserveState: true, onSuccess: () => { setEditing(null); onDone(); } }); }}>
                     <Select label={`Service port ${editing.index}: download`} name="down" placeholder="Choose" options={options} value={editing.down} onChange={(e) => setEditing({ ...editing, down: e.target.value })} />
                     <Select label="Upload" name="up" placeholder="Choose" options={options} value={editing.up} onChange={(e) => setEditing({ ...editing, up: e.target.value })} />
                     <button className="button primary" disabled={!editing.up || !editing.down}>Save on the OLT</button>
@@ -300,7 +302,7 @@ function ServicePorts({ ports, tables, base, mayChange }: { ports: ServicePort[]
                 </form>
             )}
             {mayChange && (
-                <form className="toolbar onu-add-speed" onSubmit={(e) => { e.preventDefault(); setAdding(true); router.post(`${base}/add-speed`, { mbps }, { preserveScroll: true, onSuccess: () => setMbps(''), onFinish: () => setAdding(false) }); }}>
+                <form className="toolbar onu-add-speed" onSubmit={(e) => { e.preventDefault(); setAdding(true); router.post(`${base}/add-speed`, { mbps }, { preserveScroll: true, preserveState: true, onSuccess: () => { setMbps(''); onDone(); }, onFinish: () => setAdding(false) }); }}>
                     <Field label="Add a speed to the OLT (Mbit/s)" name="mbps" type="number" min={1} max={10000} inputMode="numeric" placeholder="100" value={mbps} onChange={(e) => setMbps(e.target.value)} hint={`Speeds on the OLT: ${[...new Set(sorted.map((t) => speedName(t.pir)))].join(', ') || 'none'}.`} />
                     <button className="button" disabled={adding || !(Number(mbps) >= 1 && Number(mbps) <= 10000)}>{adding ? 'Adding…' : 'Add speed'}</button>
                 </form>
@@ -309,7 +311,7 @@ function ServicePorts({ ports, tables, base, mayChange }: { ports: ServicePort[]
     );
 }
 
-function Ports({ live, base, mayChange }: { live: Live; base: string; mayChange: boolean }) {
+function Ports({ live, base, mayChange, onDone }: { live: Live; base: string; mayChange: boolean; onDone: () => void }) {
     return (
         <div className="onu-tab-body">
             <Panel title="Ethernet ports">
@@ -324,8 +326,8 @@ function Ports({ live, base, mayChange }: { live: Live; base: string; mayChange:
                         { header: 'Speed', cell: (p) => (p.speed ? `${p.speed} Mbit/s${p.duplex ? `, ${p.duplex} duplex` : ''}` : '-') },
                         { header: 'Native VLAN', cell: (p) => p.native ?? '-' },
                         ...(mayChange ? [{ header: '', cell: (p: Lan) => (p.on === null ? '' : p.on
-                            ? <PostButton action={`${base}/lan/${p.port}`} data={{ state: 'off' }} label="Turn off" confirm={{ title: `Turn LAN port ${p.port} off?`, message: 'Whatever is plugged into this port on the ONU loses its connection.', confirmLabel: 'Turn off' }} />
-                            : <PostButton action={`${base}/lan/${p.port}`} data={{ state: 'on' }} label="Turn on" className="link" />) }] : []),
+                            ? <PostButton action={`${base}/lan/${p.port}`} data={{ state: 'off' }} preserveState onSuccess={onDone} label="Turn off" confirm={{ title: `Turn LAN port ${p.port} off?`, message: 'Whatever is plugged into this port on the ONU loses its connection.', confirmLabel: 'Turn off' }} />
+                            : <PostButton action={`${base}/lan/${p.port}`} data={{ state: 'on' }} preserveState onSuccess={onDone} label="Turn on" className="link" />) }] : []),
                     ]}
                 />
             </Panel>
@@ -367,7 +369,7 @@ function RenameTitle({ name, sn, base, mayChange }: { name: string; sn: string; 
     const save = (e: React.FormEvent) => {
         e.preventDefault();
         setBusy(true);
-        router.post(`${base}/describe`, { description: value }, { preserveScroll: true, onSuccess: () => setEditing(false), onFinish: () => setBusy(false) });
+        router.post(`${base}/describe`, { description: value }, { preserveScroll: true, preserveState: true, onSuccess: () => setEditing(false), onFinish: () => setBusy(false) });
     };
     return (
         <form className="onu-rename" onSubmit={save}>
@@ -434,7 +436,7 @@ function WanForm({ base, live, clients, options, onDone }: { base: string; live:
         if (f.mode === 'pppoe') Object.assign(data, client ? { pppoe_client: client } : { pppoe_user: f.user.trim(), pppoe_password: f.password });
         if (f.mode === 'static') Object.assign(data, { ip: f.ip.trim(), mask: f.mask.trim(), gateway: f.gateway.trim(), dns1: f.dns1.trim(), dns2: f.dns2.trim() });
         setBusy(true);
-        router.post(`${base}/wan`, data, { preserveScroll: true, onSuccess: () => { set('password', ''); onDone(); }, onFinish: () => setBusy(false) });
+        router.post(`${base}/wan`, data, { preserveScroll: true, preserveState: true, onSuccess: () => { set('password', ''); onDone(); }, onFinish: () => setBusy(false) });
     };
 
     return (
@@ -518,7 +520,7 @@ function BridgeForm({ base, options, lanCount, onDone }: { base: string; options
         e.preventDefault();
         if (!(await ask({ title: 'Make this ONU a bridge?', message: wans.length ? 'Its internet connection is taken off the ONU: the customer\'s own router has to connect from now on. The internet drops until it does.' : 'Every LAN port puts untagged traffic on the VLAN you chose.', confirmLabel: 'Switch to bridging' }))) return;
         setBusy(true);
-        router.post(`${base}/bridge`, { vlan }, { preserveScroll: true, onSuccess: onDone, onFinish: () => setBusy(false) });
+        router.post(`${base}/bridge`, { vlan }, { preserveScroll: true, preserveState: true, onSuccess: onDone, onFinish: () => setBusy(false) });
     };
     return (
         <form className="form-grid" onSubmit={(e) => void submit(e)}>
@@ -561,7 +563,7 @@ function EthPorts({ base, live, options, onDone }: { base: string; live: Live | 
         e.preventDefault();
         if (!edit) return;
         setBusy(true);
-        router.post(`${base}/eth/${edit.eth}`, { mode: edit.mode, native: edit.mode === 'access' || edit.mode === 'trunk' ? edit.native : '', tagged: edit.mode === 'trunk' ? edit.tagged.map(String) : [] }, { preserveScroll: true, onSuccess: () => { setEdit(null); onDone(); }, onFinish: () => setBusy(false) });
+        router.post(`${base}/eth/${edit.eth}`, { mode: edit.mode, native: edit.mode === 'access' || edit.mode === 'trunk' ? edit.native : '', tagged: edit.mode === 'trunk' ? edit.tagged.map(String) : [] }, { preserveScroll: true, preserveState: true, onSuccess: () => { setEdit(null); onDone(); }, onFinish: () => setBusy(false) });
     };
     const vlanOptions = options.vlans.map((v) => ({ value: String(v), label: `VLAN ${v}` }));
     return (
@@ -613,28 +615,38 @@ function EthPorts({ base, live, options, onDone }: { base: string; live: Live | 
     );
 }
 
-function Configure({ base, live, clients }: { base: string; live: LiveState; clients: Client[] }) {
-    const [options, setOptions] = useState<{ ok: true; data: OmciOptions } | { ok: false; error: string } | null>(null);
-    const [mode, setMode] = useState<'routing' | 'bridging' | null>(null);
+/** The OLT's VLANs, profiles and speeds to choose from. Asked for once the page has its first read, before the tab is opened. */
+function useChoices(base: string, ready: boolean): [Choices | null, () => void] {
+    const [choices, setChoices] = useState<Choices | null>(() => kept.choices.get(base) ?? null);
     const [round, setRound] = useState(0);
     useEffect(() => {
+        if (!ready || kept.choices.has(base)) return undefined;
         let alive = true;
-        getJson<{ ok: true; data: OmciOptions } | { ok: false; error: string }>(`${base}/omci-options`)
-            .then((answer) => { if (alive) setOptions(answer); })
-            .catch(() => { if (alive) setOptions({ ok: false, error: 'The portal could not be reached. Reload the page and try again.' }); });
+        getJson<Choices>(`${base}/omci-options`)
+            .then((answer) => { if (answer.ok) kept.choices.set(base, answer); if (alive) setChoices(answer); })
+            .catch(() => { if (alive) setChoices({ ok: false, error: 'The portal could not be reached. Reload the page and try again.' }); });
         return () => { alive = false; };
-    }, [base, round]);
-    if (!options) return <Panel><p className="hint" role="status">Reading the ONU&apos;s settings, and the OLT&apos;s VLANs and profiles.</p></Panel>;
-    if (!options.ok) return <Panel><p className="flash warning" role="alert">{options.error}</p></Panel>;
+    }, [base, ready, round]);
+    // Asked for again after something that changes the choices, such as a new speed: the old ones stay until then.
+    return [choices, () => { kept.choices.delete(base); setRound((r) => r + 1); }];
+}
+
+function Configure({ base, live, choices, clients, onDone }: { base: string; live: LiveState; choices: Choices | null; clients: Client[]; onDone: () => void }) {
+    const [mode, setMode] = useState<'routing' | 'bridging' | null>(null);
     if (live.enabled && !live.answer) return <Panel><p className="hint" role="status">Reading what the ONU has now.</p></Panel>;
+    if (!choices) return <Panel><p className="hint" role="status">Reading the OLT&apos;s VLANs and profiles.</p></Panel>;
+    if (!choices.ok) return <Panel><p className="flash warning" role="alert">{choices.error}</p></Panel>;
     const data = live.answer?.ok ? live.answer.data : null;
-    const state = options.data.state;
+    // What the ONU has set comes with the page's own read, so it is as new as everything else on the page.
+    const state = data?.omci ?? choices.data.state;
+    const options = { ...choices.data, state };
     const shown = mode ?? (state.mode === 'bridging' ? 'bridging' : 'routing');
-    // After a change: the settings again from the OLT, and the ONU's own report a little later.
-    const reread = () => { setRound((r) => r + 1); window.setTimeout(() => void live.read(), 3000); };
+    // The forms start over only when what the ONU has set really changed, not at every read.
+    const stamp = JSON.stringify(state);
+    const done = () => { setMode(null); onDone(); };
     const lanCount = Math.max(data?.lan.length ?? 0, ...Object.keys(state.ports).map(Number), 1);
     return (
-        <div className="onu-tab-body" key={round}>
+        <div className="onu-tab-body">
             <Panel title="ONU mode" actions={<Badge tone={state.mode === 'none' ? 'warning' : 'info'}>Now: {state.mode === 'routing' ? 'Routing' : state.mode === 'bridging' ? 'Bridging' : 'Not set'}</Badge>}>
                 <fieldset className="onu-choice onu-choice-2">
                     <legend>How the ONU works</legend>
@@ -647,10 +659,10 @@ function Configure({ base, live, clients }: { base: string; live: LiveState; cli
                     ))}
                 </fieldset>
                 {shown === 'routing'
-                    ? <WanForm base={base} live={data} clients={clients} options={options.data} onDone={reread} />
-                    : <BridgeForm base={base} options={options.data} lanCount={lanCount} onDone={reread} />}
+                    ? <WanForm key={stamp} base={base} live={data} clients={clients} options={options} onDone={done} />
+                    : <BridgeForm key={stamp} base={base} options={options} lanCount={lanCount} onDone={done} />}
             </Panel>
-            <EthPorts base={base} live={data} options={options.data} onDone={reread} />
+            <EthPorts key={stamp} base={base} live={data} options={options} onDone={done} />
         </div>
     );
 }
@@ -672,6 +684,9 @@ export default function OnuPage({ olt, onu, clients, disconnections, timeline, s
     const off = onu.active === false;
     const live = useLive(base, olt.canRead);
     const data = live.answer?.ok ? live.answer.data : null;
+    const [choices, rereadChoices] = useChoices(base, mayChange && data !== null);
+    // After a change: the OLT is asked again, while the page keeps showing what it has.
+    const reread = () => { void live.read(); };
     const [frame, slot, port] = onu.position.split(':')[0].split('/');
     const onuId = onu.position.split(':')[1] ?? '';
 
@@ -686,10 +701,10 @@ export default function OnuPage({ olt, onu, clients, disconnections, timeline, s
 
     const ownTabs: TabDef[] = [
         { key: 'graphs', title: 'Graphs', icon: 'reports', content: <Graphs base={base} ranges={ranges} /> },
-        { key: 'ports', title: 'Ports', icon: 'fiber', count: data ? data.lan.length : undefined, content: data ? <Ports live={data} base={base} mayChange={mayChange} /> : <Waiting live={live} /> },
-        { key: 'speed', title: 'Speed profiles', icon: 'activity', count: data ? data.servicePorts.length : undefined, content: data ? <ServicePorts ports={data.servicePorts} tables={trafficTables} base={base} mayChange={mayChange} /> : <Waiting live={live} /> },
-        ...(mayChange ? [{ key: 'omci', title: 'Configure', icon: 'settings', hint: 'Push settings to the ONU over OMCI', content: <Configure base={base} live={live} clients={clients} /> }] : []),
-        ...(olt.canRead ? [{ key: 'config', title: 'Running config', icon: 'logs', content: <RunningConfig base={base} /> }] : []),
+        { key: 'ports', title: 'Ports', icon: 'fiber', count: data ? data.lan.length : undefined, content: data ? <Ports live={data} base={base} mayChange={mayChange} onDone={reread} /> : <Waiting live={live} /> },
+        { key: 'speed', title: 'Speed profiles', icon: 'activity', count: data ? data.servicePorts.length : undefined, content: data ? <ServicePorts ports={data.servicePorts} tables={choices?.ok ? choices.data.trafficTables : trafficTables} base={base} mayChange={mayChange} onDone={() => { rereadChoices(); reread(); }} /> : <Waiting live={live} /> },
+        ...(mayChange ? [{ key: 'omci', title: 'Configure', icon: 'settings', hint: 'Push settings to the ONU over OMCI', content: <Configure base={base} live={live} choices={choices} clients={clients} onDone={reread} /> }] : []),
+        ...(olt.canRead ? [{ key: 'config', title: 'Running config', icon: 'logs', content: <RunningConfig live={live} /> }] : []),
         ...(mayChange ? [{
             key: 'manage', title: 'Manage', icon: 'shield', content: (
                 <div className="onu-tab-body">
@@ -697,15 +712,15 @@ export default function OnuPage({ olt, onu, clients, disconnections, timeline, s
                         <p className="hint">A turned-off ONU keeps its settings on the OLT but carries no traffic.</p>
                         <div className="toolbar">
                             {off
-                                ? <PostButton action={`${base}/enable`} label="Enable ONU" className="button" />
-                                : <PostButton action={`${base}/disable`} label="Disable ONU" className="button" confirm={{ title: 'Turn this ONU off?', message: `${onu.description || onu.sn} loses its connection until you turn the ONU on again. Its settings stay on the OLT.`, confirmLabel: 'Turn off' }} />}
+                                ? <PostButton action={`${base}/enable`} preserveState onSuccess={reread} label="Enable ONU" className="button" />
+                                : <PostButton action={`${base}/disable`} preserveState onSuccess={reread} label="Disable ONU" className="button" confirm={{ title: 'Turn this ONU off?', message: `${onu.description || onu.sn} loses its connection until you turn the ONU on again. Its settings stay on the OLT.`, confirmLabel: 'Turn off' }} />}
                         </div>
                     </Panel>
                     {can('danger.delete') && (
                         <Panel title="Danger zone" className="onu-danger">
                             <p className="hint">Restoring defaults wipes what the customer set on the ONU. Deleting removes it and its service ports from the OLT.</p>
                             <div className="toolbar">
-                                <PostButton action={`${base}/factory-reset`} label="Restore defaults" className="button" disabled={off || onu.status === 'offline'} confirm={{ title: 'Put this ONU back to its factory settings?', message: 'The customer\'s own Wi-Fi name and password and anything else set on the ONU are lost. The ONU restarts, and the OLT sets its internet connection up again.', confirmLabel: 'Restore defaults', typeToConfirm: onu.sn }} />
+                                <PostButton action={`${base}/factory-reset`} preserveState onSuccess={reread} label="Restore defaults" className="button" disabled={off || onu.status === 'offline'} confirm={{ title: 'Put this ONU back to its factory settings?', message: 'The customer\'s own Wi-Fi name and password and anything else set on the ONU are lost. The ONU restarts, and the OLT sets its internet connection up again.', confirmLabel: 'Restore defaults', typeToConfirm: onu.sn }} />
                                 <DeleteButton action={`${base}/delete`} label="Delete" title={`Remove ${onu.sn} from the OLT?`} message="The ONU and its service ports are deleted on the OLT, and its client is unlinked. The customer is offline until the ONU is added again." typeToConfirm={onu.sn} />
                             </div>
                         </Panel>
@@ -738,7 +753,7 @@ export default function OnuPage({ olt, onu, clients, disconnections, timeline, s
                             {status === 'off' ? <Badge tone="warning">Turned off</Badge> : <OnuStatus status={status} />}
                             {since !== null && status === onu.status && <span>{status === 'online' ? 'for' : 'since'} <strong>{duration(since)}</strong></span>}
                             {onu.distance !== null && <span><strong>{onu.distance >= 1000 ? `${(onu.distance / 1000).toFixed(2)} km` : `${onu.distance} m`}</strong> of fibre</span>}
-                            {live.answer?.ok && (live.answer.age ?? 0) > 0 && <span className="onu-pending">read {live.answer.age} s ago</span>}
+                            {live.answer?.ok && (live.answer.age ?? 0) > 0 && <span className="onu-pending">read {duration(live.answer.age ?? 0)} ago{live.busy ? ', asking again…' : ''}</span>}
                             {disconnections.day > 0 && <Badge tone="warning">{disconnections.day} disconnection{disconnections.day === 1 ? '' : 's'} in 24 h</Badge>}
                         </div>
                     </div>
@@ -750,7 +765,7 @@ export default function OnuPage({ olt, onu, clients, disconnections, timeline, s
                             </>
                         )}
                         {mayChange && can('danger.delete') && <Link className="button" href={`/olts/${olt.id}?tab=cli&at=${frame}/${slot}`} title={`Open the OLT's terminal at interface gpon ${frame}/${slot}`}><Icon name="terminal" />Terminal</Link>}
-                        {mayChange && <PostButton action={`${base}/reboot`} label="Reboot" className="button" disabled={off || onu.status === 'offline'} confirm={{ title: 'Restart this ONU?', message: `${onu.description || onu.sn} loses its connection for a minute or two.`, confirmLabel: 'Restart' }} />}
+                        {mayChange && <PostButton action={`${base}/reboot`} preserveState onSuccess={reread} label="Reboot" className="button" disabled={off || onu.status === 'offline'} confirm={{ title: 'Restart this ONU?', message: `${onu.description || onu.sn} loses its connection for a minute or two.`, confirmLabel: 'Restart' }} />}
                     </div>
                 </div>
 
@@ -758,12 +773,13 @@ export default function OnuPage({ olt, onu, clients, disconnections, timeline, s
                     <div className="onu-device">
                         <DeviceArt online={status === 'online'} off={status === 'off'} lan={data ? data.lan : null} />
                         {live.answer && !live.answer.ok && <p className="onu-device-note" role="alert">{live.answer.error}</p>}
+                        {live.answer?.ok && live.answer.failed && <p className="onu-device-note" role="alert">The last read failed, so this is from the read before: {live.answer.failed}</p>}
                     </div>
                     <div className="onu-meters">
                         <SignalMeter label="ONU Rx · 1490 nm" dbm={rx} weak={olt.rxWarning} veryWeak={olt.rxCritical} note={data?.optical.tx ? `Transmits ${data.optical.tx} dBm` : undefined} />
                         <SignalMeter label="OLT Rx · 1310 nm" dbm={oltRx} weak={olt.rxWarning} veryWeak={olt.rxCritical} />
                         <div className="onu-meter onu-traffic">
-                            <div className="onu-meter-head"><span>Traffic now</span>{live.auto && <small>Live</small>}</div>
+                            <div className="onu-meter-head"><span>Traffic</span><small>last 5 minutes</small></div>
                             <div className="onu-traffic-rows">
                                 <div><span aria-hidden="true">↓</span><strong>{fromLive(rate(data?.traffic.down))}</strong><small>Download</small></div>
                                 <div><span aria-hidden="true">↑</span><strong>{fromLive(rate(data?.traffic.up))}</strong><small>Upload</small></div>

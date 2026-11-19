@@ -63,7 +63,7 @@ final class OnuController extends Controller
     /** How long one read of an ONU serves its page, its tabs and a reload: each read is a telnet login on the OLT. */
     private const LIVE_SECONDS = 30;
     /** The OLT's VLANs, profiles and traffic tables change rarely, and the portal forgets them when it changes them. */
-    private const CHOICES_SECONDS = 600;
+    private const CHOICES_SECONDS = 3600;
 
     /** @param  array<string, mixed>  $row */
     private static function liveKey(array $row): string
@@ -85,7 +85,8 @@ final class OnuController extends Controller
             return ['at' => $cached['at'], 'data' => $cached['data']];
         }
         $read = ['at' => time(), 'data' => OltManager::live($olt, $row)];
-        Cache::put(self::liveKey($row), $read, 300);
+        // Kept for a week: a page opened later shows this at once, says how old it is, and asks the OLT again.
+        Cache::put(self::liveKey($row), $read, 604800);
         return $read;
     }
 
@@ -95,9 +96,13 @@ final class OnuController extends Controller
         [$olt, $row] = self::find($id, $onu);
         set_time_limit(90);
         try {
-            // "quick" is the page opening: it gets the last read at once if there is one from the last 5 minutes, and
-            // asks for a new one itself when that is more than 30 seconds old.
-            $read = self::liveRead($olt, $row, $request->boolean('fresh'), $request->boolean('quick') ? 300 : self::LIVE_SECONDS);
+            // "quick" is the page opening: it gets the last read at once, however old, and asks for a new one itself
+            // when that is more than 30 seconds old.
+            $read = self::liveRead($olt, $row, $request->boolean('fresh'), $request->boolean('quick') ? 604800 : self::LIVE_SECONDS);
+            // Traffic comes from the regular reads over SNMP: the average of the last 5 minutes, in kbit/s. Asking the
+            // OLT to measure it for one ONU takes over 4 seconds.
+            $sample = Db::row('SELECT up_bps,down_bps FROM olt_onu_samples WHERE olt_id=? AND sn=? AND sampled_at>=? AND down_bps IS NOT NULL ORDER BY sampled_at DESC LIMIT 1', [$olt['id'], $row['sn'], time() - 900]);
+            $read['data']['traffic'] = ['up' => $sample ? (int) round((float) $sample['up_bps'] / 1000) : null, 'down' => $sample ? (int) round((float) $sample['down_bps'] / 1000) : null];
             $payload = ['ok' => true, 'data' => $read['data'], 'age' => time() - $read['at']];
         } catch (RuntimeException $e) {
             $payload = ['ok' => false, 'error' => $e->getMessage()];
@@ -128,9 +133,9 @@ final class OnuController extends Controller
         set_time_limit(120);
         try {
             $choices = Cache::remember('olt-omci-choices:' . (int) $olt['id'], self::CHOICES_SECONDS, static fn () => OltManager::omciChoices($olt));
-            // What the ONU has set comes with the page's own read, when that is recent.
+            // What the ONU has set comes with the page's own read, which the page also uses itself: no second login.
             $cached = Cache::get(self::liveKey($row));
-            $state = is_array($cached) && time() - (int) $cached['at'] <= 60 && is_array($cached['data']['omci'] ?? null) ? $cached['data']['omci'] : OltManager::onuState($olt, $row);
+            $state = is_array($cached) && is_array($cached['data']['omci'] ?? null) ? $cached['data']['omci'] : OltManager::onuState($olt, $row);
             $payload = ['ok' => true, 'data' => $choices + ['state' => $state]];
         } catch (RuntimeException $e) {
             $payload = ['ok' => false, 'error' => $e->getMessage()];
