@@ -166,7 +166,7 @@ final class OltController extends Controller
             $params[] = $status;
         } elseif ($status === 'weak') {
             $weak = (float) ($olt['rx_warning'] ?? -27);
-            $where .= ' AND (o.rx_dbm<? OR o.olt_rx_dbm<?)';
+            $where .= ' AND ' . Olts::weakSql('o', '?');
             array_push($params, $weak, $weak);
         }
         // One PON port, chosen on the OLT's front panel: "frame/slot/port".
@@ -186,7 +186,7 @@ final class OltController extends Controller
         [$page, $pages, $offset] = self::page($request, $total);
         $rows = Db::select('SELECT o.*,(SELECT GROUP_CONCAT(c.username ORDER BY c.username SEPARATOR "\n") FROM customer_onus l JOIN customer_profiles c ON c.id=l.customer_id WHERE l.olt_id=o.olt_id AND l.sn=o.sn) AS clients
             FROM olt_onus o' . $where . ' ORDER BY o.frame,o.slot,o.port,o.ont_id LIMIT ' . self::PAGE_SIZE . ' OFFSET ' . $offset, $params);
-        $counts = Db::row('SELECT COUNT(*) AS total,COALESCE(SUM(status="online"),0) AS online,COALESCE(SUM(status="offline"),0) AS offline,COALESCE(SUM(rx_dbm<? OR olt_rx_dbm<?),0) AS weak FROM olt_onus WHERE olt_id=?', [$olt['rx_warning'] ?? -27, $olt['rx_warning'] ?? -27, $olt['id']]);
+        $counts = Db::row('SELECT COUNT(*) AS total,COALESCE(SUM(status="online"),0) AS online,COALESCE(SUM(status="offline"),0) AS offline,COALESCE(SUM(' . Olts::weakSql('o', '?') . '),0) AS weak FROM olt_onus o WHERE olt_id=?', [$olt['rx_warning'] ?? -27, $olt['rx_warning'] ?? -27, $olt['id']]);
         return Inertia::render('olts/Show', [
             'olt' => [
                 'id' => (int) $olt['id'], 'name' => (string) $olt['name'], 'model' => Olts::MODELS[$olt['model']] ?? (string) $olt['model'], 'host' => (string) $olt['host'], 'enabled' => (bool) $olt['enabled'],

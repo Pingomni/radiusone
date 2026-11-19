@@ -12,6 +12,16 @@ use RuntimeException;
 /** The list of OLTs and their saved settings. Passwords stay sealed and are never sent to the browser. */
 final class Olts
 {
+    /**
+     * The one rule for "weak signal", used by the menu, the Overview, the OLT page and its graph: an ONU that is online
+     * and receives less than the level, at the ONU or at the OLT. An offline ONU's last reading is old, so it does not count.
+     * $onu is the olt_onus alias; $level a column or "?" (then bind the level twice).
+     */
+    public static function weakSql(string $onu, string $level): string
+    {
+        return "({$onu}.status = 'online' AND ({$onu}.rx_dbm < {$level} OR {$onu}.olt_rx_dbm < {$level}))";
+    }
+
     /** Only models whose commands and values have been built for. */
     public const MODELS = ['huawei_ma5800_x7' => 'Huawei MA5800-X7'];
 

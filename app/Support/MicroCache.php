@@ -31,6 +31,15 @@ final class MicroCache
         return $value;
     }
 
+    /** Drops a cached value, so the next remember() computes it again. */
+    public static function forget(string $key): void
+    {
+        $file = self::file($key);
+        if ($file !== null && is_file($file)) {
+            @unlink($file);
+        }
+    }
+
     private static function file(string $key): ?string
     {
         try {

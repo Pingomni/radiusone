@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Support\MicroCache;
+use App\Support\NavCounts;
 use Inertia\Testing\AssertableInertia;
 use Tests\TestCase;
 
@@ -35,6 +37,28 @@ final class DashboardTest extends TestCase
             ->where('attention.0.title', '3 ONUs have a weak signal on OLT-Center')
             ->where('attention.0.detail', '3 of them on port 0/1/3.')
             ->where('attention.0.action.href', '/olts/' . $olt . '?status=weak'));
+    }
+
+    public function test_menu_overview_and_olt_page_count_weak_onus_the_same_way(): void
+    {
+        $this->actingAsOperator();
+        $olt = $this->insertRow('olts', ['name' => 'OLT-Center', 'model' => 'MA5800', 'host' => '10.0.9.2', 'enabled' => 1, 'rx_warning' => -27, 'rx_critical' => -30, 'last_sync_ok' => 1]);
+        $onus = [
+            ['online', -20.0, -21.0],  // good
+            ['online', -28.0, -20.0],  // weak at the ONU
+            ['online', -20.0, -28.5],  // weak at the OLT
+            ['offline', -31.0, -31.0], // offline: an old reading, not counted
+        ];
+        foreach ($onus as $i => [$status, $rx, $oltRx]) {
+            $this->insertRow('olt_onus', ['olt_id' => $olt, 'frame' => 0, 'slot' => 1, 'port' => 2, 'ont_id' => $i, 'sn' => 'HWTC100' . $i, 'status' => $status, 'rx_dbm' => $rx, 'olt_rx_dbm' => $oltRx]);
+        }
+
+        MicroCache::forget(NavCounts::CACHE_KEY);
+        $this->get('/')->assertOk()->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('nav.weakOnus', 2)
+            ->where('attention.0.title', '2 ONUs have a weak signal on OLT-Center'));
+        $this->get('/olts/' . $olt)->assertOk()->assertInertia(fn (AssertableInertia $page) => $page->where('counts.weak', 2));
+        $this->get('/olts/' . $olt . '?status=weak')->assertOk()->assertInertia(fn (AssertableInertia $page) => $page->where('result.total', 2));
     }
 
     public function test_lists_clients_that_expire_this_week(): void

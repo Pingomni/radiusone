@@ -16,6 +16,7 @@ use App\Support\License;
 use App\Support\MicroCache;
 use App\Support\NasMonitor;
 use App\Support\NasRepository;
+use App\Support\Olt\Olts;
 use Illuminate\Http\JsonResponse;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -173,8 +174,8 @@ final class DashboardController extends Controller
         if ($canNas) {
             try {
                 $olts = Db::select('SELECT t.id, t.name, t.last_sync_ok, t.last_error, t.rx_warning, t.rx_critical,
-                    COALESCE(SUM(o.status = "online" AND o.rx_dbm < t.rx_warning), 0) AS weak,
-                    COALESCE(SUM(o.status = "online" AND o.rx_dbm < t.rx_critical), 0) AS very_weak
+                    COALESCE(SUM(' . Olts::weakSql('o', 't.rx_warning') . '), 0) AS weak,
+                    COALESCE(SUM(' . Olts::weakSql('o', 't.rx_critical') . '), 0) AS very_weak
                     FROM olts t LEFT JOIN olt_onus o ON o.olt_id = t.id WHERE t.enabled = 1 GROUP BY t.id ORDER BY t.name');
             } catch (\Throwable) {
                 $olts = [];
@@ -191,7 +192,7 @@ final class DashboardController extends Controller
                 if ($weak === 0) {
                     continue;
                 }
-                $port = Db::row('SELECT frame, slot, port, COUNT(*) AS n FROM olt_onus WHERE olt_id = ? AND status = "online" AND rx_dbm < ? GROUP BY frame, slot, port ORDER BY n DESC LIMIT 1', [(int) $o['id'], $o['rx_warning']]);
+                $port = Db::row('SELECT o.frame, o.slot, o.port, COUNT(*) AS n FROM olt_onus o WHERE o.olt_id = ? AND ' . Olts::weakSql('o', '?') . ' GROUP BY o.frame, o.slot, o.port ORDER BY n DESC LIMIT 1', [(int) $o['id'], $o['rx_warning'], $o['rx_warning']]);
                 $items[] = [
                     'tone' => (int) $o['very_weak'] > 0 ? 'danger' : 'warning',
                     'title' => ($weak === 1 ? 'One ONU has' : $weak . ' ONUs have') . ' a weak signal on ' . $o['name'],

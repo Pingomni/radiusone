@@ -36,7 +36,7 @@ final class OltMonitor
     public static function record(int $oltId): void
     {
         $weak = (float) (Db::value('SELECT rx_warning FROM olts WHERE id=?', [$oltId]) ?? self::WEAK_DBM);
-        $c = Db::row('SELECT COUNT(*) AS onus,COALESCE(SUM(status="online"),0) AS online,COALESCE(SUM(status="offline"),0) AS offline,COALESCE(SUM(rx_dbm<? OR olt_rx_dbm<?),0) AS weak FROM olt_onus WHERE olt_id=?', [$weak, $weak, $oltId]);
+        $c = Db::row('SELECT COUNT(*) AS onus,COALESCE(SUM(status="online"),0) AS online,COALESCE(SUM(status="offline"),0) AS offline,COALESCE(SUM(' . Olts::weakSql('o', '?') . '),0) AS weak FROM olt_onus o WHERE olt_id=?', [$weak, $weak, $oltId]);
         Db::exec('INSERT IGNORE INTO olt_samples (olt_id,sampled_at,onus,online,offline,weak) VALUES (?,?,?,?,?,?)', [$oltId, time(), $c['onus'] ?? 0, $c['online'] ?? 0, $c['offline'] ?? 0, $c['weak'] ?? 0]);
         Db::exec('DELETE FROM olt_samples WHERE sampled_at<? LIMIT 5000', [time() - self::RETENTION_SECONDS]);
     }
@@ -283,7 +283,7 @@ final class OltMonitor
             $portsByOlt[(int) $p['olt_id']][] = $p;
         }
         $rows = Db::select('SELECT t.id,t.name,t.host,t.model,t.enabled,t.telnet_enabled,t.created_at,t.last_error,t.last_mac_error,t.last_hw_error,t.last_sync_ok,UNIX_TIMESTAMP(t.last_sync_at) AS tried,
-            COUNT(o.id) AS onus,COALESCE(SUM(o.status="online"),0) AS online,COALESCE(SUM(o.status="offline"),0) AS offline,COALESCE(SUM(o.rx_dbm<t.rx_warning OR o.olt_rx_dbm<t.rx_warning),0) AS weak,UNIX_TIMESTAMP(MAX(o.seen_at)) AS good
+            COUNT(o.id) AS onus,COALESCE(SUM(o.status="online"),0) AS online,COALESCE(SUM(o.status="offline"),0) AS offline,COALESCE(SUM(' . Olts::weakSql('o', 't.rx_warning') . '),0) AS weak,UNIX_TIMESTAMP(MAX(o.seen_at)) AS good
             FROM olts t LEFT JOIN olt_onus o ON o.olt_id=t.id GROUP BY t.id ORDER BY t.name');
         foreach ($rows as $o) {
             $id = (int) $o['id'];

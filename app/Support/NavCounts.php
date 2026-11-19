@@ -4,18 +4,21 @@ declare(strict_types=1);
 
 namespace App\Support;
 
+use App\Support\Olt\Olts;
 use Throwable;
 
 /** The numbers beside the menu items: clients in total and ONUs with a weak signal. One cached read a minute. */
 final class NavCounts
 {
+    public const CACHE_KEY = 'nav:counts';
+
     /** @return array{clients: int|null, weakOnus: int|null} null where the operator may not see that page */
     public static function forCurrentUser(): array
     {
-        $all = MicroCache::remember('nav:counts', 60, static function (): array {
+        $all = MicroCache::remember(self::CACHE_KEY, 60, static function (): array {
             try {
                 $weak = (int) Db::value('SELECT COUNT(*) FROM olt_onus o JOIN olts t ON t.id = o.olt_id
-                    WHERE t.enabled = 1 AND o.status = "online" AND o.rx_dbm IS NOT NULL AND o.rx_dbm < t.rx_warning');
+                    WHERE t.enabled = 1 AND ' . Olts::weakSql('o', 't.rx_warning'));
             } catch (Throwable) {
                 $weak = 0;
             }
