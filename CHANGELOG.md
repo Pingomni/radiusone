@@ -4,6 +4,12 @@ RadiusOne follows [semantic versioning](https://semver.org): **major** for chang
 upgrading, **minor** for new features, **patch** for fixes. The version is in the `VERSION` file and shows in
 the portal's sidebar and under Settings → System information.
 
+## 2.30.0 (2026-11-19)
+
+The ONU page in the new look, same layout. Update with **Settings → Overview → Software update** or `sudo radiusone-update`.
+
+- **Name as title, state as a dot and a word, the readings in one strip,** shorter notices. The ONU drawing stays.
+
 ## 2.29.0 (2026-11-19)
 
 The last pages in the new look. Update with **Settings → Overview → Software update** or `sudo radiusone-update`.

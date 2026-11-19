@@ -2851,7 +2851,7 @@ tr.is-clickable { cursor: pointer; }
 @media (max-width: 760px) { .onu-choice, .onu-choice.onu-choice-2, .onu-choice.onu-choice-4 { grid-template-columns: minmax(0, 1fr); } }
 
 .onu-identity h2, .onu-identity h1 { margin: 0; color: var(--text-strong); font-size: 22px; font-weight: 600; letter-spacing: -.02em; line-height: 1.2; overflow-wrap: anywhere; }
-.onu-identity p { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; color: var(--text-muted); font-size: var(--fs-md); }
+.onu-identity p { display: flex; flex-wrap: wrap; gap: 2px 14px; margin: 0; color: var(--text-muted); font-size: var(--fs-md); }
 .onu-identity p > [aria-hidden] { color: var(--text-faint); }
 .onu-status-line { display: flex; flex-wrap: wrap; align-items: center; gap: 6px var(--sp-3); color: var(--text-muted); font-size: var(--fs-md); }
 .onu-status-line strong { color: var(--text-strong); font-weight: 600; font-variant-numeric: tabular-nums; }
@@ -2894,7 +2894,10 @@ tr.is-clickable { cursor: pointer; }
 .onu-art-power.on { fill: var(--success-solid); }
 .onu-art-power.off { fill: var(--warning-solid); }
 
-.onu-meters { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sp-3); }
+.onu-meters { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+/* The three readings as one strip, split by hairlines, like the key figures elsewhere. */
+.onu-meters > .onu-meter { border: 0; border-radius: 0; background: none; box-shadow: -1px 0 0 var(--line), 0 -1px 0 var(--line); padding: 14px 18px; }
+.onu-where { display: flex; flex-wrap: wrap; gap: 2px 14px; margin: 0; color: var(--text-muted); }
 .onu-meter { display: grid; align-content: start; gap: 6px; min-width: 0; padding: var(--sp-3); border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-2); }
 .onu-meter-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--sp-2); color: var(--text-muted); font-size: var(--fs-sm); }
 .onu-meter-head > span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }

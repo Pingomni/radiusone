@@ -4,10 +4,10 @@ import { DeleteButton, PostButton, useConfirm } from '@/components/confirm';
 import Icon from '@/components/Icon';
 import { ChartOrMessage, type ChartPayload } from '@/components/LineChart';
 import { Changelog, type Change } from '@/components/OltChangelog';
-import { OnuStatus, SignalScale, type OnuRow } from '@/components/olt';
+import { SignalScale, type OnuRow } from '@/components/olt';
 import { DataTable } from '@/components/table';
 import { Tabs, type TabDef } from '@/components/tabs';
-import { Badge, Check, Field, Panel, Select, Time } from '@/components/ui';
+import { Badge, Check, Field, Panel, Select, Status, Time } from '@/components/ui';
 import AppLayout from '@/layouts/AppLayout';
 import { useCan } from '@/lib/auth';
 
@@ -285,7 +285,7 @@ function ServicePorts({ ports, tables, base, mayChange, onDone }: { ports: Servi
                     { header: 'GEM', cell: (p) => p.gem },
                     { header: 'Download', cell: (p) => named(p.down) },
                     { header: 'Upload', cell: (p) => named(p.up) },
-                    { header: 'State', cell: (p) => (p.state ? <Badge tone="success">Up</Badge> : <Badge>Down</Badge>) },
+                    { header: 'State', cell: (p) => <Status tone={p.state ? 'good' : 'neutral'}>{p.state ? 'Up' : 'Down'}</Status> },
                     ...(mayChange && tables.length ? [{ header: '', cell: (p: ServicePort) => <button type="button" className="button" onClick={() => setEditing({ index: p.index, up: String(p.up ?? ''), down: String(p.down ?? '') })}>Configure</button> }] : []),
                 ]}
             />
@@ -318,7 +318,7 @@ function Ports({ live, base, mayChange, onDone }: { live: Live; base: string; ma
                     columns={[
                         { header: 'Port', cell: (p) => `LAN ${p.port}` },
                         { header: 'Admin state', cell: (p) => (p.on === null ? '-' : p.on ? 'Enabled' : <Badge tone="warning">Turned off</Badge>) },
-                        { header: 'Link', cell: (p) => (p.up ? <Badge tone="success">Up</Badge> : <Badge>Down</Badge>) },
+                        { header: 'Link', cell: (p) => <Status tone={p.up ? 'good' : 'neutral'}>{p.up ? 'Up' : 'Down'}</Status> },
                         { header: 'Speed', cell: (p) => (p.speed ? `${p.speed} Mbit/s${p.duplex ? `, ${p.duplex} duplex` : ''}` : '-') },
                         { header: 'Native VLAN', cell: (p) => p.native ?? '-' },
                         ...(mayChange ? [{ header: '', cell: (p: Lan) => (p.on === null ? '' : p.on
@@ -334,7 +334,7 @@ function Ports({ live, base, mayChange, onDone }: { live: Live; base: string; ma
                     emptyText="The ONU reports no connection of its own. That is normal for an ONU in bridge mode, or one that is offline."
                     columns={[
                         { header: 'Name', className: 'wrap', cell: (w) => w.name || '-' },
-                        { header: 'Status', cell: (w) => (w.status ? <Badge tone={w.status.toLowerCase() === 'connected' ? 'success' : 'warning'}>{w.status}</Badge> : '-') },
+                        { header: 'Status', cell: (w) => (w.status ? <Status tone={w.status.toLowerCase() === 'connected' ? 'good' : 'warning'}>{w.status}</Status> : '-') },
                         { header: 'Type', cell: (w) => [w.type, w.access].filter(Boolean).join(', ') || '-' },
                         { header: 'IP address', cell: (w) => <span className="mono">{w.ip || '-'}</span> },
                         { header: 'Gateway', cell: (w) => <span className="mono">{w.gateway || '-'}</span> },
@@ -357,7 +357,7 @@ function RenameTitle({ name, sn, base, mayChange }: { name: string; sn: string; 
     if (!editing) {
         return (
             <div className="onu-title">
-                <h2>{name || sn}</h2>
+                <h1>{name || sn}</h1>
                 {mayChange && <button type="button" className="onu-icon-button" onClick={() => setEditing(true)} aria-label="Rename this ONU" title="Rename this ONU on the OLT"><Icon name="edit" /></button>}
             </div>
         );
@@ -369,7 +369,7 @@ function RenameTitle({ name, sn, base, mayChange }: { name: string; sn: string; 
     };
     return (
         <form className="onu-rename" onSubmit={save}>
-            <Field label="Name on the OLT" name="description" maxLength={64} value={value} autoFocus onChange={(e) => setValue(e.target.value)} onKeyDown={(e) => { if (e.key === 'Escape') { setValue(name); setEditing(false); } }} hint="Up to 64 letters, digits and simple punctuation. ë and ç are saved as e and c." />
+            <Field label="Name on the OLT" name="description" maxLength={64} value={value} autoFocus onChange={(e) => setValue(e.target.value)} onKeyDown={(e) => { if (e.key === 'Escape') { setValue(name); setEditing(false); } }} hint="Up to 64 characters. ë and ç are saved as e and c." />
             <div className="onu-rename-actions">
                 <button className="button primary" disabled={busy || !value.trim() || value === name}>{busy ? 'Saving on the OLT…' : 'Save'}</button>
                 <button type="button" className="button" onClick={() => { setValue(name); setEditing(false); }}>Cancel</button>
@@ -520,7 +520,7 @@ function BridgeForm({ base, options, lanCount, onDone }: { base: string; options
     };
     return (
         <form className="form-grid" onSubmit={(e) => void submit(e)}>
-            <p className="hint">The ONU passes traffic through: the customer&apos;s own router connects behind it. Every LAN port puts untagged traffic on the VLAN.</p>
+            <p className="hint">The customer&apos;s own router connects behind the ONU. LAN ports carry the VLAN untagged.</p>
             <Select label="VLAN" name="vlan" placeholder="Choose" value={vlan} onChange={(e) => setVlan(e.target.value)} options={options.vlans.map((v) => ({ value: String(v), label: `VLAN ${v}` }))} />
             {wans.length > 0 && <p className="flash warning">This takes off connection {wans.map(([i, w]) => `${i} (${w.mode.toUpperCase()} on VLAN ${w.vlan})`).join(', ')}{routes.length ? ` and routing on LAN port ${routes.join(', ')}` : ''}.</p>}
             <details><summary>Commands the OLT will get</summary><pre className="mono onu-preview">{preview.join('\n')}</pre></details>
@@ -571,7 +571,7 @@ function EthPorts({ base, live, options, onDone }: { base: string; live: Live | 
                 emptyText="Neither the ONU nor the OLT lists LAN ports for this ONU. It may be offline."
                 columns={[
                     { header: 'Port', cell: (eth) => `LAN ${eth}` },
-                    { header: 'Link', cell: (eth) => { const l = live?.lan.find((x) => x.port === eth); return !l ? '-' : l.on === false ? <Badge tone="warning">Turned off</Badge> : l.up ? <Badge tone="success">Up{l.speed ? ` ${l.speed}M` : ''}</Badge> : <Badge>Down</Badge>; } },
+                    { header: 'Link', cell: (eth) => { const l = live?.lan.find((x) => x.port === eth); return !l ? '-' : l.on === false ? <Badge tone="warning">Turned off</Badge> : l.up ? <Status tone="good">Up{l.speed ? ` ${l.speed}M` : ''}</Status> : <Status tone="neutral">Down</Status>; } },
                     { header: 'Mode', className: 'wrap', cell: (eth) => portWords(options.state.ports[String(eth)]) },
                     { header: '', cell: (eth) => <button type="button" className="button" aria-expanded={edit?.eth === eth} onClick={() => (edit?.eth === eth ? setEdit(null) : open(eth))}>{edit?.eth === eth ? 'Close' : 'Configure'}</button> },
                 ]}
@@ -716,7 +716,7 @@ export default function OnuPage({ olt, onu, clients, disconnections, timeline, s
                     </Panel>
                     {can('danger.delete') && (
                         <Panel title="Danger zone" className="onu-danger">
-                            <p className="hint">Restoring defaults wipes what the customer set on the ONU. Deleting removes it and its service ports from the OLT.</p>
+                            <p className="hint">Restore defaults wipes the customer's settings. Delete removes the ONU from the OLT.</p>
                             <div className="toolbar">
                                 <PostButton action={`${base}/factory-reset`} preserveState onSuccess={reread} label="Restore defaults" className="button" disabled={off || onu.status === 'offline'} confirm={{ title: 'Put this ONU back to its factory settings?', message: 'The customer\'s own Wi-Fi name and password and anything else set on the ONU are lost. The ONU restarts, and the OLT sets its internet connection up again.', confirmLabel: 'Restore defaults', typeToConfirm: onu.sn }} />
                                 <DeleteButton action={`${base}/delete`} label="Delete" title={`Remove ${onu.sn} from the OLT?`} message="The ONU and its service ports are deleted on the OLT, and its client is unlinked. The customer is offline until the ONU is added again." typeToConfirm={onu.sn} />
@@ -729,30 +729,24 @@ export default function OnuPage({ olt, onu, clients, disconnections, timeline, s
     ];
 
     return (
-        <AppLayout title={`ONU ${onu.sn}`} heading={false}>
-            <nav className="onu-crumbs" aria-label="Where this ONU is">
-                <Link href="/olts">OLTs</Link><span aria-hidden="true">/</span>
-                <Link href={`/olts/${olt.id}`}>{olt.name}</Link><span aria-hidden="true">/</span>
-                <span>PON {frame}/{slot}/{port}</span><span aria-hidden="true">/</span>
-                <span aria-current="page">ONU {onuId}</span>
-            </nav>
-            {can('nas.manage') && !olt.canChange && <p className="hint">Changes are turned off for this OLT, so this page only reads. To restart, turn off, rename or remove ONUs here, turn on <Link href={`/olts/${olt.id}/edit`}>Allow changes from the portal</Link>.</p>}
+        <AppLayout title={onu.description || `ONU ${onu.sn}`} heading={false}>
+            {can('nas.manage') && !olt.canChange && <p className="hint">Read only. <Link href={`/olts/${olt.id}/edit`}>Allow changes</Link> on this OLT to restart, rename or remove ONUs.</p>}
 
             <section className={`onu-hero ${status === 'online' ? 'is-online' : status === 'off' ? 'is-off' : status === 'offline' ? 'is-offline' : ''}`.trim()} aria-label="ONU at a glance">
                 <div className="onu-hero-top">
                     <div className="onu-identity">
                         <RenameTitle name={onu.description} sn={onu.sn} base={base} mayChange={mayChange} />
-                        <p>
+                        <p className="onu-where">
+                            <span>ONU {onuId} on port <span className="mono">{frame}/{slot}/{port}</span> of <Link href={`/olts/${olt.id}`}>{olt.name}</Link></span>
                             <span className="mono">{onu.sn}</span>
-                            {onu.model && <><span aria-hidden="true">·</span>{onu.model}</>}
-                            <span aria-hidden="true">·</span><span className="mono">{onu.position}</span>
+                            {onu.model && <span>{onu.model}</span>}
                         </p>
                         <div className="onu-status-line">
-                            {status === 'off' ? <Badge tone="warning">Turned off</Badge> : <OnuStatus status={status} />}
+                            {status === 'off' ? <Status tone="warning">Turned off</Status> : <Status tone={status === 'online' ? 'good' : status === 'offline' ? 'danger' : 'neutral'}>{status === 'online' ? 'Online' : status === 'offline' ? 'Offline' : 'Unknown'}</Status>}
                             {since !== null && status === onu.status && <span>{status === 'online' ? 'for' : 'since'} <strong>{duration(since)}</strong></span>}
                             {onu.distance !== null && <span><strong>{onu.distance >= 1000 ? `${(onu.distance / 1000).toFixed(2)} km` : `${onu.distance} m`}</strong> of fibre</span>}
                             {live.answer?.ok && (live.answer.age ?? 0) > 0 && <span className="onu-pending">read {duration(live.answer.age ?? 0)} ago{live.busy ? ', asking again…' : ''}</span>}
-                            {disconnections.day > 0 && <Badge tone="warning">{disconnections.day} disconnection{disconnections.day === 1 ? '' : 's'} in 24 h</Badge>}
+                            {disconnections.day > 0 && <span className="warning-text">{disconnections.day} disconnection{disconnections.day === 1 ? '' : 's'} in 24 h</span>}
                         </div>
                     </div>
                     <div className="onu-hero-actions">
@@ -774,8 +768,8 @@ export default function OnuPage({ olt, onu, clients, disconnections, timeline, s
                         {live.answer?.ok && live.answer.failed && <p className="onu-device-note" role="alert">The last read failed, so this is from the read before: {live.answer.failed}</p>}
                     </div>
                     <div className="onu-meters">
-                        <SignalMeter label="ONU Rx · 1490 nm" dbm={rx} weak={olt.rxWarning} veryWeak={olt.rxCritical} note={data?.optical.tx ? `Transmits ${data.optical.tx} dBm` : undefined} />
-                        <SignalMeter label="OLT Rx · 1310 nm" dbm={oltRx} weak={olt.rxWarning} veryWeak={olt.rxCritical} />
+                        <SignalMeter label="ONU receives, 1490 nm" dbm={rx} weak={olt.rxWarning} veryWeak={olt.rxCritical} note={data?.optical.tx ? `Transmits ${data.optical.tx} dBm` : undefined} />
+                        <SignalMeter label="OLT receives, 1310 nm" dbm={oltRx} weak={olt.rxWarning} veryWeak={olt.rxCritical} />
                         <div className="onu-meter onu-traffic">
                             <div className="onu-meter-head"><span>Traffic</span><small>last 5 minutes</small></div>
                             <div className="onu-traffic-rows">
@@ -822,7 +816,7 @@ export default function OnuPage({ olt, onu, clients, disconnections, timeline, s
                 </Facts>
                 <Facts title="Service" icon="signal">
                     <Fact label="ONU mode">{fromLive(data?.wans.length ? (routed ? `Routing, WAN VLAN ${routed.vlan || '-'}` : 'Bridging') : data?.state.run === 'online' ? 'Bridging' : '-')}</Fact>
-                    <Fact label="WAN setup">{fromLive(routed ? <>{routed.access || '-'} <span className="mono">{routed.ip}</span>{routed.status && <> <Badge tone={routed.status.toLowerCase() === 'connected' ? 'success' : 'warning'}>{routed.status}</Badge></>}</> : '-')}</Fact>
+                    <Fact label="WAN setup">{fromLive(routed ? <>{routed.access || '-'} <span className="mono">{routed.ip}</span>{routed.status && <> <Status tone={routed.status.toLowerCase() === 'connected' ? 'good' : 'warning'}>{routed.status}</Status></>}</> : '-')}</Fact>
                     <Fact label="Attached VLANs">{fromLive(vlans.length ? vlans.join(', ') : '-')}</Fact>
                     <Fact label="Config from the OLT (OMCI)">{fromLive(`${dash(data?.state.config)}${data?.state.match ? `, profile ${data.state.match}` : ''}`)}</Fact>
                     <Fact label="Last came online"><Time value={onu.lastUp} /></Fact>
