@@ -1421,6 +1421,38 @@ a.stat:hover { background: var(--surface-2); text-decoration: none; }
 .signal-ends { display: flex; justify-content: space-between; margin-top: 6px; color: var(--text-faint); font-size: var(--fs-xs); font-variant-numeric: tabular-nums; }
 
 /* --------------------------------------------------------------------------
+   Overview (the dashboard): the state sentence, the strip, routers, what needs attention
+   -------------------------------------------------------------------------- */
+th.num, td.num { text-align: right; }
+.is-empty-text { color: var(--text-faint); }
+.page-head.with-actions { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: var(--sp-3) var(--sp-4); }
+.page-head > div { min-width: 0; }
+.page-head p { margin-top: 4px; color: var(--text-muted); font-size: var(--fs-lg); }
+/* The strip refreshes on its own; its "Updated" line is for screen readers only. */
+.overview-figures.panel.live-bare > .live-head { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+/* A live panel that holds only a table runs it edge to edge, like other panels. */
+.panel > .live-body:has(> .table-wrap:only-child) { margin: 0; }
+.overview-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 420px); gap: var(--sp-4); align-items: start; }
+.overview-grid.thirds { grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+.attention-list { display: grid; margin: 0; padding: 0; list-style: none; }
+.attention-list > li { display: flex; align-items: center; gap: var(--sp-3); padding: 11px var(--sp-3); border-bottom: 1px solid var(--line); }
+.attention-list > li:last-child { border-bottom: 0; }
+.attention-list > li > .status-dot { align-self: flex-start; margin-top: 6px; }
+.attention-list > li > div { display: grid; flex: 1 1 auto; min-width: 0; gap: 1px; }
+.attention-list strong { color: var(--text-strong); font-weight: 500; }
+.attention-list span:not(.status-dot):not(.sr-only) { color: var(--text-muted); font-size: var(--fs-sm); }
+.attention-list .button { flex: none; min-height: var(--control-h-sm); padding: 0 10px; font-size: var(--fs-sm); }
+.cpu-cell { display: inline-flex; align-items: center; gap: var(--sp-2); color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.cpu-bar { display: block; width: 72px; height: 5px; overflow: hidden; border-radius: 3px; background: var(--line); }
+.cpu-bar > i { display: block; height: 100%; border-radius: 3px; background: var(--accent); }
+.cpu-bar > i.is-high { background: var(--warning-solid); }
+@media (max-width: 1100px) {
+  .overview-grid { grid-template-columns: minmax(0, 1fr); }
+  /* One column: what needs attention comes before the routers. */
+  .overview-grid > :last-child:not(:only-child) { order: -1; }
+}
+
+/* --------------------------------------------------------------------------
    NAS status (dashboard) and NAS health
    -------------------------------------------------------------------------- */
 .nas-status-grid { display: grid; }

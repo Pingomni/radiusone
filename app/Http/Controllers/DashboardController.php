@@ -9,8 +9,10 @@ use App\Http\Support\Present;
 use App\Support\Accounting;
 use App\Support\Auth;
 use App\Support\ClientQuery;
+use App\Support\Currency;
 use App\Support\Db;
 use App\Support\Entitlement;
+use App\Support\License;
 use App\Support\MicroCache;
 use App\Support\NasMonitor;
 use App\Support\NasRepository;
@@ -18,7 +20,7 @@ use Illuminate\Http\JsonResponse;
 use Inertia\Inertia;
 use Inertia\Response;
 
-/** Dashboard page and the JSON data its live panels poll. */
+/** The Overview page (the dashboard) and the JSON data its live panels poll. */
 final class DashboardController extends Controller
 {
     public function dashboard(): Response
@@ -27,13 +29,23 @@ final class DashboardController extends Controller
         $topUsers = MicroCache::remember('dashboard:top-users:' . date('Y-m'), 300, static fn () => Db::select(
             'SELECT username, COALESCE(SUM(acctoutputoctets),0) AS down, COALESCE(SUM(acctinputoctets),0) AS up FROM radacct
              WHERE acctstarttime >= DATE_FORMAT(CURDATE(), "%Y-%m-01") GROUP BY username
-             ORDER BY COALESCE(SUM(acctinputoctets),0) + COALESCE(SUM(acctoutputoctets),0) DESC LIMIT 8'
+             ORDER BY COALESCE(SUM(acctinputoctets),0) + COALESCE(SUM(acctoutputoctets),0) DESC LIMIT 6'
         ));
         $showRejects = Auth::can('logs.view') && Db::value("SHOW TABLES LIKE 'radpostauth'");
+        $routers = self::routers();
+        $attention = self::attention($routers);
+        $online = ClientQuery::count(['status' => 'online']);
 
         return Inertia::render('Dashboard', [
-            'kpis' => self::kpis(),
-            'nas' => self::nasCards(),
+            'state' => [
+                'headline' => self::headline($attention),
+                'line' => number_format($online) . ' ' . ($online === 1 ? 'client is' : 'clients are') . ' online.',
+            ],
+            'kpis' => self::kpis($online),
+            'routers' => $routers,
+            'routerTotal' => (int) Db::value('SELECT COUNT(*) FROM nas'),
+            'attention' => $attention,
+            'expiring' => Auth::can('clients.view') ? self::expiring() : null,
             'rejects' => $showRejects ? self::rejects() : null,
             'topUsers' => array_map(static fn (array $r) => [
                 'username' => (string) $r['username'],
@@ -50,7 +62,7 @@ final class DashboardController extends Controller
         Auth::requireCan($fragment === 'dashboard-rejects' ? 'logs.view' : 'dashboard.view');
         return response()->json(match ($fragment) {
             'dashboard-kpis' => self::kpis(),
-            'dashboard-nas' => self::nasCards(),
+            'dashboard-nas' => self::routers(),
             'dashboard-rejects' => self::rejects(),
             default => abort(404),
         })->header('Cache-Control', 'no-store');
@@ -69,24 +81,23 @@ final class DashboardController extends Controller
         return array_map(static fn ($count): int => (int) $count, $counts ?? []);
     }
 
-    /** Key figures. Expired needs follow-up (amber); only cards matching a client filter exactly link to a list. */
-    private static function kpis(): array
+    /** Key figures for the strip. Expired needs follow-up (amber); figures that match a client filter link to the list. */
+    private static function kpis(?int $online = null): array
     {
         $counts = self::clientCounts();
         $today = (int) Db::value('SELECT COALESCE(SUM(COALESCE(acctinputoctets,0) + COALESCE(acctoutputoctets,0)),0) FROM radacct WHERE acctstarttime >= CURDATE() AND acctstarttime < DATE_ADD(CURDATE(), INTERVAL 1 DAY)');
         $month = (int) Db::value('SELECT COALESCE(SUM(COALESCE(acctinputoctets,0) + COALESCE(acctoutputoctets,0)),0) FROM radacct WHERE acctstarttime >= DATE_FORMAT(CURDATE(), "%Y-%m-01") AND acctstarttime < DATE_ADD(DATE_FORMAT(CURDATE(), "%Y-%m-01"),INTERVAL 1 MONTH)');
         $clients = Auth::can('clients.view');
-        $metric = static fn (string $label, string|int $value, string $icon, string $tone = '', string $href = '') => compact('label', 'icon', 'tone', 'href') + ['value' => (string) $value];
+        $metric = static fn (string $label, string|int $value, string $tone = '', string $href = '', string $note = '') => ['label' => $label, 'value' => is_int($value) ? number_format($value) : $value, 'icon' => '', 'tone' => $tone, 'href' => $href, 'note' => $note];
+        $expired = $counts['expired'] ?? 0;
 
         return [
-            $metric('Online clients', ClientQuery::count(['status' => 'online']), 'signal', '', $clients ? '/clients?status=online' : ''),
-            $metric('Enabled clients', $counts['enabled'] ?? 0, 'user'),
-            $metric('Expired clients', $counts['expired'] ?? 0, 'shield', ($counts['expired'] ?? 0) > 0 ? 'warning' : ''),
-            $metric('Disabled clients', $counts['disabled'] ?? 0, 'lock'),
-            $metric('NAS devices', (int) Db::value('SELECT COUNT(*) FROM nas'), 'server', '', Auth::can('nas.view') ? '/nas' : ''),
-            $metric('Session totals: started today', Format::bytes($today), 'signal'),
-            $metric('Session totals: started this month', Format::bytes($month), 'signal'),
-            $metric('Total clients', $counts['total'] ?? 0, 'user', '', $clients ? '/clients' : ''),
+            $metric('Online now', $online ?? ClientQuery::count(['status' => 'online']), '', $clients ? '/clients?status=online' : ''),
+            $metric('Active clients', $counts['enabled'] ?? 0, '', $clients ? '/clients?status=enabled' : '', number_format($counts['total'] ?? 0) . ' in total'),
+            $metric('Expired', $expired, $expired > 0 ? 'warning' : '', $clients ? '/clients?status=expired' : ''),
+            $metric('Disabled', $counts['disabled'] ?? 0, '', $clients ? '/clients?status=disabled' : ''),
+            $metric('Data today', Format::bytes($today)),
+            $metric('Data this month', Format::bytes($month)),
         ];
     }
 
@@ -95,35 +106,158 @@ final class DashboardController extends Controller
         return Db::select('SELECT n.id, n.shortname, n.nasname, n.type, m.config_revision, m.applied_revision, m.pending_delete, COALESCE(m.vendor, n.type) AS vendor, COALESCE(m.enabled, 1) AS enabled, COALESCE(m.coa_enabled, 1) AS coa_enabled, m.coa_port, (COALESCE(n.secret, "") <> "") AS secret_saved, m.api_host, m.api_user, (COALESCE(m.api_password, "") <> "") AS api_password_saved, ' . NasRepository::apiEnabledSql('m') . ' AS api_enabled, COUNT(r.radacctid) AS online_users FROM nas n LEFT JOIN nas_metadata m ON m.nas_id=n.id LEFT JOIN radacct r ON ' . Accounting::freshSql('r') . ' AND (r.nasipaddress=n.nasname OR r.nasipaddress=n.shortname) GROUP BY n.id, m.enabled, m.coa_enabled, m.coa_port, m.vendor, m.api_host, m.api_user, m.api_password ORDER BY n.shortname LIMIT 6');
     }
 
-    /** NAS status cards; one parallel SNMP GET for the listed devices (at most 6), bounded at 1.5 s. */
-    private static function nasCards(): array
+    /**
+     * The routers table: one parallel SNMP GET for the listed NAS (at most 6, bounded at 1.5 s), the latest CPU sample
+     * from the last 15 minutes, and one status word per router.
+     */
+    private static function routers(): array
     {
         $rows = self::nasRows();
         $snmp = NasMonitor::probeMany($rows);
+        $cpu = [];
+        try {
+            foreach (Db::select('SELECT s.nas_id, s.cpu_pct FROM nas_snmp_health_samples s JOIN (SELECT nas_id, MAX(sampled_at) AS at FROM nas_snmp_health_samples WHERE sampled_at >= UNIX_TIMESTAMP() - 900 GROUP BY nas_id) l ON l.nas_id = s.nas_id AND l.at = s.sampled_at') as $r) {
+                $cpu[(int) $r['nas_id']] = $r['cpu_pct'] === null ? null : (int) round((float) $r['cpu_pct']);
+            }
+        } catch (\Throwable) {
+            $cpu = [];
+        }
         $canViewNas = Auth::can('nas.view');
-        return array_map(static function (array $r) use ($snmp, $canViewNas) {
+
+        return array_map(static function (array $r) use ($snmp, $cpu, $canViewNas) {
             $id = (int) $r['id'];
-            $tags = [];
-            if ((int) $r['enabled'] !== 1) {
-                $tags[] = Present::tag('RADIUS disabled', 'warning');
-            }
-            $tags[] = Present::nasDisconnect($r);
-            $tags[] = Present::tag($r['online_users'] . ' fresh ' . ((int) $r['online_users'] === 1 ? 'session' : 'sessions'));
-            $status = $snmp[$id] ?? null;
-            if ($status && $status['state'] !== 'off') {
-                $up = $status['state'] === 'up';
-                $text = $up ? 'SNMP ' . $status['latency_ms'] . ' ms' : 'SNMP no response';
-                $title = $up ? 'Responding over SNMP' . ($status['uptime'] !== null ? '; uptime ' . Present::uptime((int) $status['uptime']) : '') : (string) ($status['error'] ?? 'No SNMP response');
-                $tags[] = Present::tag($text, $up ? '' : 'danger', $title, $canViewNas ? '/nas/' . $id . '/monitor' : null);
-            }
+            $probe = $snmp[$id] ?? null;
+            $sessions = (int) $r['online_users'];
+            $waiting = ($r['applied_revision'] ?? null) === null || (int) $r['applied_revision'] !== (int) ($r['config_revision'] ?? 0);
+            [$tone, $text, $title] = match (true) {
+                (int) $r['enabled'] !== 1 => ['neutral', 'RADIUS off', 'RADIUS is turned off for this NAS'],
+                !empty($r['pending_delete']) => ['warning', 'Removal pending', 'Removed in the portal; FreeRADIUS still has it until it restarts'],
+                $probe !== null && $probe['state'] === 'down' => ['danger', 'Not answering', (string) ($probe['error'] ?? 'No SNMP response')],
+                $waiting => ['warning', 'Waiting for restart', 'FreeRADIUS has not loaded the latest change for this NAS yet'],
+                $probe !== null && $probe['state'] === 'up' => ['good', 'Online', 'Answering over SNMP in ' . $probe['latency_ms'] . ' ms'],
+                $sessions > 0 => ['good', 'Online', 'Sending accounting'],
+                default => ['neutral', 'No sessions', 'No SNMP set up and no live sessions'],
+            };
             return [
                 'id' => $id,
                 'name' => (string) ($r['shortname'] ?: $r['nasname']),
+                'vendor' => (string) ($r['vendor'] ?? ''),
                 'address' => (string) $r['nasname'],
                 'href' => $canViewNas && $id ? '/nas/' . $id . '/edit' : null,
-                'tags' => $tags,
+                'tone' => $tone,
+                'status' => $text,
+                'title' => $title,
+                'sessions' => $sessions,
+                'cpu' => $cpu[$id] ?? null,
+                'uptime' => $probe !== null && $probe['state'] === 'up' && $probe['uptime'] !== null ? Present::uptime((int) $probe['uptime']) : null,
             ];
         }, $rows);
+    }
+
+    /**
+     * What needs a look, most urgent first: routers not answering, OLTs that cannot be read, ONUs with a weak signal,
+     * routers waiting for a FreeRADIUS restart and overdue invoices. Each item names the page that fixes it.
+     *
+     * @return list<array{tone:string, title:string, detail:string, action:?array{label:string, href:string}, phrase:string}>
+     */
+    private static function attention(array $routers): array
+    {
+        $items = [];
+        $canNas = Auth::can('nas.view');
+        $down = array_values(array_filter($routers, static fn (array $r) => $r['tone'] === 'danger'));
+        foreach ($down as $r) {
+            $items[] = ['tone' => 'danger', 'title' => $r['name'] . ' is not answering', 'detail' => $r['address'],
+                'action' => $canNas ? ['label' => 'Diagnose', 'href' => '/nas/' . $r['id'] . '/diagnostics'] : null,
+                'phrase' => count($down) === 1 ? 'One router is not answering' : count($down) . ' routers are not answering'];
+        }
+        if ($canNas) {
+            try {
+                $olts = Db::select('SELECT t.id, t.name, t.last_sync_ok, t.last_error, t.rx_warning, t.rx_critical,
+                    COALESCE(SUM(o.status = "online" AND o.rx_dbm < t.rx_warning), 0) AS weak,
+                    COALESCE(SUM(o.status = "online" AND o.rx_dbm < t.rx_critical), 0) AS very_weak
+                    FROM olts t LEFT JOIN olt_onus o ON o.olt_id = t.id WHERE t.enabled = 1 GROUP BY t.id ORDER BY t.name');
+            } catch (\Throwable) {
+                $olts = [];
+            }
+            foreach ($olts as $o) {
+                if ($o['last_sync_ok'] !== null && (int) $o['last_sync_ok'] === 0) {
+                    $items[] = ['tone' => 'danger', 'title' => $o['name'] . ' cannot be read', 'detail' => mb_strimwidth((string) $o['last_error'], 0, 90, '…'),
+                        'action' => ['label' => 'Open', 'href' => '/olts/' . (int) $o['id']], 'phrase' => $o['name'] . ' cannot be read'];
+                }
+            }
+            $weakTotal = array_sum(array_map(static fn (array $o) => (int) $o['weak'], $olts));
+            foreach ($olts as $o) {
+                $weak = (int) $o['weak'];
+                if ($weak === 0) {
+                    continue;
+                }
+                $port = Db::row('SELECT frame, slot, port, COUNT(*) AS n FROM olt_onus WHERE olt_id = ? AND status = "online" AND rx_dbm < ? GROUP BY frame, slot, port ORDER BY n DESC LIMIT 1', [(int) $o['id'], $o['rx_warning']]);
+                $items[] = [
+                    'tone' => (int) $o['very_weak'] > 0 ? 'danger' : 'warning',
+                    'title' => ($weak === 1 ? 'One ONU has' : $weak . ' ONUs have') . ' a weak signal on ' . $o['name'],
+                    'detail' => $port && (int) $port['n'] > 1 && $weak > 1 ? $port['n'] . ' of them on port ' . $port['frame'] . '/' . $port['slot'] . '/' . $port['port'] . '.' : 'Below ' . rtrim(rtrim((string) $o['rx_warning'], '0'), '.') . ' dBm.',
+                    'action' => ['label' => 'See them', 'href' => '/olts/' . (int) $o['id'] . '?status=weak'],
+                    'phrase' => $weakTotal === 1 ? 'one ONU has a weak signal' : $weakTotal . ' ONUs have a weak signal',
+                ];
+            }
+        }
+        $waiting = array_filter($routers, static fn (array $r) => $r['status'] === 'Waiting for restart');
+        if ($waiting) {
+            $items[] = ['tone' => 'warning', 'title' => (count($waiting) === 1 ? reset($waiting)['name'] . ' waits' : count($waiting) . ' routers wait') . ' for a FreeRADIUS restart',
+                'detail' => 'Changes to them are not in use yet.', 'action' => $canNas ? ['label' => 'Open', 'href' => '/nas'] : null, 'phrase' => ''];
+        }
+        if (Auth::can('billing.view') && License::allows('billing')) {
+            $rows = Db::select('SELECT currency, COUNT(*) AS n, COALESCE(SUM(balance_due), 0) AS due FROM billing_invoices WHERE status = "overdue" GROUP BY currency');
+            $count = array_sum(array_map(static fn (array $r) => (int) $r['n'], $rows));
+            if ($count > 0) {
+                $items[] = ['tone' => 'warning', 'title' => ($count === 1 ? 'One invoice is' : number_format($count) . ' invoices are') . ' overdue',
+                    'detail' => Currency::totals(array_column($rows, 'due', 'currency')) . ' to collect.',
+                    'action' => ['label' => 'Review', 'href' => '/billing?status=overdue'], 'phrase' => ($count === 1 ? 'one invoice is' : number_format($count) . ' invoices are') . ' overdue'];
+            }
+        }
+        usort($items, static fn (array $a, array $b) => ($a['tone'] === 'danger' ? 0 : 1) <=> ($b['tone'] === 'danger' ? 0 : 1));
+        return $items;
+    }
+
+    /** The page's title: the state of the network in one sentence, from the two most urgent kinds of problem. */
+    private static function headline(array $attention): string
+    {
+        $phrases = array_values(array_unique(array_filter(array_column($attention, 'phrase'))));
+        if (!$phrases) {
+            return $attention ? 'Almost everything is working.' : 'Everything is working.';
+        }
+        $text = ucfirst($phrases[0]) . (isset($phrases[1]) ? ' and ' . lcfirst($phrases[1]) : '');
+        return $text . '.';
+    }
+
+    /** Active clients whose service ends in the next 7 days, soonest first; how many in all. */
+    private static function expiring(): array
+    {
+        $today = Entitlement::today();
+        $until = date('Y-m-d', strtotime($today . ' +7 days'));
+        $where = 'c.account_status = "active" AND c.enabled = 1 AND c.expiry_date >= ? AND c.expiry_date <= ?';
+        $rows = Db::select("SELECT c.username, c.first_name, c.last_name, c.company_name, c.expiry_date, c.balance, s.name AS service
+            FROM customer_profiles c LEFT JOIN service_metadata s ON s.group_name = c.service_group WHERE $where ORDER BY c.expiry_date, c.username LIMIT 6", [$today, $until]);
+        $showBalance = Auth::can('billing.view');
+
+        return [
+            'total' => (int) Db::value("SELECT COUNT(*) FROM customer_profiles c WHERE $where", [$today, $until]),
+            'rows' => array_map(static function (array $r) use ($today, $showBalance) {
+                $days = (int) round((strtotime((string) $r['expiry_date']) - strtotime($today)) / 86400);
+                return [
+                    'username' => (string) $r['username'],
+                    'name' => trim($r['first_name'] . ' ' . $r['last_name']) ?: (string) $r['company_name'],
+                    'service' => (string) ($r['service'] ?? ''),
+                    'expires' => (string) $r['expiry_date'],
+                    'when' => match (true) {
+                        $days <= 0 => 'Today', $days === 1 => 'Tomorrow', default => 'In ' . $days . ' days'
+                    },
+                    'soon' => $days <= 2,
+                    'balance' => $showBalance ? (float) $r['balance'] : null,
+                    'balanceText' => $showBalance ? Currency::amount($r['balance']) : null,
+                ];
+            }, $rows),
+        ];
     }
 
     private static function rejects(): array
