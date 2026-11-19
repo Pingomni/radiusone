@@ -734,7 +734,7 @@ export default function OnuPage({ olt, onu, clients, disconnections, timeline, s
     ];
 
     return (
-        <AppLayout title={`ONU ${onu.sn}`}>
+        <AppLayout title={`ONU ${onu.sn}`} heading={false}>
             <nav className="onu-crumbs" aria-label="Where this ONU is">
                 <Link href="/olts">OLTs</Link><span aria-hidden="true">/</span>
                 <Link href={`/olts/${olt.id}`}>{olt.name}</Link><span aria-hidden="true">/</span>

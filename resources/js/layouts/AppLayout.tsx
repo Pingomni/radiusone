@@ -7,18 +7,20 @@ import { useCan, useShared } from '@/lib/auth';
 import { useServerClock } from '@/lib/clock';
 import type { ProFeature } from '@/lib/types';
 
-// Each label appears once: items are listed in group order.
-const NAV: [href: string, label: string, permission: string, icon: string, group: string][] = [
-    ['/', 'Dashboard', 'dashboard.view', 'dashboard', 'Operations'],
-    ['/clients', 'Clients', 'clients.view', 'clients', 'Operations'],
+type NavCount = 'clients' | 'weakOnus';
+
+// Each label appears once: items are listed in group order. The last field names a count shown beside the item.
+const NAV: [href: string, label: string, permission: string, icon: string, group: string, count?: NavCount][] = [
+    ['/', 'Overview', 'dashboard.view', 'dashboard', 'Operations'],
+    ['/clients', 'Clients', 'clients.view', 'clients', 'Operations', 'clients'],
     ['/services', 'Services', 'services.view', 'services', 'Operations'],
-    ['/nas', 'NAS Devices', 'nas.view', 'server', 'Operations'],
-    ['/olts', 'OLT', 'nas.view', 'fiber', 'Operations'],
-    ['/monitoring', 'Monitoring', 'nas.view', 'activity', 'Operations'],
-    ['/operations', 'Network operations', 'operations.view', 'signal', 'Operations'],
-    ['/billing', 'Billing', 'billing.view', 'billing', 'Operations'],
-    ['/contracts', 'Contracts', 'billing.view', 'book', 'Operations'],
-    ['/payments', 'Online payments', 'billing.view', 'activity', 'Operations'],
+    ['/nas', 'NAS devices', 'nas.view', 'server', 'Network'],
+    ['/olts', 'OLT and ONU', 'nas.view', 'fiber', 'Network', 'weakOnus'],
+    ['/monitoring', 'Monitoring', 'nas.view', 'activity', 'Network'],
+    ['/operations', 'Network operations', 'operations.view', 'signal', 'Network'],
+    ['/billing', 'Billing', 'billing.view', 'billing', 'Finance'],
+    ['/contracts', 'Contracts', 'billing.view', 'book', 'Finance'],
+    ['/payments', 'Online payments', 'billing.view', 'activity', 'Finance'],
     ['/reports', 'Reports', 'reports.view', 'reports', 'Workspace'],
     ['/logs', 'Logs', 'logs.view', 'logs', 'Workspace'],
     ['/settings', 'Settings', 'settings.manage', 'settings', 'Workspace'],
@@ -27,23 +29,14 @@ const NAV: [href: string, label: string, permission: string, icon: string, group
 // Menu items that are RadiusOne Pro features: marked "Pro" while this server has no licence for them.
 const PRO_NAV: Record<string, ProFeature> = { '/billing': 'billing', '/contracts': 'contracts', '/payments': 'contracts' };
 
-const CONTEXTS: Record<string, string> = {
-    '': 'Workspace / Overview',
-    dashboard: 'Workspace / Overview',
-    clients: 'Workspace / Customers',
-    services: 'Workspace / Services',
-    nas: 'Workspace / Network',
-    olts: 'Workspace / Network',
-    monitoring: 'Workspace / Network',
-    operations: 'Workspace / Network',
-    billing: 'Workspace / Finance',
-    contracts: 'Workspace / Finance',
-    payments: 'Workspace / Finance',
-    reports: 'Workspace / Insights',
-    logs: 'Workspace / Activity',
-    settings: 'Workspace / Administration',
-    profile: 'Workspace / My account',
-};
+/** Where a page sits in the menu, for the breadcrumb: its group and its menu item. */
+function placeOf(path: string): { group: string; label: string; href: string } | null {
+    const section = path.replace(/^\/+/, '').split('/')[0];
+    if (section === '' || section === 'dashboard') return { group: 'Operations', label: 'Overview', href: '/' };
+    if (section === 'profile') return { group: 'Workspace', label: 'My account', href: '/profile' };
+    const item = NAV.find(([href]) => href === `/${section}`);
+    return item ? { group: item[4], label: item[1], href: item[0] } : null;
+}
 
 export function BrandLogo({ className = 'brand-logo' }: { className?: string }) {
     const { logo } = useShared();
@@ -79,7 +72,7 @@ function ThemeToggle() {
     return (
         <button
             type="button"
-            className="theme-toggle"
+            className="theme-toggle icon-button"
             aria-pressed={dark}
             title="Switch between light and dark theme"
             onClick={() => {
@@ -91,8 +84,8 @@ function ThemeToggle() {
                 setDark(!dark);
             }}
         >
-            <Icon name="moon" />
-            <span>Dark theme</span>
+            <Icon name={dark ? 'sun' : 'moon'} />
+            <span className="sr-only">Dark theme</span>
         </button>
     );
 }
@@ -116,9 +109,122 @@ function useMobileNav() {
     return { mobile, open, setOpen };
 }
 
+type SearchResults = { q: string; clients: { username: string; name: string; ip: string; online: boolean; href: string }[]; clientTotal: number; invoices: { number: string; username: string; href: string }[] };
+
+/** The top bar's search: Ctrl K (⌘K) jumps to it; typing lists clients and invoices; Enter opens the client list. */
+function TopSearch({ initial }: { initial: string }) {
+    const [value, setValue] = useState(initial);
+    const [results, setResults] = useState<SearchResults | null>(null);
+    const [open, setOpen] = useState(false);
+    const [active, setActive] = useState(-1);
+    const input = useRef<HTMLInputElement>(null);
+    const mac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
+
+    useEffect(() => {
+        const onKey = (event: KeyboardEvent) => {
+            if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+                event.preventDefault();
+                input.current?.focus();
+                input.current?.select();
+            }
+        };
+        document.addEventListener('keydown', onKey);
+        return () => document.removeEventListener('keydown', onKey);
+    }, []);
+
+    useEffect(() => {
+        const q = value.trim();
+        if (q.length < 2) {
+            setResults(null);
+            return;
+        }
+        const controller = new AbortController();
+        const timer = window.setTimeout(() => {
+            fetch(`/search?q=${encodeURIComponent(q)}`, { headers: { Accept: 'application/json' }, credentials: 'same-origin', signal: controller.signal })
+                .then((r) => (r.ok ? r.json() : null))
+                .then((data: SearchResults | null) => { if (data) { setResults(data); setActive(-1); } })
+                .catch(() => undefined);
+        }, 180);
+        return () => { window.clearTimeout(timer); controller.abort(); };
+    }, [value]);
+
+    const items = results ? [
+        ...results.clients.map((c) => ({ key: `c-${c.username}`, href: c.href, title: c.name || c.username, sub: [c.username, c.ip].filter(Boolean).join('  '), online: c.online, kind: 'client' as const })),
+        ...results.invoices.map((i) => ({ key: `i-${i.number}`, href: i.href, title: i.number, sub: i.username, online: false, kind: 'invoice' as const })),
+    ] : [];
+    const showAll = !!results && results.clientTotal > results.clients.length;
+    const listOpen = open && !!results;
+    const go = (href: string) => { setOpen(false); router.visit(href); };
+
+    return (
+        <form
+            className="topbar-search"
+            action="/clients"
+            role="search"
+            onSubmit={(event) => {
+                event.preventDefault();
+                if (active >= 0 && items[active]) return go(items[active].href);
+                const q = value.trim();
+                setOpen(false);
+                router.get('/clients', q ? { q } : {});
+            }}
+        >
+            <Icon name="search" />
+            <label className="sr-only" htmlFor="topbar-search-input">Find a client, IP, MAC or invoice</label>
+            <input
+                ref={input}
+                id="topbar-search-input"
+                type="search"
+                name="q"
+                placeholder="Find a client, IP, MAC or invoice"
+                autoComplete="off"
+                role="combobox"
+                aria-expanded={listOpen}
+                aria-controls="topbar-search-results"
+                aria-autocomplete="list"
+                aria-activedescendant={listOpen && active >= 0 ? `search-option-${active}` : undefined}
+                value={value}
+                onChange={(e) => { setValue(e.target.value); setOpen(true); }}
+                onFocus={() => setOpen(true)}
+                onBlur={() => window.setTimeout(() => setOpen(false), 150)}
+                onKeyDown={(e) => {
+                    if (e.key === 'ArrowDown') { e.preventDefault(); setOpen(true); setActive((i) => Math.min(items.length - 1, i + 1)); }
+                    else if (e.key === 'ArrowUp') { e.preventDefault(); setActive((i) => Math.max(-1, i - 1)); }
+                    else if (e.key === 'Escape') { setOpen(false); setActive(-1); }
+                }}
+            />
+            <kbd aria-hidden="true">{mac ? '⌘K' : 'Ctrl K'}</kbd>
+            {listOpen && (
+                <div className="search-results" id="topbar-search-results" role="listbox" aria-label="Search results">
+                    {items.length === 0 && <p className="search-empty">Nothing found for “{results.q}”.</p>}
+                    {items.map((item, i) => (
+                        <a
+                            key={item.key}
+                            id={`search-option-${i}`}
+                            role="option"
+                            aria-selected={i === active}
+                            href={item.href}
+                            className={i === active ? 'active' : undefined}
+                            onMouseDown={(e) => { e.preventDefault(); go(item.href); }}
+                        >
+                            <span className={`search-kind ${item.kind}`}>{item.kind === 'client' ? <span className={`status-dot ${item.online ? 'is-online' : ''}`} /> : <Icon name="billing" />}</span>
+                            <span><strong>{item.title}</strong><small className={item.kind === 'client' ? 'mono' : undefined}>{item.sub}</small></span>
+                        </a>
+                    ))}
+                    {showAll && (
+                        <a href={`/clients?q=${encodeURIComponent(results.q)}`} className="search-all" onMouseDown={(e) => { e.preventDefault(); setOpen(false); router.get('/clients', { q: results.q }); }}>
+                            All {results.clientTotal} matching clients
+                        </a>
+                    )}
+                </div>
+            )}
+        </form>
+    );
+}
+
 /** Workspace shell: sidebar, topbar and page feedback (legacy render()). */
-export default function AppLayout({ title, children }: { title: string; children: ReactNode }) {
-    const { auth, flash, clock, appName, appVersion, pro } = useShared();
+export default function AppLayout({ title, heading = true, children }: { title: string; /** false: the page draws its own header (client, NAS, OLT and ONU pages). */ heading?: boolean; children: ReactNode }) {
+    const { auth, flash, clock, appName, appVersion, pro, nav } = useShared();
     const time = useServerClock();
     const can = useCan();
     const { url } = usePage();
@@ -166,7 +272,8 @@ export default function AppLayout({ title, children }: { title: string; children
         return () => document.removeEventListener('keydown', onKey);
     }, [open, setOpen]);
 
-    const section = path.replace(/^\/+/, '').split('/')[0];
+    const place = placeOf(path);
+    const user = auth.user;
     let group = '';
 
     return (
@@ -192,17 +299,22 @@ export default function AppLayout({ title, children }: { title: string; children
                     <div><strong>{appName}</strong><small>{appName === 'RadiusOne' ? 'Client management' : 'RadiusOne'}</small></div>
                 </div>
                 <nav aria-label="Primary">
-                    {NAV.filter(([, , permission]) => can(permission)).map(([href, label, , icon, navGroup]) => {
+                    {NAV.filter(([, , permission]) => can(permission)).map(([href, label, , icon, navGroup, count]) => {
                         const active = path === href || (href !== '/' && path.startsWith(`${href}/`)) || (href === '/' && path === '/dashboard');
                         const heading = navGroup !== group ? <span className="nav-group-label">{navGroup}</span> : null;
                         group = navGroup;
+                        const n = count ? nav?.[count] ?? null : null;
                         return (
                             <Fragment key={href}>
                                 {heading}
                                 <Link className={active ? 'active' : ''} href={href} aria-current={active ? 'page' : undefined}>
                                     <Icon name={icon} />
                                     <span>{label}</span>
-                                    {PRO_NAV[href] && pro[PRO_NAV[href]] === false && <span className="nav-pro">Pro</span>}
+                                    {PRO_NAV[href] && pro[PRO_NAV[href]] === false
+                                        ? <span className="nav-pro">Pro</span>
+                                        : count === 'weakOnus'
+                                            ? !!n && <span className="nav-flag" title={`${n} ${n === 1 ? 'ONU has' : 'ONUs have'} a weak signal`}>{n}<span className="sr-only"> with weak signal</span></span>
+                                            : n !== null && <span className="nav-count">{n.toLocaleString('en-US')}</span>}
                                 </Link>
                             </Fragment>
                         );
@@ -213,6 +325,17 @@ export default function AppLayout({ title, children }: { title: string; children
                         <span>Documentation</span>
                     </a>
                 </nav>
+                <div className="sidebar-foot">
+                    <Link className="sidebar-user" href="/profile" title="My account">
+                        <span className="sidebar-avatar" aria-hidden="true">{(user?.name || user?.username || '?').split(/\s+/).map((w) => w[0]).join('').slice(0, 2).toUpperCase()}</span>
+                        <span><strong>{user?.name || user?.username}</strong><small>{user?.role ? user.role.replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase()) : ''}</small></span>
+                    </Link>
+                    <ThemeToggle />
+                    <button type="button" className="logout-button icon-button" title="Sign out" onClick={() => router.post('/logout')}>
+                        <Icon name="logout" />
+                        <span className="sr-only">Sign out</span>
+                    </button>
+                </div>
                 {appVersion && <div className="sidebar-version">RadiusOne v{appVersion}</div>}
             </aside>
             <button type="button" className="nav-backdrop" tabIndex={-1} aria-hidden="true" hidden={!open} onClick={() => setOpen(false)} />
@@ -231,40 +354,22 @@ export default function AppLayout({ title, children }: { title: string; children
                             <Icon name="menu" />
                             <span>Menu</span>
                         </button>
-                        <div>
-                            <span className="workspace-eyebrow">{CONTEXTS[section] ?? 'Workspace'}</span>
-                            <h1>{title}</h1>
-                        </div>
+                        <nav className="crumbs" aria-label="Breadcrumb">
+                            {place ? (
+                                <>
+                                    <span>{place.group}</span>
+                                    {place.label === title ? <span aria-current="page">{title}</span> : <><Link href={place.href}>{place.label}</Link><span aria-current="page">{title}</span></>}
+                                </>
+                            ) : <span aria-current="page">{title}</span>}
+                        </nav>
                     </div>
-                    {can('clients.view') && (
-                        <form
-                            className="topbar-search"
-                            action="/clients"
-                            role="search"
-                            onSubmit={(event) => {
-                                event.preventDefault();
-                                const q = new FormData(event.currentTarget).get('q');
-                                router.get('/clients', q ? { q: String(q) } : {});
-                            }}
-                        >
-                            <label className="sr-only" htmlFor="topbar-search-input">Search clients</label>
-                            <input key={search} id="topbar-search-input" type="search" name="q" placeholder="Search user, name, phone, IP or MAC" autoComplete="off" defaultValue={search} />
-                        </form>
-                    )}
+                    {can('clients.view') && <TopSearch key={search} initial={search} />}
                     <div className="operator">
                         <span className="topbar-clock" title="All times are shown in this timezone">{time} {clock.timezone}</span>
-                        <ThemeToggle />
-                        <Link className="operator-id" href="/profile" title="My profile">
-                            <Icon name="user" />
-                            {auth.user?.username}
-                        </Link>
-                        <button type="button" className="logout-button" onClick={() => router.post('/logout')}>
-                            <Icon name="logout" />
-                            <span>Logout</span>
-                        </button>
                     </div>
                 </header>
                 <div className="workspace-content" id="workspace-content" tabIndex={-1} ref={feedback}>
+                    {heading && <div className="page-head"><h1>{title}</h1></div>}
                     {flash && <FlashMessage flash={flash} />}
                     {children}
                 </div>

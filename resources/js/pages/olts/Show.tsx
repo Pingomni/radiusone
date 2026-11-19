@@ -663,7 +663,7 @@ export default function OltShow({ olt, counts, filters, hardware, details, backu
     const [status, setStatus] = useState(filters.status);
     const path = `/olts/${olt.id}`;
     return (
-        <AppLayout title={olt.name}>
+        <AppLayout title={olt.name} heading={false}>
             <nav className="onu-crumbs" aria-label="Where this OLT is">
                 <Link href="/olts">OLTs</Link><span aria-hidden="true">/</span><span aria-current="page">{olt.name}</span>
             </nav>

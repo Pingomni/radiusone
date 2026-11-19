@@ -17,6 +17,7 @@ use App\Http\Controllers\PayController;
 use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ReportsController;
+use App\Http\Controllers\SearchController;
 use App\Http\Controllers\ServiceController;
 use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\SoftwareUpdateController;
@@ -56,6 +57,9 @@ Route::middleware('frweb.auth')->group(function () {
         Route::get('/dashboard', [DashboardController::class, 'dashboard']);
         Route::get('/fragments/{fragment}', [DashboardController::class, 'fragment'])->whereIn('fragment', ['dashboard-kpis', 'dashboard-nas', 'dashboard-rejects']);
     });
+
+    // The top bar's search; each kind of result checks its own permission.
+    Route::get('/search', [SearchController::class, 'search']);
 
     // Profile (every signed-in operator).
     Route::get('/profile', [ProfileController::class, 'profile']);

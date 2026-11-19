@@ -6,6 +6,7 @@ use App\Support\Auth;
 use App\Support\Branding;
 use App\Support\Currency;
 use App\Support\License;
+use App\Support\NavCounts;
 use App\Support\Settings;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
@@ -47,6 +48,8 @@ class HandleInertiaRequests extends Middleware
             // The browser shows times in this clock and timezone (resources/js/lib/clock.ts).
             'currency' => fn () => Currency::code(),
             'clock' => fn () => ['time' => date('H:i'), 'now' => time(), 'timezone' => date_default_timezone_get()],
+            // Counts beside the menu items, cached for a minute (App\Support\NavCounts).
+            'nav' => fn () => $user ? NavCounts::forCurrentUser() : null,
         ];
     }
 }

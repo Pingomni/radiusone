@@ -24,6 +24,8 @@ export interface SharedProps {
     flash: Flash | null;
     logo: string | null;
     clock: { time: string; now: number; timezone: string };
+    /** Counts beside the menu items; null where this operator may not see the page. */
+    nav: { clients: number | null; weakOnus: number | null } | null;
     /** System currency code (Settings → Regional): EUR, USD or ALL. */
     currency: string;
     /** RadiusOne Pro features (License::FEATURES) and whether each may run here; empty when signed out. */

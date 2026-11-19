@@ -190,7 +190,7 @@ export default function NasForm({ device, vendors, setupSteps, canManage, nas, a
     }
 
     return (
-        <AppLayout title="Edit NAS Device">
+        <AppLayout title="Edit NAS Device" heading={false}>
             <div className="toolbar">
                 <Link className="button" href="/nas">Back to NAS devices</Link>
                 <Link className="button" href={`/nas/${nas.id}/monitor`}><Icon name="signal" />Live monitor</Link>

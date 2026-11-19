@@ -425,7 +425,7 @@ export default function ClientForm({ values, draftRestored, draftTab, canEdit, c
     ].filter((t) => client || !['accounting', 'billing', 'logs'].includes(t.key));
 
     return (
-        <AppLayout title={client ? 'Client Profile' : 'New Client'}>
+        <AppLayout title={client ? 'Client Profile' : 'New Client'} heading={!client}>
             {client && <ProfileHeader username={client.username} header={client.header} />}
             {client?.revealed && (
                 <Panel title={`Saved PPPoE password for ${client.username}`}>
