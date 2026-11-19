@@ -22,11 +22,15 @@ export function PaymentProgress({ status }: { status: InvoiceStatusData }) {
     );
 }
 
+const TONES: Record<string, 'good' | 'warning' | 'danger' | 'neutral'> = { success: 'good', warning: 'warning', danger: 'danger' };
+
+/** An invoice's state as a dot and a word; while part of it is owed, how much is paid. */
 export function InvoiceStatus({ status }: { status: InvoiceStatusData }) {
+    const owing = status.payable && status.paid > 0 && status.paid < status.total;
     return (
-        <div className="invoice-status-cell">
-            <span className={`badge ${status.tone}`.trim()} title={`Status: ${status.status}`}>{status.label}</span>
-            <PaymentProgress status={status} />
+        <div className="invoice-status-cell" title={`Status: ${status.status}`}>
+            <span className={`status is-${TONES[status.tone] ?? 'neutral'}`}>{status.label}</span>
+            {owing && <small className="pay-note">{status.note}</small>}
         </div>
     );
 }

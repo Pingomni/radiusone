@@ -49,7 +49,15 @@ export default function Billing({ filters, lastRun, metrics, statuses, result, p
     const filtered = filters.q !== '' || filters.status !== '';
 
     return (
-        <AppLayout title="Billing">
+        <AppLayout
+            title="Billing"
+            actions={(
+                <>
+                    <ExportMenu url={`/billing/export${query(filters)}`} total={result.total} loaded={result.rows.length} />
+                    {manage && <Link className="button primary" href="/billing/invoices/create"><Icon name="plus" />New invoice</Link>}
+                </>
+            )}
+        >
             <div className="clean-list billing-page">
                 {lastRun && (
                     <section className={`invoice-status-banner billing-run-notice tone-${lastRun.tone}`} role="status">
@@ -58,8 +66,8 @@ export default function Billing({ filters, lastRun, metrics, statuses, result, p
                             <p>
                                 Recurring billing, {lastRun.at}.{' '}
                                 {lastRun.review.length > 0
-                                    ? 'Everyone else was billed. Open each customer\'s invoices and classify or correct the one named; the next run bills them.'
-                                    : 'No recurring invoices were created. The reason is in the server log (storage/logs); the next run retries.'}
+                                    ? 'Everyone else was billed. Correct the invoices of the clients below; the next run bills them.'
+                                    : 'No invoices were created; the next run tries again. The reason is in the server log.'}
                             </p>
                             {lastRun.review.length > 0 && (
                                 <ul>
@@ -72,16 +80,7 @@ export default function Billing({ filters, lastRun, metrics, statuses, result, p
                     </section>
                 )}
                 <MetricCards metrics={metrics} />
-                <ListPanel
-                    title="Invoices"
-                    description={filtered ? `${result.total} matching` : undefined}
-                    tools={(
-                        <>
-                            <ExportMenu url={`/billing/export${query(filters)}`} total={result.total} loaded={result.rows.length} />
-                            {manage && <Link className="button primary" href="/billing/invoices/create"><Icon name="plus" />New invoice</Link>}
-                        </>
-                    )}
-                >
+                <section className="panel list-panel" aria-label="Invoices">
                     <Filters key={JSON.stringify(filters)} filters={filters} statuses={statuses} />
                     <DataTable
                         rows={result.rows}
@@ -100,9 +99,7 @@ export default function Billing({ filters, lastRun, metrics, statuses, result, p
                                 noExport: true,
                                 cell: (r) => (
                                     <div className="list-row-actions">
-                                        {manage && r.owed
-                                            ? <Link className="button" href={`/billing/invoices/${r.id}#record-payment`}>Record payment</Link>
-                                            : <Link className="button" href={`/billing/invoices/${r.id}`}>Open</Link>}
+                                        {manage && r.owed && <Link className="button" href={`/billing/invoices/${r.id}#record-payment`}>Record payment</Link>}
                                         <RowActions label={`More actions for ${r.number}`}>
                                             <InvoiceDocuments invoice={r} />
                                             {r.canEdit && <Link href={`/billing/invoices/${r.id}/edit`}>Edit</Link>}
@@ -115,7 +112,7 @@ export default function Billing({ filters, lastRun, metrics, statuses, result, p
                         ]}
                     />
                     <Pagination result={result} path="/billing" query={filters} noun="invoices" />
-                </ListPanel>
+                </section>
                 {payments.length > 0 && (
                     <ListPanel title="Latest payments">
                         <ul className="billing-payments">

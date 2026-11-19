@@ -78,7 +78,6 @@ export default function InvoiceView({ invoice, items, payments, payment, methods
     return (
         <AppLayout title={`Invoice ${invoice.number}`}>
             <div className="toolbar invoice-toolbar">
-                <Link href="/billing">← Billing</Link>
                 <span className="toolbar-actions">
                     {invoice.draftPdf && <a className="button" href={`/billing/invoices/${invoice.id}/draft-pdf`}>Payment request PDF</a>}
                     {receiptButton}

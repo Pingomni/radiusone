@@ -2,7 +2,7 @@ import { Link, router } from '@inertiajs/react';
 import { useState } from 'react';
 import Icon from '@/components/Icon';
 import { DataTable } from '@/components/table';
-import { Badge, ListPanel } from '@/components/ui';
+import { Status } from '@/components/ui';
 import AppLayout from '@/layouts/AppLayout';
 import { query } from '@/lib/format';
 
@@ -20,11 +20,8 @@ export default function Index({ filters, rows, canManage }: { filters: Filters; 
     const [q, setQ] = useState(filters.q);
     const link = (next: Filters) => `/contracts${query(next)}`;
     return (
-        <AppLayout title="Contracts">
-            <ListPanel
-                title="Contracts"
-                tools={canManage ? <Link className="button primary" href="/contracts/create"><Icon name="plus" />New contract</Link> : undefined}
-            >
+        <AppLayout title="Contracts" actions={canManage ? <Link className="button primary" href="/contracts/create"><Icon name="plus" />New contract</Link> : undefined}>
+            <section className="panel list-panel" aria-label="Contracts">
                 <div className="billing-filters">
                     <nav className="segmented" aria-label="Contract status">
                         {STATUSES.map(([value, label]) => (
@@ -42,14 +39,14 @@ export default function Index({ filters, rows, canManage }: { filters: Filters; 
                     emptyText="No contracts yet."
                     columns={[
                         { header: 'Contract', cell: (r) => <Link href={`/contracts/${r.id}`}>{r.number}</Link> },
-                        { header: 'Customer', cell: (r) => <><Link href={`/clients/${encodeURIComponent(r.username)}/edit`}>{r.customer || r.username}</Link><br /><small className="muted">{r.username}</small></> },
+                        { header: 'Customer', cell: (r) => <span className="list-cell-stack"><Link href={`/clients/${encodeURIComponent(r.username)}/edit`}>{r.customer || r.username}</Link><span className="list-subline mono">{r.username}</span></span> },
                         { header: 'Plan', cell: (r) => r.service },
                         { header: 'Billed', cell: (r) => r.period },
                         { header: 'Term', cell: (r) => `${r.start} to ${r.end}` },
-                        { header: 'Status', cell: (r) => <Badge tone={statusTone(r.status)}>{r.status}</Badge> },
+                        { header: 'Status', cell: (r) => <Status tone={r.status === 'active' ? 'good' : r.status === 'cancelled' ? 'danger' : 'neutral'}>{r.status.charAt(0).toUpperCase() + r.status.slice(1)}</Status> },
                     ]}
                 />
-            </ListPanel>
+            </section>
         </AppLayout>
     );
 }

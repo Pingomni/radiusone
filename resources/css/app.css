@@ -1733,10 +1733,14 @@ tr.is-clickable { cursor: pointer; }
 .billing-stats { background: var(--surface); }
 .billing-alert { margin: 0; padding: var(--sp-2) var(--sp-3); border-left: 3px solid var(--danger); border-radius: var(--radius-sm); background: var(--danger-bg); color: var(--danger); font-size: var(--fs-sm); font-weight: 600; }
 /* Billing list: status tabs with counts, one search box, compact latest payments. */
-.billing-filters { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--sp-2); padding: var(--sp-2) var(--sp-3); }
-.billing-filters .segmented { flex-wrap: wrap; }
-.billing-count { margin-left: 6px; padding: 0 6px; border-radius: 999px; background: var(--line); color: var(--text-muted); font-size: var(--fs-xs); font-variant-numeric: tabular-nums; }
-.billing-filters a[aria-current="page"] .billing-count { background: var(--accent-solid); color: var(--on-accent); }
+.billing-filters { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--sp-2) var(--sp-4); padding: 0 var(--sp-3) 0 18px; border-bottom: 1px solid var(--line); }
+.billing-filters > form { padding: 6px 0; }
+/* Status views on the billing, contracts and payments lists: the same underline tabs as the client list. */
+.billing-filters .segmented { flex-wrap: wrap; gap: 20px; padding: 0; border: 0; border-radius: 0; background: none; align-self: stretch; }
+.billing-filters .segmented a { min-height: 0; padding: 9px 0 7px; border-bottom: 2px solid transparent; border-radius: 0; color: var(--text-muted); font-size: var(--fs-md); font-weight: 500; }
+.billing-filters .segmented a[aria-current="page"] { border-bottom-color: var(--text-strong); background: none; box-shadow: none; color: var(--text-strong); }
+.billing-count { margin-left: 6px; padding: 0; border-radius: 0; background: none; color: var(--text-muted); font-size: var(--fs-xs); font-variant-numeric: tabular-nums; }
+.billing-filters a[aria-current="page"] .billing-count { color: var(--text-muted); }
 .billing-search { position: relative; flex: 1 1 240px; max-width: 340px; }
 .billing-search > svg { position: absolute; left: 10px; top: 50%; width: 16px; height: 16px; transform: translateY(-50%); color: var(--text-muted); pointer-events: none; }
 .billing-search input { width: 100%; min-height: var(--control-h); padding-left: 34px; }
@@ -1752,9 +1756,10 @@ tr.is-clickable { cursor: pointer; }
 .invoice-sheet > * { margin-inline: 0; }
 .invoice-parties { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--sp-3); padding-bottom: var(--sp-3); border-bottom: 1px solid var(--line); }
 .invoice-parties > div { display: grid; gap: 2px; }
-.invoice-label { color: var(--text-muted); font-size: var(--fs-xs); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+.invoice-toolbar .toolbar-actions { margin-left: auto; }
+.invoice-label { color: var(--text-muted); font-size: var(--fs-sm); font-weight: 500; }
 .invoice-dates { display: flex; gap: var(--sp-4); margin: 0; }
-.invoice-dates dt { color: var(--text-muted); font-size: var(--fs-xs); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+.invoice-dates dt { color: var(--text-muted); font-size: var(--fs-sm); font-weight: 500; letter-spacing: 0em; }
 .invoice-dates dd { margin: 2px 0 0; color: var(--text-strong); font-weight: 600; white-space: nowrap; }
 .invoice-lines { margin: 0; padding: 0; list-style: none; }
 .invoice-lines li { display: flex; justify-content: space-between; gap: var(--sp-3); padding: var(--sp-2) 0; border-bottom: 1px solid var(--line); }
@@ -2527,7 +2532,8 @@ tr.is-clickable { cursor: pointer; }
   font-size: 19px;
 }
 
-.pay-note {
+/* The customer pay page's note; the billing list has its own small .pay-note. */
+.pay-card .pay-note {
   padding: 12px;
   border-radius: 8px;
   background: var(--bg);

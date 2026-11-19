@@ -4,6 +4,12 @@ RadiusOne follows [semantic versioning](https://semver.org): **major** for chang
 upgrading, **minor** for new features, **patch** for fixes. The version is in the `VERSION` file and shows in
 the portal's sidebar and under Settings → System information.
 
+## 2.27.0 (2026-11-19)
+
+Billing, contracts and online payments in the new look. Update with **Settings → Overview → Software update** or `sudo radiusone-update`.
+
+- **Actions beside the title, status tabs with counts, statuses as a dot and a word.**
+
 ## 2.26.0 (2026-11-19)
 
 The OLT page in the new look, same layout. Update with **Settings → Overview → Software update** or `sudo radiusone-update`.

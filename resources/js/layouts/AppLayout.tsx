@@ -223,7 +223,16 @@ function TopSearch({ initial }: { initial: string }) {
 }
 
 /** Workspace shell: sidebar, topbar and page feedback (legacy render()). */
-export default function AppLayout({ title, heading = true, children }: { title: string; /** false: the page draws its own header (client, NAS, OLT and ONU pages). */ heading?: boolean; children: ReactNode }) {
+export default function AppLayout({ title, heading = true, subtitle, actions, children }: {
+    title: string;
+    /** false: the page draws its own header (client, NAS, OLT and ONU pages). */
+    heading?: boolean;
+    /** One short line under the title: the current state, never an explanation. */
+    subtitle?: ReactNode;
+    /** Buttons beside the title, at most one primary. */
+    actions?: ReactNode;
+    children: ReactNode;
+}) {
     const { auth, flash, clock, appName, appVersion, pro, nav } = useShared();
     const time = useServerClock();
     const can = useCan();
@@ -369,7 +378,12 @@ export default function AppLayout({ title, heading = true, children }: { title: 
                     </div>
                 </header>
                 <div className="workspace-content" id="workspace-content" tabIndex={-1} ref={feedback}>
-                    {heading && <div className="page-head"><h1>{title}</h1></div>}
+                    {heading && (
+                        <div className={`page-head${actions ? ' with-actions' : ''}`}>
+                            <div><h1>{title}</h1>{subtitle && <p>{subtitle}</p>}</div>
+                            {actions && <div className="page-actions">{actions}</div>}
+                        </div>
+                    )}
                     {flash && <FlashMessage flash={flash} />}
                     {children}
                 </div>

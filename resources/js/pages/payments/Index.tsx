@@ -3,7 +3,7 @@ import { useState } from 'react';
 import Icon from '@/components/Icon';
 import { MetricCards, type Metric } from '@/components/metrics';
 import { DataTable, Pagination } from '@/components/table';
-import { Badge, ListPanel } from '@/components/ui';
+import { Status } from '@/components/ui';
 import AppLayout from '@/layouts/AppLayout';
 import { query } from '@/lib/format';
 import type { Paginated } from '@/lib/types';
@@ -19,8 +19,9 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 export function PaymentStatus({ status }: { status: string }) {
-    const tone = status === 'paid' ? 'success' : status === 'mismatch' || status === 'failed' ? 'danger' : status === 'pending' ? 'warning' : '';
-    return <Badge tone={tone}>{STATUS_LABEL[status] ?? status}</Badge>;
+    const tone = status === 'paid' ? 'good' : status === 'mismatch' || status === 'failed' ? 'danger' : status === 'pending' ? 'warning' : 'neutral';
+    const label = STATUS_LABEL[status] ?? status;
+    return <Status tone={tone}>{label.charAt(0).toUpperCase() + label.slice(1)}</Status>;
 }
 
 const TABS: [string, string][] = [['', 'All'], ['paid', 'Paid'], ['pending', 'Waiting'], ['mismatch', 'Needs review'], ['reviewed', 'Reviewed'], ['closed', 'Not completed']];
@@ -33,12 +34,9 @@ export default function Index({ filters, providers, counts, metrics, result }: {
     const [to, setTo] = useState(filters.to);
     const link = (next: Partial<Filters>) => `/payments${query({ ...filters, ...next })}`;
     return (
-        <AppLayout title="Online payments">
+        <AppLayout title="Online payments" actions={<a className="button" href={`/payments/export${query(filters)}`}>Export CSV</a>}>
             <MetricCards metrics={metrics} />
-            <ListPanel
-                title="Online payments"
-                tools={<a className="button" href={`/payments/export${query(filters)}`}>Export CSV</a>}
-            >
+            <section className="panel list-panel" aria-label="Online payments">
                 <div className="billing-filters">
                     <nav className="segmented" aria-label="Payment status">
                         {TABS.map(([value, label]) => (
@@ -72,7 +70,7 @@ export default function Index({ filters, providers, counts, metrics, result }: {
                     emptyText="No online payments found."
                     columns={[
                         { header: 'Started', cell: (r) => <Link href={`/payments/${r.id}`}>{r.createdAt}</Link> },
-                        { header: 'Customer', cell: (r) => <><Link href={`/clients/${encodeURIComponent(r.username)}/edit`}>{r.customer || r.username}</Link><br /><small className="muted">{r.username}</small></> },
+                        { header: 'Customer', cell: (r) => <span className="list-cell-stack"><Link href={`/clients/${encodeURIComponent(r.username)}/edit`}>{r.customer || r.username}</Link><span className="list-subline mono">{r.username}</span></span> },
                         { header: 'Amount', cell: (r) => `${r.amount} ${r.currency}` },
                         { header: 'Service', cell: (r) => r.provider },
                         { header: 'Covers', cell: (r) => `${r.periodStart} – ${r.periodEnd}` },
@@ -81,7 +79,7 @@ export default function Index({ filters, providers, counts, metrics, result }: {
                     ]}
                 />
                 <Pagination result={result} path="/payments" query={filters} noun="payments" />
-            </ListPanel>
+            </section>
         </AppLayout>
     );
 }
