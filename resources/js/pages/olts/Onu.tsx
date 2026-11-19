@@ -682,6 +682,7 @@ export default function OnuPage({ olt, onu, clients, disconnections, timeline, s
     const base = `/olts/${olt.id}/onus/${onu.id}`;
     const mayChange = can('nas.manage') && olt.canChange;
     const off = onu.active === false;
+    const sections = useRef<HTMLDivElement>(null);
     const live = useLive(base, olt.canRead);
     const data = live.answer?.ok ? live.answer.data : null;
     const [choices, rereadChoices] = useChoices(base, mayChange && data !== null);
@@ -831,7 +832,10 @@ export default function OnuPage({ olt, onu, clients, disconnections, timeline, s
                 </Facts>
             </div>
 
-            <Tabs tabs={ownTabs} label="ONU details" className="tabs onu-tabs" />
+            {/* Choosing a section brings it to the top of the window, so the whole section shows instead of its first lines. */}
+            <div ref={sections} className="onu-sections">
+                <Tabs tabs={ownTabs} label="ONU details" className="tabs onu-tabs" onChange={() => window.requestAnimationFrame(() => sections.current?.scrollIntoView({ block: 'start', behavior: 'smooth' }))} />
+            </div>
         </AppLayout>
     );
 }

@@ -2771,6 +2771,10 @@ td .list-menu > summary:hover { border-color: var(--line); background: var(--sur
 .onu-pending { color: var(--text-faint); font-weight: 400; }
 
 .onu-tabs { display: grid; gap: var(--sp-3); }
+/* A section fills the window under the top bar, so choosing one can bring it to the top whatever its length,
+   and going from a long section to a short one does not move the page. */
+.onu-sections { scroll-margin-top: calc(var(--topbar-h) + var(--sp-2)); min-height: calc(100vh - var(--topbar-h) - var(--sp-4)); }
+.onu-tabs > .tab-buttons { overflow-y: hidden; }
 .onu-tab-body { display: grid; gap: var(--sp-3); }
 .onu-tabs .tab > .panel, .onu-tab-body > .panel { margin: 0; }
 .onu-graphs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-3); }
