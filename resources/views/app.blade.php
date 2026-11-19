@@ -10,7 +10,7 @@
         <link rel="icon" href="/favicon.ico?v=4" sizes="16x16 32x32 48x48">
         <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=4">
         <link rel="manifest" href="/manifest.json?v=3">
-        <meta name="theme-color" content="#0d7f78">
+        <meta name="theme-color" content="#0c1524">
         @viteReactRefresh
         @vite(['resources/css/app.css', 'resources/js/app.tsx'])
         <x-inertia::head>
