@@ -14,7 +14,8 @@ export function MetricCard({ metric }: { metric: Metric }) {
             {metric.note && <span className="stat-note">{metric.note}</span>}
         </>
     );
-    const className = `stat ${metric.tone}`.trim();
+    // is-* classes: a bare "danger" or "warning" would pick up the button styles of the same name.
+    const className = metric.tone ? `stat is-${metric.tone}` : 'stat';
     return metric.href ? <Link className={className} href={metric.href}>{body}</Link> : <div className={className}>{body}</div>;
 }
 

@@ -1389,9 +1389,9 @@ a.stat:hover { background: var(--surface-2); text-decoration: none; }
 .stat-label { overflow: hidden; color: var(--text-muted); font-size: var(--fs-sm); white-space: nowrap; text-overflow: ellipsis; }
 .stat-value { color: var(--text-strong); font-size: var(--fs-metric); font-weight: 600; letter-spacing: -.03em; line-height: 1.2; font-variant-numeric: tabular-nums; }
 .stat-note { overflow: hidden; color: var(--text-muted); font-size: var(--fs-sm); white-space: nowrap; text-overflow: ellipsis; }
-.stat.warning .stat-value { color: var(--warning); }
-.stat.danger .stat-value { color: var(--danger); }
-.stat.success .stat-value { color: var(--success); }
+.stat.is-warning .stat-value { color: var(--warning); }
+.stat.is-danger .stat-value { color: var(--danger); }
+.stat.is-success .stat-value { color: var(--success); }
 
 /* Status: a dot and a word. Connection and account state each get their own. */
 .status { display: inline-flex; align-items: center; gap: 7px; color: var(--text-strong); font-weight: 500; white-space: nowrap; }
@@ -2672,13 +2672,14 @@ tr.is-clickable { cursor: pointer; }
 .olt-reasons li { padding: 2px 8px; border: 1px solid var(--warning-line); border-radius: 999px; background: var(--warning-bg); color: var(--warning); font-size: var(--fs-xs); font-weight: 600; }
 .is-danger .olt-reasons li:first-child { border-color: var(--danger-line); background: var(--danger-bg); color: var(--danger); }
 .olt-hero-body { display: grid; grid-template-columns: minmax(0, 7fr) minmax(280px, 4fr); gap: var(--sp-4); align-items: start; }
-.olt-kpis { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-3); }
+.olt-kpis { display: grid; }
+.olt-kpis > .stat-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .olt-kpi-link { color: inherit; }
 .olt-kpis .onu-meter-head { flex-wrap: wrap; }
 .olt-kpi-link:hover { border-color: var(--accent-line); background: var(--surface-hover); text-decoration: none; }
 .olt-ratio, .olt-pon-bar { position: relative; display: block; height: 6px; overflow: hidden; border-radius: 3px; background: var(--danger-bg); box-shadow: inset 0 0 0 1px var(--danger-line); }
 .olt-ratio > i, .olt-pon-bar > i { position: absolute; inset: 0 auto 0 0; border-radius: 3px; background: var(--success-solid); }
-.olt-hero-foot { margin: 0; padding-top: var(--sp-3); border-top: 1px solid var(--line); color: var(--text-muted); font-size: var(--fs-sm); }
+.olt-hero-foot { display: flex; flex-wrap: wrap; gap: 4px var(--sp-4); margin: 0; padding-top: var(--sp-3); border-top: 1px solid var(--line); color: var(--text-muted); font-size: var(--fs-sm); }
 
 .olt-chassis { margin: 0; padding: var(--sp-3); border-radius: var(--radius); background: var(--surface-2); }
 .olt-chassis-empty p { margin: 0; color: var(--text-muted); font-size: var(--fs-sm); }
@@ -2715,19 +2716,20 @@ tr.is-clickable { cursor: pointer; }
 .olt-pon-head h3 { margin: 0; color: var(--text-strong); font-size: var(--fs-md); font-weight: 600; }
 .olt-pon-head span { color: var(--text-muted); font-size: var(--fs-sm); }
 .olt-pon-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: var(--sp-2); }
-.olt-pon-card { position: relative; display: grid; gap: 6px; padding: 10px 12px 10px 15px; overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-2); color: var(--text); }
-.olt-pon-card::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 3px; background: var(--success-solid); }
+.olt-pon-card { position: relative; display: grid; gap: 4px; padding: 10px 12px 13px; overflow: hidden; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); color: var(--text); }
+/* The port's state is the bar along its bottom edge: green all online, amber some offline, red all offline. */
+.olt-pon-card::before { content: ""; position: absolute; inset: auto 0 0 0; height: 3px; background: var(--success-solid); }
 .olt-pon-card.partial::before { background: var(--warning-solid); }
 .olt-pon-card.down::before { background: var(--danger-solid); }
 .olt-pon-card.off::before { background: var(--line-strong); }
 .olt-pon-card:hover { border-color: var(--accent-line); background: var(--surface-hover); text-decoration: none; }
 .olt-pon-name { color: var(--text-muted); font-size: var(--fs-sm); }
 .olt-pon-count { color: var(--text-muted); font-size: var(--fs-md); font-variant-numeric: tabular-nums; }
-.olt-pon-count strong { color: var(--text-strong); font-size: var(--fs-metric); font-weight: 650; }
+.olt-pon-count strong { color: var(--text-strong); font-size: 22px; font-weight: 600; letter-spacing: -.02em; }
 .olt-pon-count small { font-size: var(--fs-xs); }
 .olt-pon-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: var(--fs-xs); }
-.olt-pon-signal { color: var(--text-muted); font-family: var(--font-mono); }
-.olt-pon-signal.success { color: var(--success); }
+.olt-pon-signal { color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.olt-pon-signal.success { color: var(--text-muted); }
 .olt-pon-signal.warning { color: var(--warning); font-weight: 600; }
 .olt-pon-signal.danger { color: var(--danger); font-weight: 600; }
 
@@ -2843,7 +2845,7 @@ tr.is-clickable { cursor: pointer; }
 @media (max-width: 1100px) { .onu-choice.onu-choice-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 760px) { .onu-choice, .onu-choice.onu-choice-2, .onu-choice.onu-choice-4 { grid-template-columns: minmax(0, 1fr); } }
 
-.onu-identity h2 { margin: 0; color: var(--text-strong); font-size: 20px; font-weight: 650; line-height: 1.2; overflow-wrap: anywhere; }
+.onu-identity h2, .onu-identity h1 { margin: 0; color: var(--text-strong); font-size: 22px; font-weight: 600; letter-spacing: -.02em; line-height: 1.2; overflow-wrap: anywhere; }
 .onu-identity p { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; color: var(--text-muted); font-size: var(--fs-md); }
 .onu-identity p > [aria-hidden] { color: var(--text-faint); }
 .onu-status-line { display: flex; flex-wrap: wrap; align-items: center; gap: 6px var(--sp-3); color: var(--text-muted); font-size: var(--fs-md); }

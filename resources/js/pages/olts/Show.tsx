@@ -9,7 +9,8 @@ import OltConsole from '@/components/OltConsole';
 import { OnuPower, OnuStatus, SignalReading, type OnuRow } from '@/components/olt';
 import { DataTable, Pagination } from '@/components/table';
 import { Tabs } from '@/components/tabs';
-import { Badge, Check, Field, ListPanel, Panel, RowActions, Select, Time } from '@/components/ui';
+import { MetricCards } from '@/components/metrics';
+import { Badge, Check, Field, ListPanel, Panel, RowActions, Select, Status, Time } from '@/components/ui';
 import AppLayout from '@/layouts/AppLayout';
 import { useCan } from '@/lib/auth';
 import type { Paginated } from '@/lib/types';
@@ -565,7 +566,7 @@ function PonGrid({ hardware, olt, path }: { hardware: Hardware; olt: Olt; path: 
         <section className="olt-pon" aria-label="PON ports in use">
             <div className="olt-pon-head">
                 <h3>PON ports in use</h3>
-                <span>{used.length} with ONUs{empty > 0 ? ` · ${empty} empty` : ''}</span>
+                <span>{used.length} in use{empty > 0 ? `, ${empty} empty` : ''}</span>
             </div>
             <div className="olt-pon-grid">
                 {used.map((p) => {
@@ -575,10 +576,9 @@ function PonGrid({ hardware, olt, path }: { hardware: Hardware; olt: Olt; path: 
                     return (
                         <Link key={p.id} href={`${path}?tab=ports`} className={`olt-pon-card ${portLight(p)}`}>
                             <span className="olt-pon-name mono">{p.name.replace(/^GPON\s*/i, '')}</span>
-                            <span className="olt-pon-count"><strong>{n.online}</strong>/{n.total}<small> online</small></span>
-                            <span className="olt-pon-bar" role="img" aria-label={`${share}% online`}><i style={{ width: `${share}%` }} /></span>
+                            <span className="olt-pon-count"><strong>{n.online}</strong>/{n.total}<span className="sr-only"> online, {share}%</span></span>
                             <span className="olt-pon-foot">
-                                <span className={`olt-pon-signal ${tone}`}>{p.signal === null ? 'No signal reading' : `${p.signal.toFixed(1)} dBm avg`}</span>
+                                <span className={`olt-pon-signal ${tone}`}>{p.signal === null ? 'No reading' : `${p.signal.toFixed(1).replace('-', '\u2212')} dBm average`}</span>
                                 {p.pon?.autofind === false && <Badge tone="warning">Autofind off</Badge>}
                                 {p.pon?.rogue && p.pon.rogue.toLowerCase() !== 'inexistent' && <Badge tone="danger">Rogue ONU</Badge>}
                             </span>
@@ -602,14 +602,14 @@ function OltHero({ olt, counts, hardware, details, path }: { olt: Olt; counts: C
         <section className={`onu-hero olt-hero is-${h.tone}`} aria-label="OLT at a glance">
             <div className="onu-hero-top">
                 <div className="onu-identity">
-                    <div className="onu-title"><h2>{olt.name}</h2>{!olt.enabled && <Badge>Not read</Badge>}</div>
+                    <div className="onu-title"><h1>{olt.name}</h1>{!olt.enabled && <Badge>Not read</Badge>}</div>
                     <p>
                         <span>{details.version?.product || olt.model}</span>
                         <span aria-hidden="true">·</span><span className="mono">{olt.host}</span>
                         {software && <><span aria-hidden="true">·</span><span className="mono">{software}</span></>}
                     </p>
                     <div className="onu-status-line">
-                        <Badge tone={h.tone}>{h.tone === 'success' ? 'Healthy' : h.tone === 'warning' ? 'Needs a look' : 'Problem'}</Badge>
+                        <Status tone={h.tone === 'success' ? 'good' : h.tone}>{h.tone === 'success' ? 'Healthy' : h.tone === 'warning' ? 'Needs a look' : 'Problem'}</Status>
                         {details.bootedAt && <span>up <strong>{uptime(details.bootedAt)}</strong></span>}
                         {details.temperature !== null && <span><strong>{details.temperature} °C</strong> hottest card</span>}
                         {details.power !== null && <span><strong>{details.power} W</strong></span>}
@@ -627,31 +627,20 @@ function OltHero({ olt, counts, hardware, details, path }: { olt: Olt; counts: C
             <div className="olt-hero-body">
                 <Chassis hardware={hardware} model={details.version?.product || olt.model} path={path} />
                 <div className="olt-kpis">
-                    <div className="onu-meter">
-                        <div className="onu-meter-head"><span>ONUs online</span><small>{online}%</small></div>
-                        <strong className="onu-meter-value">{counts.online}<small> / {counts.total}</small></strong>
-                        <span className="olt-ratio" role="img" aria-label={`${online}% online`}><i style={{ width: `${online}%` }} /></span>
-                    </div>
-                    <Link className={`onu-meter olt-kpi-link${counts.offline ? ' warning' : ''}`} href={`${path}?status=offline`}>
-                        <div className="onu-meter-head"><span>Offline</span><small>{counts.offline ? 'Show them' : 'None'}</small></div>
-                        <strong className="onu-meter-value">{counts.offline}</strong>
-                    </Link>
-                    <div className={`onu-meter${counts.weak ? ' warning' : ''}`}>
-                        <div className="onu-meter-head"><span>Weak signal</span><small>below {olt.rxWarning} dBm</small></div>
-                        <strong className="onu-meter-value">{counts.weak}</strong>
-                    </div>
-                    <div className={`onu-meter${uplinks.length && up < uplinks.length ? ' danger' : ''}`}>
-                        <div className="onu-meter-head"><span>Uplinks up</span><small>{uplinks.map((u) => u.speed ? speedText(u.speed) : '').filter(Boolean)[0] ?? ''}</small></div>
-                        <strong className="onu-meter-value">{up}<small> / {uplinks.length}</small></strong>
-                    </div>
+                    <MetricCards metrics={[
+                        { label: 'ONUs online', value: String(counts.online), note: `of ${counts.total}, ${online}%`, icon: '', tone: '', href: '' },
+                        { label: 'Offline', value: String(counts.offline), note: '', icon: '', tone: counts.offline ? 'warning' : '', href: counts.offline ? `${path}?status=offline` : '' },
+                        { label: 'Weak signal', value: String(counts.weak), note: `below ${olt.rxWarning} dBm`, icon: '', tone: counts.weak ? 'warning' : '', href: counts.weak ? `${path}?status=weak` : '' },
+                        { label: 'Uplinks up', value: `${up} of ${uplinks.length}`, note: uplinks.map((u) => (u.speed ? speedText(u.speed) : '')).filter(Boolean)[0] ?? '', icon: '', tone: uplinks.length && up < uplinks.length ? 'danger' : '', href: '' },
+                    ]} />
                 </div>
             </div>
             <PonGrid hardware={hardware} olt={olt} path={path} />
             <p className="olt-hero-foot">
-                ONU list read <Time value={olt.lastSync} /> (every 5 minutes)
-                {olt.telnet ? <> · MAC table read <Time value={olt.lastMacSync} /> (every 15 minutes)</> : ' · Telnet is off, so clients are not found from their MAC'}
-                {' · '}<Link href="/olts/mapping">Client mapping</Link>
-                {olt.telnet && <> · <a href={`${path}/macs.csv`} download>Export MAC table</a></>}
+                <span>ONUs read <Time value={olt.lastSync} /></span>
+                {olt.telnet ? <span>MAC table read <Time value={olt.lastMacSync} /></span> : <span>MAC table: telnet off</span>}
+                <Link href="/olts/mapping">Client mapping</Link>
+                {olt.telnet && <a href={`${path}/macs.csv`} download>Export MAC table</a>}
             </p>
         </section>
     );
@@ -664,9 +653,6 @@ export default function OltShow({ olt, counts, filters, hardware, details, backu
     const path = `/olts/${olt.id}`;
     return (
         <AppLayout title={olt.name} heading={false}>
-            <nav className="onu-crumbs" aria-label="Where this OLT is">
-                <Link href="/olts">OLTs</Link><span aria-hidden="true">/</span><span aria-current="page">{olt.name}</span>
-            </nav>
             {olt.error && <p className="flash danger" role="alert">SNMP read failed: {olt.error}</p>}
             {olt.macError && <p className="flash warning" role="alert">Telnet read failed: {olt.macError}</p>}
             <OltHero olt={olt} counts={counts} hardware={hardware} details={details} path={path} />

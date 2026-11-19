@@ -4,6 +4,13 @@ RadiusOne follows [semantic versioning](https://semver.org): **major** for chang
 upgrading, **minor** for new features, **patch** for fixes. The version is in the `VERSION` file and shows in
 the portal's sidebar and under Settings → System information.
 
+## 2.26.0 (2026-11-19)
+
+The OLT page in the new look, same layout. Update with **Settings → Overview → Software update** or `sudo radiusone-update`.
+
+- **Figures in one strip, the state as a dot and a word, PON port boxes** with a state bar.
+- **Fixed:** a red key figure was drawn as a red block.
+
 ## 2.25.0 (2026-11-19)
 
 A new client page. Update with **Settings → Overview → Software update** or `sudo radiusone-update`.
