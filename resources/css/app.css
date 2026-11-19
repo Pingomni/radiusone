@@ -690,7 +690,7 @@ body:has(.main) { background: var(--frame); }
 /* --------------------------------------------------------------------------
    Panels: one surface for every page
    -------------------------------------------------------------------------- */
-.panel, .settings-sheet, .health-card, .overview, .client-layout > form > .tabs, .notice-template, .notice-gateway, .settings-destination, .role-access-card, .metric {
+.panel, .settings-sheet, .health-card, .overview, .client-layout > form > .tabs, .notice-template, .notice-gateway, .settings-destination, .role-access-card {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--surface);
@@ -1366,45 +1366,59 @@ td .list-menu > summary:hover { border-color: var(--line); background: var(--sur
 /* --------------------------------------------------------------------------
    Metric tiles
    -------------------------------------------------------------------------- */
-.cards, .dashboard-cards {
+/* One strip of key figures. Each cell draws a hairline on its left and top; the strip clips the ones at its edges, so
+   rows that wrap keep clean lines and a short last row leaves no grey gap. */
+.stat-strip {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: var(--sp-3);
-}
-.metric-link { display: grid; color: inherit; }
-.metric-link:hover { text-decoration: none; }
-.metric-link:hover .metric { border-color: var(--accent-line); background: var(--surface-hover); }
-.metric {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: var(--sp-3);
-  min-height: 64px;
-  padding: 10px var(--sp-3);
+  grid-template-columns: repeat(auto-fit, minmax(176px, 1fr));
   overflow: hidden;
-}
-.metric::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 3px; background: var(--line-strong); }
-.metric.success::before { background: var(--success-solid); }
-.metric.warning::before { background: var(--warning-solid); }
-.metric.danger::before { background: var(--danger-solid); }
-.metric-icon {
-  display: grid;
-  place-items: center;
-  width: 32px;
-  height: 32px;
-  flex: none;
+  border: 1px solid var(--line);
   border-radius: var(--radius);
-  background: var(--neutral-bg);
-  color: var(--text-muted);
+  background: var(--surface);
 }
-.metric.success .metric-icon { background: var(--success-bg); color: var(--success); }
-.metric.warning .metric-icon { background: var(--warning-bg); color: var(--warning); }
-.metric.danger .metric-icon { background: var(--danger-bg); color: var(--danger); }
-.metric-svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-.metric > div { display: grid; gap: 1px; min-width: 0; }
-.metric > div > span { overflow: hidden; color: var(--text-muted); font-size: var(--fs-sm); white-space: nowrap; text-overflow: ellipsis; }
-.metric > div > strong { color: var(--text-strong); font-size: var(--fs-metric); font-weight: 600; line-height: 1.15; font-variant-numeric: tabular-nums; }
-.metric > div > small { color: var(--text-muted); }
+.stat {
+  display: grid;
+  align-content: start;
+  gap: 2px;
+  min-width: 0;
+  padding: 14px 18px 15px;
+  box-shadow: -1px 0 0 var(--line), 0 -1px 0 var(--line);
+  color: var(--text);
+}
+a.stat:hover { background: var(--surface-2); text-decoration: none; }
+.stat-label { overflow: hidden; color: var(--text-muted); font-size: var(--fs-sm); white-space: nowrap; text-overflow: ellipsis; }
+.stat-value { color: var(--text-strong); font-size: var(--fs-metric); font-weight: 600; letter-spacing: -.03em; line-height: 1.2; font-variant-numeric: tabular-nums; }
+.stat-note { overflow: hidden; color: var(--text-muted); font-size: var(--fs-sm); white-space: nowrap; text-overflow: ellipsis; }
+.stat.warning .stat-value { color: var(--warning); }
+.stat.danger .stat-value { color: var(--danger); }
+.stat.success .stat-value { color: var(--success); }
+
+/* Status: a dot and a word. Connection and account state each get their own. */
+.status { display: inline-flex; align-items: center; gap: 7px; color: var(--text-strong); font-weight: 500; white-space: nowrap; }
+.status::before { content: ""; width: 7px; height: 7px; flex: none; border-radius: 50%; background: var(--text-faint); }
+.status.is-good::before { background: var(--success-solid); }
+.status.is-warning { color: var(--warning); }
+.status.is-warning::before { background: var(--warning-solid); }
+.status.is-danger { color: var(--danger); }
+.status.is-danger::before { background: var(--danger-solid); }
+.status.is-neutral { color: var(--text-muted); font-weight: 400; }
+
+/* Fibre signal scale: the same bar wherever a received power is shown. Zones come from the OLT's own levels. */
+.signal-scale { position: relative; display: flex; height: 6px; min-width: 90px; }
+/* Zones touch, so the marker's position is exact; a 2px cut in the page colour separates them. */
+.signal-scale > i { display: block; flex: none; height: 100%; border-radius: 2px; box-shadow: inset -2px 0 0 var(--surface); }
+.signal-scale > i:last-of-type { box-shadow: none; }
+.signal-scale > .zone-danger { background: color-mix(in srgb, var(--danger-solid) 42%, var(--surface)); }
+.signal-scale > .zone-warning { background: color-mix(in srgb, var(--warning-solid) 48%, var(--surface)); }
+.signal-scale > .zone-good { background: color-mix(in srgb, var(--success-solid) 42%, var(--surface)); }
+.signal-scale.is-empty > i { background: var(--line-strong); }
+.signal-scale > b { position: absolute; top: -4px; width: 4px; height: 14px; margin-left: -2px; border-radius: 2px; background: var(--text-strong); box-shadow: 0 0 0 2px var(--surface); }
+.signal-reading { display: grid; grid-template-columns: minmax(90px, 1fr) auto; align-items: center; gap: 12px; min-width: 170px; }
+.signal-reading > strong { min-width: 3.4em; font-weight: 500; text-align: right; font-variant-numeric: tabular-nums; }
+.signal-reading.is-warning > strong { color: var(--warning); }
+.signal-reading.is-danger > strong { color: var(--danger); }
+.signal-reading small { display: block; color: var(--text-muted); font-size: var(--fs-sm); font-weight: 400; }
+.signal-ends { display: flex; justify-content: space-between; margin-top: 6px; color: var(--text-faint); font-size: var(--fs-xs); font-variant-numeric: tabular-nums; }
 
 /* --------------------------------------------------------------------------
    NAS status (dashboard) and NAS health
@@ -2804,23 +2818,8 @@ td .list-menu > summary:hover { border-color: var(--line); background: var(--sur
 .onu-meter.success .onu-meter-head > small, .onu-meter.success .onu-meter-value { color: var(--success); }
 .onu-meter.warning .onu-meter-head > small, .onu-meter.warning .onu-meter-value { color: var(--warning); }
 .onu-meter.danger .onu-meter-head > small, .onu-meter.danger .onu-meter-value { color: var(--danger); }
-.onu-meter-scale {
-  position: relative;
-  height: 6px;
-  margin-top: 4px;
-  border-radius: 3px;
-  background: linear-gradient(90deg,
-    var(--danger-solid) 0 var(--very-weak),
-    var(--warning-solid) var(--very-weak) var(--weak),
-    var(--success-solid) var(--weak) var(--strong),
-    var(--warning-solid) var(--strong) 100%);
-  opacity: .9;
-}
-.onu-meter-needle { position: absolute; top: -4px; width: 4px; height: 14px; margin-left: -2px; border: 1px solid var(--surface); border-radius: 2px; background: var(--text-strong); box-shadow: 0 0 0 1px var(--text-strong); }
-.onu-meter-ticks { position: relative; height: 14px; color: var(--text-faint); font: var(--fs-xs) var(--font-mono); }
-.onu-meter-ticks > span { position: absolute; top: 0; transform: translateX(-50%); }
-.onu-meter-ticks > span:first-child { transform: none; }
-.onu-meter-ticks > span:last-child { transform: translateX(-100%); }
+.onu-meter .signal-scale { margin-top: 4px; }
+.onu-meter .signal-ends { margin-top: 2px; }
 .onu-meter-note { color: var(--text-muted); font-size: var(--fs-sm); }
 .onu-traffic-rows { display: grid; gap: var(--sp-2); }
 .onu-traffic-rows > div { display: grid; grid-template-columns: 16px minmax(0, 1fr); column-gap: 6px; align-items: baseline; }

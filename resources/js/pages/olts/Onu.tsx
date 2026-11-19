@@ -4,7 +4,7 @@ import { DeleteButton, PostButton, useConfirm } from '@/components/confirm';
 import Icon from '@/components/Icon';
 import { ChartOrMessage, type ChartPayload } from '@/components/LineChart';
 import { Changelog, type Change } from '@/components/OltChangelog';
-import { OnuStatus, type OnuRow } from '@/components/olt';
+import { OnuStatus, SignalScale, type OnuRow } from '@/components/olt';
 import { DataTable } from '@/components/table';
 import { Tabs, type TabDef } from '@/components/tabs';
 import { Badge, Check, Field, Panel, Select, Time } from '@/components/ui';
@@ -127,13 +127,10 @@ function signalTone(dbm: number | null, weak: number, veryWeak: number): string 
 }
 
 /**
- * A received-power reading on a scale from -35 to -5 dBm, with the OLT's own weak and very weak levels marked,
+ * A received-power reading on the fibre signal scale (-32 to -5 dBm) with the OLT's own weak and very weak levels,
  * so the number is read against its limits. The words say the same as the colour.
  */
 function SignalMeter({ label, dbm, weak, veryWeak, note }: { label: string; dbm: number | null; weak: number; veryWeak: number; note?: string }) {
-    const min = -35;
-    const span = 30;
-    const at = (v: number) => `${Math.min(100, Math.max(0, ((v - min) / span) * 100))}%`;
     const tone = signalTone(dbm, weak, veryWeak);
     const verdict = dbm === null ? 'No reading' : tone === 'danger' ? 'Very weak' : dbm > -8 ? 'Too strong' : tone === 'warning' ? 'Weak' : 'Good';
     return (
@@ -143,10 +140,8 @@ function SignalMeter({ label, dbm, weak, veryWeak, note }: { label: string; dbm:
                 <small>{verdict}</small>
             </div>
             <strong className="onu-meter-value">{dbm === null ? '-' : dbm.toFixed(2)}<small> dBm</small></strong>
-            <div className="onu-meter-scale" style={{ ['--weak' as string]: at(weak), ['--very-weak' as string]: at(veryWeak), ['--strong' as string]: at(-8) }} aria-hidden="true">
-                {dbm !== null && <span className="onu-meter-needle" style={{ left: at(dbm) }} />}
-            </div>
-            <div className="onu-meter-ticks" aria-hidden="true">{[min, veryWeak, weak, -8].map((v) => <span key={v} style={{ left: at(v) }}>{v}</span>)}</div>
+            <SignalScale dbm={dbm} weak={weak} veryWeak={veryWeak} />
+            <div className="signal-ends" aria-hidden="true"><span>{'\u2212'}32</span><span>Weak below {String(weak).replace('-', '\u2212')}</span><span>{'\u2212'}5</span></div>
             {note && <small className="onu-meter-note">{note}</small>}
         </div>
     );

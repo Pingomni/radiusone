@@ -4,6 +4,13 @@ RadiusOne follows [semantic versioning](https://semver.org): **major** for chang
 upgrading, **minor** for new features, **patch** for fixes. The version is in the `VERSION` file and shows in
 the portal's sidebar and under Settings → System information.
 
+## 2.22.0 (2026-11-19)
+
+Shared parts of the new look. Update with **Settings → Overview → Software update** or `sudo radiusone-update`.
+
+- **Key figures in one strip of numbers** on every page that shows them.
+- **The fibre signal scale** on the OLT's ONU list, the ONU page and the client's ONU tab.
+
 ## 2.21.0 (2026-11-19)
 
 The portal's new frame. Update with **Settings → Overview → Software update** or `sudo radiusone-update`.

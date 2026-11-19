@@ -34,6 +34,13 @@ export function Badge({ children, tone = '' }: { children: ReactNode; tone?: str
     return <span className={`badge ${tone}`.trim()}>{children}</span>;
 }
 
+export type StatusTone = 'good' | 'warning' | 'danger' | 'neutral';
+
+/** A status: a dot and a word ("Online", "Weak signal", "Paid"). The word says what the colour says. */
+export function Status({ tone, children }: { tone: StatusTone; children: ReactNode }) {
+    return <span className={`status is-${tone}`}>{children}</span>;
+}
+
 /** Online is the normal case: plain text. Anything else is worth a look. */
 export function ConnectionState({ state }: { state: string }) {
     return state === 'fresh accounting' ? <>{connectionLabel(state)}</> : <Badge tone="warning">{connectionLabel(state)}</Badge>;
