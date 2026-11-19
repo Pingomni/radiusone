@@ -187,12 +187,15 @@ export default function NasMonitor({ nas, snapshot, history, vendorLabel, oids, 
     // A NAS whose SNMP was switched off may still have recorded history worth showing.
     const recorded = history.available && [history.health?.data, history.temperature?.data, history.traffic.data].some((d) => d !== undefined && 'chart' in d);
     return (
-        <AppLayout title="NAS monitor">
-            <div className="toolbar">
-                <Link className="button" href="/monitoring">Back to monitoring</Link>
-                <Link className="button" href={`/nas/${nas.id}/edit`}>{canManage ? 'Edit NAS and SNMP' : 'NAS details'}</Link>
-                {!noSnmp && <PollButton target={String(nas.id)} back={`/nas/${nas.id}/monitor`} label="Poll this NAS now" />}
-            </div>
+        <AppLayout
+            title={`${nas.name} monitor`}
+            actions={(
+                <>
+                    <Link className="button" href={`/nas/${nas.id}/edit`}>{canManage ? 'Edit NAS and SNMP' : 'NAS details'}</Link>
+                    {!noSnmp && <PollButton target={String(nas.id)} back={`/nas/${nas.id}/monitor`} label="Poll now" />}
+                </>
+            )}
+        >
             {noSnmp ? (
                 <>
                     <SetupSnmp nas={nas} basics={basics ?? []} setup={snapshot.status === 'off' ? snapshot.setup : null} canManage={canManage} />

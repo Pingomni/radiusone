@@ -177,9 +177,8 @@ export default function NasForm({ device, vendors, setupSteps, canManage, nas, a
     if (!nas) {
         return (
             <AppLayout title="New NAS device">
-                <div className="toolbar"><Link className="button" href="/nas">Back to NAS devices</Link></div>
-                <Panel title="New NAS device">
-                    <p className="hint">Add the router first. The RouterOS API and SNMP monitoring are set up on its page afterwards.</p>
+                <Panel title="Router">
+                    <p className="hint">API and SNMP are set up on the router's page after saving.</p>
                     <DeviceForm device={device} vendors={vendors} canManage={canManage} />
                 </Panel>
                 <Panel title="Router checklist">

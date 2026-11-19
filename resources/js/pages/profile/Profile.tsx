@@ -94,7 +94,7 @@ function TwoFactorPanel({ twoFactor }: { twoFactor: TwoFactor }) {
 
 export default function ProfilePage({ profile, twoFactor }: { profile: Profile; twoFactor: TwoFactor }) {
     return (
-        <AppLayout title="Profile settings">
+        <AppLayout title="My account">
             <div className="settings-console profile-settings">
                 <div className="settings-edit-page">
                     <div className="profile-settings-main">

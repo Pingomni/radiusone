@@ -1,4 +1,3 @@
-import { Link } from '@inertiajs/react';
 import { LivePanel } from '@/components/LivePanel';
 import { PostButton } from '@/components/confirm';
 import Icon from '@/components/Icon';
@@ -68,11 +67,7 @@ function StatusBody({ status, restartable }: { status: Status; restartable: Reco
 
 export default function Server({ host, status, history, serverId, restartable }: { host: string; status: Status; history: History; serverId: number; restartable: Record<string, string> }) {
     return (
-        <AppLayout title="RADIUS server">
-            <div className="toolbar">
-                <Link className="button" href="/monitoring">Back to monitoring</Link>
-                <PollButton target={String(serverId)} back="/monitoring/server" label="Poll server now" />
-            </div>
+        <AppLayout title="RADIUS server" actions={<PollButton target={String(serverId)} back="/monitoring/server" label="Poll now" />}>
             <LivePanel title={`RADIUS server · ${host}`} url="/monitoring/server/live" interval={15} initial={status} className="nas-monitor" render={(s) => <StatusBody status={s} restartable={restartable} />} />
             <HistorySection history={history} pageUrl="/monitoring/server" />
         </AppLayout>

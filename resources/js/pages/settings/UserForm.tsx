@@ -76,7 +76,7 @@ export default function UserForm({ user, self, roles, roleDescriptions }: {
                                         <div><span>Two-factor authentication</span><strong>{user.twoFactor}</strong></div>
                                         <Tag tag={user.twoFactorTag} />
                                     </div>
-                                    <p className="hint">Use these buttons to change only this user's 2FA state. Enabling forces setup after their next password login.</p>
+                                    <p className="hint">Turning it on asks for setup at their next sign-in.</p>
                                     <div className="two-factor-button-row">
                                         <button type="button" className="primary" disabled={form.processing} onClick={() => submit('generate')}>
                                             {user.twoFactor === 'setup required' ? 'Regenerate setup' : 'Enable / require setup'}

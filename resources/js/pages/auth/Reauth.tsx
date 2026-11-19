@@ -7,8 +7,8 @@ export default function Reauth({ returnPath, needsCode }: { returnPath: string; 
     const form = useForm({ password: '', code: '' });
     return (
         <AppLayout title="Confirm identity">
-            <Panel title="Recent reauthentication required">
-                <p>Confirm your identity to return to the originating form. Review it and submit again. Passwords, authentication codes and files must be entered or selected again.</p>
+            <Panel title="Confirm it's you">
+                <p>Then you go back to the form. Enter passwords and choose files there again.</p>
                 <ErrorSummary errors={form.errors} />
                 <form
                     id="reauth-form"
@@ -42,7 +42,7 @@ export default function Reauth({ returnPath, needsCode }: { returnPath: string; 
                     )}
                     <FormActions>
                         <button className="primary" disabled={form.processing}>Confirm identity</button>
-                        <Link className="button" href={returnPath}>Return to form without confirming</Link>
+                        <Link className="button" href={returnPath}>Back without confirming</Link>
                     </FormActions>
                 </form>
             </Panel>

@@ -140,7 +140,7 @@ export default function NasDiagnostics({ nasId }: { nasId: number }) {
             {data.unknown.length > 0 && (
                 <>
                     <div className="nas-diagnostics-head"><h3>Addresses not in your NAS list</h3></div>
-                    <p className="hint">If one of these is this router, it sends from a different address than the one saved. Addresses you don&apos;t recognise may be scanners on the internet: don&apos;t add those.</p>
+                    <p className="hint">If one is this router, it sends from another address. Add only your own routers.</p>
                     <UnknownRouterTable
                         rows={data.unknown}
                         action={data.canTest ? (address) => <Link className="link" href={`/nas/${nasId}/edit?tab=device&nasname=${encodeURIComponent(address)}`}>Use for this NAS</Link> : undefined}

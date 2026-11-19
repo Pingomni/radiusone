@@ -56,7 +56,7 @@ export default function ClientOnu({ username, data, canLink }: { username: strin
                         )}
                         <Row label="How it was linked">{current.source}{current.evidence ? `: ${current.evidence}` : ''}</Row>
                     </>
-                ) : <p className="hint">This client has no ONU yet. When the client is online, the portal looks for the session&apos;s MAC behind an ONU and links it if it finds exactly one.</p>}
+                ) : <p className="hint">No ONU yet. It is linked by itself once the client is online.</p>}
             </Panel>
             {found && (!current || differs) && (
                 <Panel title={differs ? 'The session points to a different ONU' : 'Found from the session'}>

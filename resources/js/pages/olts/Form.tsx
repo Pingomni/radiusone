@@ -1,4 +1,4 @@
-import { Link, useForm } from '@inertiajs/react';
+import { useForm } from '@inertiajs/react';
 import { DeleteButton, PostButton } from '@/components/confirm';
 import { Check, ErrorSummary, Field, Panel, Select } from '@/components/ui';
 import AppLayout from '@/layouts/AppLayout';
@@ -18,14 +18,17 @@ export default function OltForm({ id, models, authOptions, privOptions, values, 
     const hint = (on: boolean, otherwise?: string) => (on ? 'Saved. Leave blank to keep it.' : otherwise);
     const clearSecrets = () => form.setData((d) => ({ ...d, snmp_community: '', v3_auth_password: '', v3_priv_password: '', telnet_user: '', telnet_password: '' }));
     return (
-        <AppLayout title={id ? 'Edit OLT' : 'New OLT'}>
-            <div className="toolbar">
-                <Link className="button" href={id ? `/olts/${id}` : '/olts'}>Back</Link>
-                {id && <PostButton action={`/olts/${id}/test`} label="Test connection" className="button" />}
-                {id && can('danger.delete') && (
-                    <DeleteButton action={`/olts/${id}/delete`} label="Remove OLT" title={`Remove ${values.name}?`} message="Its ONU list and client links are removed from the portal. Nothing changes on the OLT." typeToConfirm={values.name} />
-                )}
-            </div>
+        <AppLayout
+            title={id ? 'Edit OLT' : 'New OLT'}
+            actions={id ? (
+                <>
+                    <PostButton action={`/olts/${id}/test`} label="Test connection" className="button" />
+                    {can('danger.delete') && (
+                        <DeleteButton action={`/olts/${id}/delete`} label="Remove OLT" title={`Remove ${values.name}?`} message="Its ONU list and client links are removed from the portal. Nothing changes on the OLT." typeToConfirm={values.name} />
+                    )}
+                </>
+            ) : undefined}
+        >
             <ErrorSummary errors={form.errors} />
             <form onSubmit={(event) => { event.preventDefault(); form.post(id ? `/olts/${id}/save` : '/olts/save', { preserveScroll: true, onFinish: clearSecrets }); }}>
                 <Panel title="OLT">
@@ -56,7 +59,7 @@ export default function OltForm({ id, models, authOptions, privOptions, values, 
                     </div>
                 </Panel>
                 <Panel title="Telnet">
-                    <p className="hint">Gives the MACs behind each ONU, which is how clients are found automatically, and an ONU&apos;s live details. Telnet is not encrypted, so keep it on your management network.</p>
+                    <p className="hint">Finds clients by MAC. Telnet is not encrypted: use your management network.</p>
                     <div className="form-grid">
                         <Check label="Read the MAC table over telnet" className="check span2" {...bindCheck(form, 'telnet_enabled')} />
                         {form.data.telnet_enabled && (
@@ -69,14 +72,14 @@ export default function OltForm({ id, models, authOptions, privOptions, values, 
                     </div>
                 </Panel>
                 <Panel title="Signal levels">
-                    <p className="hint">From which received signal an ONU is shown as weak, and as very weak. This is the portal&apos;s own setting: nothing is changed on the OLT.</p>
+                    <p className="hint">When an ONU shows as weak or very weak. Nothing changes on the OLT.</p>
                     <div className="form-grid">
                         <Field label="Weak below (dBm)" type="number" step="0.5" min={-40} max={-8} {...bind(form, 'rx_warning')} />
                         <Field label="Very weak below (dBm)" type="number" step="0.5" min={-40} max={-8} {...bind(form, 'rx_critical')} />
                     </div>
                 </Panel>
                 <Panel title="Changes">
-                    <p className="hint">Off: the portal only sends read commands, and the telnet user needs no more than read rights. On: operators who may manage NAS devices can restart, turn off, rename and remove ONUs and add new ones, over telnet, with a user that has those rights on the OLT. Every change is written to the audit log with the commands sent. If another system also adds ONUs to this OLT, use only one of them for that.</p>
+                    <p className="hint">On: operators can restart, turn off, rename, remove and add ONUs. The telnet user needs write rights. Every change is logged.</p>
                     <div className="form-grid">
                         <Check label="Allow changes from the portal" className="check span2" disabled={!form.data.telnet_enabled} {...bindCheck(form, 'manage_enabled')} />
                     </div>

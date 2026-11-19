@@ -56,12 +56,12 @@ function SmsGatewayForm({ g, providers, ready }: { g: SmsGateway; providers: Rec
             <form className="form-grid" onSubmit={(event) => { event.preventDefault(); form.post('/settings/notifications/sms-gateway', { preserveScroll: true, onFinish: () => form.setData((d) => ({ ...d, sms_gateway_twilio_token: '', sms_gateway_infobip_api_key: '' })) }); }}>
                 <Check className="check span2" label="Enable SMS gateway" name="sms_gateway_enabled" checked={form.data.sms_gateway_enabled} onChange={(e) => form.setData('sms_gateway_enabled', e.target.checked)} />
                 <Select label="Provider" options={providers} {...bind(form, 'sms_gateway_provider')} />
-                <Field label="Default country code" placeholder="355" hint="Local numbers such as 069… are sent as +355 69…. Leave blank if every saved number already includes its country code." {...bind(form, 'sms_gateway_country_code')} />
+                <Field label="Default country code" placeholder="355" hint="069… is sent as +355 69…. Blank if numbers already have it." {...bind(form, 'sms_gateway_country_code')} />
                 {provider === 'twilio' && (
                     <>
                         <Field label="Account SID" placeholder="AC…" hint="Twilio Console → Account info." {...bind(form, 'sms_gateway_twilio_sid')} />
                         <SecretField label="Auth token" name="sms_gateway_twilio_token" saved={g.twilio_token_saved} value={form.data.sms_gateway_twilio_token} error={form.errors.sms_gateway_twilio_token} onChange={(v) => form.setData('sms_gateway_twilio_token', v)} />
-                        <Field label="Sender" hint="Your Twilio number (+1…), a Messaging Service SID (MG…), or an alphanumeric sender ID where your country allows it." {...bind(form, 'sms_gateway_twilio_from')} />
+                        <Field label="Sender" hint="Twilio number, Messaging Service SID (MG…) or sender name." {...bind(form, 'sms_gateway_twilio_from')} />
                     </>
                 )}
                 {provider === 'infobip' && (
@@ -74,7 +74,7 @@ function SmsGatewayForm({ g, providers, ready }: { g: SmsGateway; providers: Rec
                 {provider === 'custom' && (
                     <>
                         <Select label="HTTP method" options={{ GET: 'GET', POST: 'POST' }} {...bind(form, 'sms_gateway_method')} />
-                        <TextArea label="Gateway URL template" hint="Include {phone} and {message} in the URL, or in the body for POST. Your administrator must approve the provider host before enabling SMS." {...bind(form, 'sms_gateway_url')} />
+                        <TextArea label="Gateway URL template" hint="Use {phone} and {message} in the URL, or in the body for POST." {...bind(form, 'sms_gateway_url')} />
                         <TextArea label="POST body template" hint="Form-encoded fields, for example: to={phone}&text={message}. Used only with POST." {...bind(form, 'sms_gateway_body')} />
                         <Field label="Success text contains" hint="Optional. Leave blank to accept any HTTP 2xx response." {...bind(form, 'sms_gateway_success')} />
                     </>

@@ -1,4 +1,4 @@
-import { Link, useForm } from '@inertiajs/react';
+import { useForm } from '@inertiajs/react';
 import { ErrorSummary, Field, Panel, Select, TextArea } from '@/components/ui';
 import AppLayout from '@/layouts/AppLayout';
 import { bind } from '@/lib/form';
@@ -57,7 +57,6 @@ export default function InvoiceForm({ values, customers, services, staticPools, 
 
     return (
         <AppLayout title={values.id ? 'Edit draft invoice' : 'New invoice'}>
-            <div className="toolbar"><Link href="/billing">← Billing</Link></div>
             <form id="invoice-form" className="invoice-form-layout" onSubmit={(e) => { e.preventDefault(); save('open'); }}>
                 <Panel>
                     <ErrorSummary errors={form.errors} />

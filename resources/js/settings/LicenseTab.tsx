@@ -68,7 +68,7 @@ export function LicenseTab({ l }: { l: License }) {
                         name="license_key"
                         rows={4}
                         placeholder="RADIUSONE1.…"
-                        hint="Paste the whole key from your PingOmni account. It is checked on this server; the server then registers with your account, so you see it there, and picks up a renewed key by itself. Pro never depends on that."
+                        hint="The whole key from your PingOmni account. Renewals are picked up by themselves."
                         value={form.data.license_key}
                         error={form.errors.license_key}
                         onChange={(e) => form.setData('license_key', e.target.value)}

@@ -39,9 +39,8 @@ export default function Diagnostics({ username, signals, operations, sources }: 
 }) {
     const can = useCan();
     return (
-        <AppLayout title="Connection diagnostics">
-            <div className="toolbar"><Link className="button" href={`/clients/${encodeURIComponent(username)}/edit`}>Back to customer</Link></div>
-            <Panel title="Connection diagnostics">
+        <AppLayout title="Connection diagnostics" subtitle={<span className="mono">{username}</span>} actions={<Link className="button" href={`/clients/${encodeURIComponent(username)}/edit`}>Open client</Link>}>
+            <Panel title="Signals">
                 <DataTable rows={signals} rowKey={(r) => r.signal} perPage={100} columns={[{ header: 'Signal', cell: (r) => r.signal, className: 'card-title' }, { header: 'Evidence', cell: (r) => r.evidence, className: 'card-plain' }]} />
             </Panel>
             <Panel title="Network operations">

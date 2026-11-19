@@ -20,7 +20,7 @@ export function ContractsTab({ c }: { c: ContractSettings }) {
                         value={form.data.template}
                         disabled={!c.licensed}
                         error={errors.template}
-                        hint="Write it in your own words and language. A line starting with # is a heading. New contracts use this text; contracts already issued keep theirs. Have a lawyer check it before you use it."
+                        hint="A line starting with # is a heading. Only new contracts use changes."
                         onChange={(e) => form.setData('template', e.target.value)}
                     />
                     <p className="span2 hint">You can use: {c.placeholders.map((p) => `{${p}}`).join(' ')}</p>

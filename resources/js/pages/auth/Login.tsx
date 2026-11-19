@@ -11,10 +11,10 @@ export default function Login() {
     const described = flash ? 'page-feedback' : undefined;
 
     return (
-        <AuthLayout title="Login">
+        <AuthLayout title="Sign in">
             <AuthCard
-                heading="Welcome back"
-                lead="Sign in with your operator credentials."
+                heading="Sign in"
+                lead=""
                 onSubmit={(event) => {
                     event.preventDefault();
                     form.post('/login', { onFinish: () => form.reset('password') });
@@ -27,7 +27,6 @@ export default function Login() {
                         <input
                             name="username"
                             autoComplete="username"
-                            placeholder="Enter your username"
                             required
                             autoFocus={!flash}
                             aria-describedby={described}
@@ -44,7 +43,6 @@ export default function Login() {
                         type={visible ? 'text' : 'password'}
                         name="password"
                         autoComplete="current-password"
-                        placeholder="Enter your password"
                         required
                         aria-describedby={described}
                         value={form.data.password}
@@ -54,8 +52,8 @@ export default function Login() {
                         {visible ? 'Hide' : 'Show'}
                     </button>
                 </div>
-                <button className="primary login-submit" disabled={form.processing}>Sign in <span aria-hidden="true">&rarr;</span></button>
-                <p className="login-help">Need access? Contact your workspace administrator.</p>
+                <button className="primary login-submit" disabled={form.processing}>Sign in</button>
+                <p className="login-help">No account? Ask your administrator.</p>
             </AuthCard>
         </AuthLayout>
     );

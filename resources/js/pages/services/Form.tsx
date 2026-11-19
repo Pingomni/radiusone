@@ -24,7 +24,7 @@ export default function ServiceForm({ service, clientCount, expiredOptions, capO
 
     return (
         <AppLayout title={service.id ? 'Edit service' : 'New service'}>
-            <Panel title="Service Plan">
+            <Panel title="Service plan">
                 <ErrorSummary errors={form.errors} />
                 <form
                     className="form-grid"

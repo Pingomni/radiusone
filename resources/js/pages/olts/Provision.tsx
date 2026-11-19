@@ -28,16 +28,12 @@ export default function Provision({ olt, options, error, client }: { olt: { id: 
     const tables = (options?.trafficTables ?? []).map((t) => ({ value: String(t.id), label: `${t.id}: ${speed(t.pir)}` }));
     const chosen = options?.found.find((o) => o.sn === form.data.sn);
     return (
-        <AppLayout title={`New ONUs on ${olt.name}`}>
-            <div className="toolbar">
-                <Link className="button" href={`/olts/${olt.id}`}>{olt.name}</Link>
-                <Link className="button" href={path + (client ? `?client=${encodeURIComponent(client.username)}` : '')}>Look again</Link>
-            </div>
+        <AppLayout title={`New ONUs on ${olt.name}`} actions={<Link className="button" href={path + (client ? `?client=${encodeURIComponent(client.username)}` : '')}>Look again</Link>}>
             {error && <p className="flash danger" role="alert">{error}</p>}
             {options && (
                 <>
                     <Panel title="Plugged in, not yet added">
-                        <p className="hint">Read from the OLT just now. An ONU shows here a few seconds after it is connected to the fibre and powered on.</p>
+                        <p className="hint">Read just now. A new ONU shows a few seconds after it is powered on.</p>
                         <DataTable
                             rows={options.found}
                             rowKey={(o) => o.sn}
@@ -57,7 +53,7 @@ export default function Provision({ olt, options, error, client }: { olt: { id: 
                         <form onSubmit={(e) => { e.preventDefault(); form.post(path, { preserveScroll: true }); }}>
                             <ErrorSummary errors={form.errors} />
                             <Panel title={chosen ? `Add ${chosen.sn} on ${chosen.frame}/${chosen.slot}/${chosen.port}` : 'Choose an ONU above'}>
-                                <p className="hint">Filled in with what the last ONU was added with, or what most ONUs on this OLT use. The speed limit of the customer&apos;s plan stays with RADIUS: the traffic tables here are only the OLT&apos;s own ceiling.</p>
+                                <p className="hint">Filled in from the last ONU added. The client's speed still comes from RADIUS.</p>
                                 <div className="form-grid">
                                     <Field label="Description on the OLT" required maxLength={64} hint="For example the customer's name. Letters, digits and simple punctuation." {...bind(form, 'description')} />
                                     <Field label="Client username (optional)" autoComplete="off" hint="The ONU is linked to this client once added." {...bind(form, 'client')} />

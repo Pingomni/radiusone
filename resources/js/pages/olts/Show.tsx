@@ -177,7 +177,7 @@ function Cards({ hardware, olt, path }: { hardware: Hardware; olt: Olt; path: st
                             { header: 'Speed', cell: (f) => (f.rpm !== null ? `${f.rpm} RPM` : value(f.speed, '%')) },
                         ]}
                     />
-                ) : <p className="hint">This OLT doesn&apos;t report its fans over SNMP. The card temperatures above still show if cooling is failing.</p>}
+                ) : <p className="hint">This OLT does not report its fans.</p>}
             </Panel>
         </>
     );
@@ -230,7 +230,7 @@ function DetailsTab({ olt, details, hardware, path }: { olt: Olt; details: Detai
                     </form>
                 </Panel>
             )}
-            <p className="hint">Power, uptime and fans are read every minute over SNMP. Software, time servers and saving are read every 15 minutes over telnet{details.read ? <>, last <Time value={details.read} /></> : ''}.</p>
+            <p className="hint">Telnet details read every 15 minutes{details.read ? <>, last <Time value={details.read} /></> : ''}.</p>
         </>
     );
 }
@@ -430,7 +430,7 @@ function BackupsTab({ olt, details, backups, path }: { olt: Olt; details: Detail
         <>
             {details.backupError && <p className="flash warning" role="alert">The last copy failed: {details.backupError}</p>}
             <Panel title="Configuration copies" actions={olt.telnet ? <PostButton action={`${path}/backup`} label="Copy now" className="button" /> : undefined}>
-                <p className="hint">The portal reads the OLT&apos;s whole configuration once a day and keeps a copy each time it changed, up to 30. A copy holds the OLT&apos;s own passwords, so it is stored sealed and each download is written to the audit log. To restore, paste the part you need on the OLT&apos;s command line.</p>
+                <p className="hint">Read once a day; a copy is kept when it changed, up to 30. Each download is logged.</p>
                 <DataTable rows={backups} rowKey={(b) => b.id} emptyText={olt.telnet ? 'No copy yet. The first one is taken within 15 minutes, or press Copy now.' : 'Needs telnet turned on for this OLT.'} columns={[
                     { header: 'Configuration from', cell: (b) => <Time value={b.taken} /> },
                     { header: 'Still the same at', cell: (b) => <Time value={b.checked} /> },

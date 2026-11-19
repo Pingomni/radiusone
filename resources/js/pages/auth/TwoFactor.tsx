@@ -11,10 +11,10 @@ export default function TwoFactor({ setup }: { setup: { secret: string; uri: str
     const failed = flash?.type === 'danger';
 
     return (
-        <AuthLayout title={setup ? 'Set Up Two-Factor Authentication' : 'Two-Factor Verification'}>
+        <AuthLayout title={setup ? 'Set up two-step sign-in' : 'Two-step sign-in'}>
             <AuthCard
-                heading={setup ? 'Set up two-factor' : 'Two-factor check'}
-                lead={setup ? 'Your account requires an authenticator app. Add this setup key to your authenticator app, then enter the current 6-digit code.' : 'Enter the 6-digit code from your authenticator app to finish signing in.'}
+                heading={setup ? 'Set up your authenticator' : 'Enter your code'}
+                lead={setup ? 'Scan the code or add the key in your authenticator app, then enter the 6-digit code.' : 'The 6-digit code from your authenticator app.'}
                 onSubmit={(event) => {
                     event.preventDefault();
                     form.post(setup ? '/two-factor/setup' : '/two-factor', { onFinish: () => form.reset('code') });
