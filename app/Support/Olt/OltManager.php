@@ -119,6 +119,7 @@ final class OltManager
     {
         Db::exec('UPDATE olts SET sync_requested_at=NOW() WHERE id=?', [$olt['id']]);
         Audit::log($action, 'onu', (string) $onu['sn'], null, ['olt' => (string) $olt['name'], 'position' => Olts::position($onu), 'commands' => $commands] + $more);
+        OltChangelog::add((int) $olt['id'], $action, (string) $onu['sn'], Olts::position($onu), ['commands' => $commands, 'description' => (string) ($onu['description'] ?? '')] + $more);
     }
 
     /**
@@ -186,7 +187,7 @@ final class OltManager
             self::send($t, sprintf('ont modify %d %d desc "%s"', $onu['port'], $onu['ont_id'], $description), $sent);
         });
         Db::exec('UPDATE olt_onus SET description=? WHERE id=?', [$description, $onu['id']]);
-        self::done($olt, $onu, 'onu_describe', $sent, ['before' => (string) $onu['description']]);
+        self::done($olt, $onu, 'onu_describe', $sent, ['before' => (string) $onu['description'], 'after' => $description]);
         return $description;
     }
 
@@ -278,6 +279,7 @@ final class OltManager
         }
         Db::exec('UPDATE olts SET sync_requested_at=NOW() WHERE id=?', [$olt['id']]);
         Audit::log('port_' . str_replace('-', '_', $action), 'olt', (string) $olt['id'], null, ['port' => $where, 'commands' => $sent]);
+        OltChangelog::add((int) $olt['id'], 'port_' . str_replace('-', '_', $action), null, $where, ['commands' => $sent]);
         return $message;
     }
 
@@ -293,6 +295,7 @@ final class OltManager
     {
         Db::exec('UPDATE olts SET inventory=?,sync_requested_at=NOW() WHERE id=?', [json_encode($change(OltInventory::saved($olt)), JSON_INVALID_UTF8_SUBSTITUTE), $olt['id']]);
         Audit::log($action, 'olt', (string) $olt['id'], null, $more + ['commands' => $sent]);
+        OltChangelog::add((int) $olt['id'], $action, null, isset($more['port']) && is_string($more['port']) ? $more['port'] : null, $more + ['commands' => $sent]);
     }
 
     /**
@@ -615,6 +618,7 @@ final class OltManager
         });
         Db::exec('UPDATE olts SET sync_requested_at=NOW() WHERE id=?', [$olt['id']]);
         Audit::log('card_restart', 'olt', (string) $olt['id'], null, ['card' => $board['name'] . ' in ' . $where, 'commands' => $sent]);
+        OltChangelog::add((int) $olt['id'], 'card_restart', null, $where, ['card' => (string) $board['name'], 'commands' => $sent]);
     }
 
     /**
@@ -833,6 +837,7 @@ final class OltManager
             $context[count($context) - 1] = $command;
         }
         Audit::log('olt_terminal', 'olt', (string) $olt['id'], null, ['olt' => (string) $olt['name'], 'mode' => array_map(self::maskSecrets(...), $context), 'commands' => [self::maskSecrets($command)], 'answered_yes' => $yes]);
+        OltChangelog::terminal((int) $olt['id'], self::maskSecrets($command), array_map(self::maskSecrets(...), $context));
         return ['output' => mb_substr(mb_scrub($output, 'UTF-8'), 0, 400000), 'prompt' => $prompt, 'context' => array_values($context), 'asked' => $asked, 'careful' => false];
     }
 
@@ -1092,6 +1097,7 @@ final class OltManager
         $inventory['trafficTables'] = [...($inventory['trafficTables'] ?? []), ['id' => $id, 'cir' => (string) $kbps, 'pir' => (string) $kbps]];
         Db::exec('UPDATE olts SET inventory=? WHERE id=?', [json_encode($inventory), $olt['id']]);
         Audit::log('olt_traffic_table_add', 'olt', (string) $olt['id'], null, ['olt' => (string) $olt['name'], 'traffic_table' => $id, 'kbps' => $kbps, 'commands' => $sent]);
+        OltChangelog::add((int) $olt['id'], 'olt_traffic_table_add', null, null, ['traffic_table' => $id, 'kbps' => $kbps, 'commands' => $sent]);
         return ['id' => $id, 'kbps' => $kbps];
     }
 

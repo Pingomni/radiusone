@@ -126,6 +126,7 @@ final class OltSync
         if (!$onus) {
             throw new RuntimeException('The OLT answered, but listed no ONUs. If it has ONUs, check that its SNMP view includes the Huawei GPON tables.');
         }
+        $before = Db::select('SELECT sn,frame,slot,port,ont_id,description,line_profile,service_profile,active FROM olt_onus WHERE olt_id=?', [$olt['id']]);
         $pdo = Db::pdo();
         $pdo->beginTransaction();
         try {
@@ -141,6 +142,9 @@ final class OltSync
             $pdo->rollBack();
             throw $e;
         }
+        // What was changed on the OLT itself, or by another system, since the last read.
+        OltChangelog::onuChanges($olt, $before, $onus);
+        Db::exec('DELETE FROM olt_changes WHERE olt_id=? AND created_at<NOW()-INTERVAL ? DAY LIMIT 5000', [$olt['id'], OltChangelog::KEEP_DAYS]);
     }
 
     /**

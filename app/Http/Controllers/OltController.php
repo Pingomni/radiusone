@@ -11,6 +11,7 @@ use App\Http\Support\MonitoringData;
 use App\Support\Audit;
 use App\Support\Auth;
 use App\Support\Db;
+use App\Support\Olt\OltChangelog;
 use App\Support\Olt\OltConsole;
 use App\Support\Olt\OltConsoleUnavailable;
 use App\Support\Olt\OltInventory;
@@ -109,6 +110,16 @@ final class OltController extends Controller
         Db::exec('UPDATE olts SET sync_requested_at=NOW() WHERE id=? AND enabled=1', [$saved]);
         $public = static fn (array $o) => array_intersect_key($o, array_flip(['name', 'model', 'host', 'enabled', 'snmp_version', 'snmp_port', 'telnet_enabled', 'telnet_port', 'manage_enabled', 'rx_warning', 'rx_critical']));
         Audit::log($stored ? 'update' : 'create', 'olt', (string) $saved, $stored ? $public($stored) : null, $public($values));
+        $changed = $stored ? array_keys(array_diff_assoc(array_map('strval', $public($values)), array_map('strval', $public($stored)))) : [];
+        // Secrets are not compared: a new password typed in shows as "telnet password" without its value.
+        foreach (['snmp_community' => 'SNMP community', 'telnet_user' => 'telnet user', 'telnet_password' => 'telnet password'] as $column => $label) {
+            if ($stored && $values[$column] !== $stored[$column]) {
+                $changed[] = $label;
+            }
+        }
+        if (!$stored || $changed) {
+            OltChangelog::add($saved, $stored ? 'update' : 'create', null, null, $stored ? ['fields' => $changed] : []);
+        }
         return $this->ok('/olts/' . $saved, 'OLT saved. It is read within a minute. ' . ($values['manage_enabled'] ? 'Changes from the portal are allowed for this OLT.' : 'Nothing is changed on the OLT.'));
     }
 
@@ -176,8 +187,7 @@ final class OltController extends Controller
             'hardware' => self::hardware($olt),
             'details' => self::details($olt),
             'backups' => Auth::can('nas.manage') ? array_map(static fn (array $b) => ['id' => (int) $b['id'], 'taken' => (string) $b['taken_at'], 'checked' => (string) $b['checked_at'], 'bytes' => (int) $b['bytes']], Db::select('SELECT id,taken_at,checked_at,bytes FROM olt_config_backups WHERE olt_id=? ORDER BY taken_at DESC,id DESC', [$olt['id']])) : null,
-            'history' => array_map(static fn (array $a) => ['at' => (string) $a['created_at'], 'who' => (string) $a['actor_username'], 'action' => (string) $a['action'], 'what' => $a['entity_type'] === 'onu' ? 'ONU ' . $a['entity_id'] : 'OLT', 'detail' => implode('; ', (array) (json_decode((string) $a['after_json'], true)['commands'] ?? []))],
-                Db::select('SELECT created_at,actor_username,action,entity_type,entity_id,after_json FROM audit_logs WHERE (entity_type="olt" AND entity_id=?) OR (entity_type="onu" AND after_json LIKE ?) ORDER BY id DESC LIMIT 200', [(string) $olt['id'], '%' . addcslashes(substr((string) json_encode(['olt' => (string) $olt['name']], JSON_UNESCAPED_SLASHES), 1, -1), '%_\\') . '%'])),
+            'changelog' => OltChangelog::forOlt((int) $olt['id']),
             'graphs' => (static function () use ($olt, $request): array {
                 $range = self::range($request->query('range'));
                 $graph = static fn (string $key, string $title, array $data) => ['key' => $key, 'title' => $title, 'url' => '/olts/' . (int) $olt['id'] . '/graph?chart=' . $key . '&range=' . $range, 'data' => $data];
@@ -294,6 +304,9 @@ final class OltController extends Controller
                 $lines = array_values(array_filter((array) ($answer['lines'] ?? []), 'is_string'));
                 if ($lines) {
                     Audit::log('olt_terminal', 'olt', (string) $olt['id'], null, ['olt' => (string) $olt['name'], 'console' => true, 'commands' => array_map(OltManager::maskSecrets(...), $lines)]);
+                    foreach ($lines as $line) {
+                        OltChangelog::terminal((int) $olt['id'], OltManager::maskSecrets($line));
+                    }
                 }
                 unset($answer['lines']);
                 $payload = $answer;

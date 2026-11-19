@@ -2800,3 +2800,11 @@ td .list-menu > summary:hover { border-color: var(--line); background: var(--sur
 @media (max-width: 560px) {
   .onu-meters { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* OLT changelog */
+.changelog-filters { align-items: end; flex-wrap: wrap; }
+.changelog-more > summary { color: var(--text-muted); font-size: var(--fs-sm); font-weight: 600; cursor: pointer; }
+.changelog-more[open] > summary { margin-bottom: var(--sp-1); }
+.changelog-more pre { max-height: 24rem; }
+.changelog-added { color: var(--success, #3fb950); }
+.changelog-removed { color: var(--danger, #f85149); }

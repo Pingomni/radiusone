@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { PostButton } from '@/components/confirm';
 import Icon from '@/components/Icon';
 import { ChartOrMessage, type ChartPayload } from '@/components/LineChart';
+import { Changelog, type Change } from '@/components/OltChangelog';
 import { LivePanel } from '@/components/LivePanel';
 import OltConsole from '@/components/OltConsole';
 import { OnuPower, OnuStatus, type OnuRow } from '@/components/olt';
@@ -33,17 +34,8 @@ type Details = {
 };
 type Vlan = { id: number; ports: number; type: string; standard: number; name: string; desc: string; own: boolean };
 type Backup = { id: number; taken: string; checked: string; bytes: number };
-type HistoryRow = { at: string; who: string; action: string; what: string; detail: string };
 
 const kbps = (v: number | string) => (v === 'off' ? 'No limit' : Number(v) >= 1000 ? `${Math.round(Number(v) / 100) / 10} Mbit/s` : `${v} kbit/s`);
-const ACTIONS: Record<string, string> = {
-    create: 'Added to the portal', update: 'Settings changed', backup: 'Configuration copied', backup_download: 'Configuration downloaded',
-    cli: 'Display command run', card_restart: 'Card restarted', port_autofind_on: 'Autofind turned on', port_autofind_off: 'Autofind turned off', port_restart_onus: 'All ONUs on a port restarted', port_off: 'PON port turned off', port_on: 'PON port turned on',
-    ntp_add: 'Time server added', ntp_remove: 'Time server removed', vlan_add: 'VLAN created', vlan_edit: 'VLAN changed', vlan_remove: 'VLAN deleted', uplink_vlan_add: 'VLAN added to an uplink', uplink_vlan_remove: 'VLAN taken off an uplink',
-    onu_add: 'ONU added', onu_delete: 'ONU removed', onu_reboot: 'ONU restarted', onu_disable: 'ONU turned off', onu_enable: 'ONU turned on', onu_describe: 'ONU renamed',
-    onu_wan: 'ONU internet connection set', onu_bridge: 'ONU switched to bridging', onu_eth_port: 'ONU Ethernet port set', onu_lan_vlan: 'ONU LAN VLAN set', onu_speed: 'ONU speed changed',
-    onu_lan_on: 'ONU LAN port turned on', onu_lan_off: 'ONU LAN port turned off', onu_factory_reset: 'ONU reset to factory settings', olt_traffic_table_add: 'Speed added', olt_terminal: 'Terminal command',
-};
 type Hardware = { lastRead: string | null; error: string; boards: Board[]; fans: Fan[]; ports: Port[] };
 
 const speedText = (mbps: number | null) => (mbps === null || mbps === 0 ? '-' : mbps >= 1000 ? `${mbps / 1000} Gbit/s` : `${mbps} Mbit/s`);
@@ -477,19 +469,6 @@ function CommandLine({ path, full }: { path: string; full: 'role' | 'olt' | null
     );
 }
 
-function HistoryTab({ rows }: { rows: HistoryRow[] }) {
-    return (
-        <Panel title="What was done on this OLT from the portal">
-            <DataTable rows={rows} rowKey={(r) => r.at + r.action + r.what} exportRows emptyText="Nothing yet." columns={[
-                { header: 'When', cell: (r) => <Time value={r.at} /> },
-                { header: 'Who', cell: (r) => r.who },
-                { header: 'What', cell: (r) => `${ACTIONS[r.action] ?? r.action}${r.what !== 'OLT' ? `: ${r.what}` : ''}` },
-                { header: 'Commands sent to the OLT', className: 'wrap', cell: (r) => (r.detail ? <span className="mono">{r.detail}</span> : '-') },
-            ]} />
-        </Panel>
-    );
-}
-
 /** Where a port sits, from its name: "GPON 0/1/15" and "ethernet0/9/0" are frame/slot/port. */
 const portAt = (name: string) => {
     const m = name.match(/(\d+)\s*\/\s*(\d+)\s*\/\s*(\d+)/);
@@ -678,7 +657,7 @@ function OltHero({ olt, counts, hardware, details, path }: { olt: Olt; counts: C
     );
 }
 
-export default function OltShow({ olt, counts, filters, hardware, details, backups, history, graphs, result }: { olt: Olt; counts: Counts; filters: { q: string; status: string }; hardware: Hardware; details: Details; backups: Backup[] | null; history: HistoryRow[]; graphs: Graphs; result: Paginated<OnuRow> }) {
+export default function OltShow({ olt, counts, filters, hardware, details, backups, changelog, graphs, result }: { olt: Olt; counts: Counts; filters: { q: string; status: string }; hardware: Hardware; details: Details; backups: Backup[] | null; changelog: Change[]; graphs: Graphs; result: Paginated<OnuRow> }) {
     const can = useCan();
     const [q, setQ] = useState(filters.q);
     const [status, setStatus] = useState(filters.status);
@@ -760,7 +739,7 @@ export default function OltShow({ olt, counts, filters, hardware, details, backu
                     ...(can('nas.manage') && olt.telnet ? [can('danger.delete') && olt.canChange
                         ? { key: 'cli', title: 'Terminal', icon: 'activity', content: <OltConsole path={path} name={olt.name} start={typeof window === 'undefined' ? undefined : new URLSearchParams(window.location.search).get('at') ?? undefined} /> }
                         : { key: 'cli', title: 'Command line', icon: 'activity', content: <CommandLine path={path} full={can('nas.manage') && !can('danger.delete') ? 'role' : !olt.canChange ? 'olt' : null} /> }] : []),
-                    { key: 'history', title: 'History', icon: 'logs', count: history.length, content: <HistoryTab rows={history} /> },
+                    { key: 'history', title: 'Changelog', icon: 'logs', count: changelog.length, content: <Changelog rows={changelog} oltId={olt.id} title={`Changelog of ${olt.name}`} /> },
                 ]}
             />
         </AppLayout>

@@ -4,6 +4,16 @@ RadiusOne follows [semantic versioning](https://semver.org): **major** for chang
 upgrading, **minor** for new features, **patch** for fixes. The version is in the `VERSION` file and shows in
 the portal's sidebar and under Settings → System information.
 
+## 2.18.0 (2026-11-19)
+
+A changelog for each OLT. Update with **Settings → Overview → Software update** or `sudo radiusone-update`.
+
+- **Changelog tab:** every change on the OLT, who made it and the commands sent, with search, filters and CSV export.
+- **Found on the OLT:** ONUs added, removed, moved, renamed or turned off there, and the configuration's changed lines
+  (secrets masked), even when done outside the portal.
+- **ONU History tab** and the date an ONU was added.
+- **On the server:** one new table, filled from the audit log by the update.
+
 ## 2.17.0 (2026-11-19)
 
 VLANs and profiles on their own pages. Update with **Settings → Overview → Software update** or `sudo radiusone-update`.

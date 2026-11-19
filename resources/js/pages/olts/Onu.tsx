@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { DeleteButton, PostButton, useConfirm } from '@/components/confirm';
 import Icon from '@/components/Icon';
 import { ChartOrMessage, type ChartPayload } from '@/components/LineChart';
+import { Changelog, type Change } from '@/components/OltChangelog';
 import { OnuStatus, type OnuRow } from '@/components/olt';
 import { DataTable } from '@/components/table';
 import { Tabs, type TabDef } from '@/components/tabs';
@@ -675,8 +676,8 @@ function Waiting({ live }: { live: LiveState }) {
     return null;
 }
 
-export default function OnuPage({ olt, onu, clients, disconnections, timeline, since, trafficTables, ranges }: {
-    olt: OltInfo; onu: OnuRow; clients: Client[]; disconnections: { day: number; week: number }; timeline: Timeline; since: number | null; trafficTables: TrafficTable[]; ranges: Record<string, string>;
+export default function OnuPage({ olt, onu, clients, disconnections, timeline, since, trafficTables, ranges, history, addedAt }: {
+    olt: OltInfo; onu: OnuRow; clients: Client[]; disconnections: { day: number; week: number }; timeline: Timeline; since: number | null; trafficTables: TrafficTable[]; ranges: Record<string, string>; history: Change[]; addedAt: string | null;
 }) {
     const can = useCan();
     const base = `/olts/${olt.id}/onus/${onu.id}`;
@@ -706,6 +707,7 @@ export default function OnuPage({ olt, onu, clients, disconnections, timeline, s
         { key: 'speed', title: 'Speed profiles', icon: 'activity', count: data ? data.servicePorts.length : undefined, content: data ? <ServicePorts ports={data.servicePorts} tables={choices?.ok ? choices.data.trafficTables : trafficTables} base={base} mayChange={mayChange} onDone={() => { rereadChoices(); reread(); }} /> : <Waiting live={live} /> },
         ...(mayChange ? [{ key: 'omci', title: 'Configure', icon: 'settings', hint: 'Push settings to the ONU over OMCI', content: <Configure base={base} live={live} choices={choices} clients={clients} onDone={reread} /> }] : []),
         ...(olt.canRead ? [{ key: 'config', title: 'Running config', icon: 'logs', content: <RunningConfig live={live} /> }] : []),
+        { key: 'history', title: 'History', icon: 'activity', count: history.length, content: <Changelog rows={history} oltId={olt.id} forOnu title={`History of ${onu.sn}`} /> },
         ...(mayChange ? [{
             key: 'manage', title: 'Manage', icon: 'shield', content: (
                 <div className="onu-tab-body">
@@ -799,6 +801,7 @@ export default function OnuPage({ olt, onu, clients, disconnections, timeline, s
                     <Fact label="Frame / board / port" mono>{frame} / {slot} / {port}</Fact>
                     <Fact label="ONU ID" mono>{onuId}</Fact>
                     <Fact label="Distance">{onu.distance === null ? '-' : `${onu.distance} m`}</Fact>
+                    <Fact label="Added to the OLT">{addedAt ? <Time value={addedAt} /> : <span className="onu-pending">Before the portal kept a history</span>}</Fact>
                     <Fact label="Read from the OLT"><Time value={onu.seen} /></Fact>
                 </Facts>
                 <Facts title="Customer" icon="user" aside={clients.length > 1 ? <Badge>{clients.length} clients</Badge> : undefined}>

@@ -135,6 +135,16 @@ final class OltInventory
         $hash = hash('sha256', $config);
         $last = Db::row('SELECT id,sha256 FROM olt_config_backups WHERE olt_id=? ORDER BY taken_at DESC,id DESC LIMIT 1', [$olt['id']]);
         $changed = !$last || $last['sha256'] !== $hash;
+        if ($changed && $last) {
+            // What is different from the copy before, for the changelog. Its secrets are masked there.
+            $previous = self::backupText((int) $olt['id'], (int) $last['id']);
+            if ($previous !== null) {
+                $diff = OltChangelog::configDiff($previous, $config);
+                if ($diff['addedCount'] + $diff['removedCount'] > 0) {
+                    OltChangelog::add((int) $olt['id'], 'config_changed', null, null, $diff, 'olt', '');
+                }
+            }
+        }
         if ($changed) {
             Db::exec('INSERT INTO olt_config_backups (olt_id,taken_at,checked_at,bytes,sha256,body) VALUES (?,NOW(),NOW(),?,?,?)', [$olt['id'], strlen($config), $hash, Secrets::encrypt((string) gzencode($config, 6))]);
             $old = Db::select('SELECT id FROM olt_config_backups WHERE olt_id=? ORDER BY taken_at DESC,id DESC LIMIT 1000 OFFSET ' . self::KEEP_BACKUPS, [$olt['id']]);

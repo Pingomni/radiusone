@@ -9,6 +9,7 @@ use App\Support\Auth;
 use App\Support\Contracts;
 use App\Support\Db;
 use App\Support\Entitlement;
+use App\Support\Pay\Gateways;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response as HttpResponse;
@@ -70,7 +71,7 @@ final class ContractController extends Controller
         return Inertia::render('contracts/Show', [
             'contract' => $this->row($contract) + ['customer' => Clients::displayName($contract), 'body' => (string) $contract['body'], 'firstInvoiceId' => $contract['first_invoice_id'] ? (int) $contract['first_invoice_id'] : null],
             'payments' => array_map(static fn (array $p) => [
-                'id' => (int) $p['id'], 'provider' => \App\Support\Pay\Gateways::label((string) $p['provider'], (string) $p['mode']), 'status' => (string) $p['status'], 'amount' => (string) $p['amount'], 'currency' => (string) $p['currency'], 'period_end' => (string) $p['period_end'],
+                'id' => (int) $p['id'], 'provider' => Gateways::label((string) $p['provider'], (string) $p['mode']), 'status' => (string) $p['status'], 'amount' => (string) $p['amount'], 'currency' => (string) $p['currency'], 'period_end' => (string) $p['period_end'],
                 'created_at' => (string) $p['created_at'], 'note' => (string) ($p['note'] ?? ''), 'invoice_id' => $p['invoice_id'] ? (int) $p['invoice_id'] : null,
             ], Db::select('SELECT * FROM pay_payments WHERE contract_id=? ORDER BY id DESC LIMIT 50', [(int) $id])),
             'canManage' => Auth::can('billing.manage'),

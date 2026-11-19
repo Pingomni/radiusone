@@ -76,7 +76,9 @@ final class OltMapper
     {
         $added = Db::exec('INSERT IGNORE INTO customer_onus (customer_id,olt_id,sn,source,evidence,linked_by,linked_at) VALUES (?,?,?,?,?,"system",NOW())', [$customerId, $onu['olt_id'], $onu['sn'], $source, mb_substr($evidence, 0, 190)]);
         if ($added === 1) {
-            Audit::log('link_onu', 'client', (string) Db::value('SELECT username FROM customer_profiles WHERE id=?', [$customerId]), null, ['sn' => $onu['sn'], 'source' => $source, 'evidence' => $evidence]);
+            $username = (string) Db::value('SELECT username FROM customer_profiles WHERE id=?', [$customerId]);
+            Audit::log('link_onu', 'client', $username, null, ['sn' => $onu['sn'], 'source' => $source, 'evidence' => $evidence]);
+            OltChangelog::add((int) $onu['olt_id'], 'link_onu', (string) $onu['sn'], Olts::position($onu), ['client' => $username, 'source' => $source, 'evidence' => $evidence], 'portal', 'system');
         }
         return $added;
     }
@@ -103,6 +105,7 @@ final class OltMapper
         Db::exec('INSERT INTO customer_onus (customer_id,olt_id,sn,source,evidence,linked_by,linked_at) VALUES (?,?,?,"manual","",?,NOW())
             ON DUPLICATE KEY UPDATE olt_id=VALUES(olt_id),sn=VALUES(sn),source="manual",evidence="",linked_by=VALUES(linked_by),linked_at=NOW()', [$customerId, $onus[0]['olt_id'], $sn, $actor]);
         Audit::log('link_onu', 'client', $username, $before, ['sn' => $sn, 'source' => 'manual']);
+        OltChangelog::add((int) $onus[0]['olt_id'], 'link_onu', $sn, Olts::position($onus[0]), ['client' => $username, 'source' => 'manual'], 'portal', $actor);
         return $onus[0];
     }
 
@@ -113,6 +116,9 @@ final class OltMapper
             // Also stops the next sync linking it straight back from the same evidence.
             Db::exec('UPDATE customer_onus SET source="none",sn="",evidence="",linked_by=?,linked_at=NOW() WHERE customer_id=?', [$username, $customerId]);
             Audit::log('unlink_onu', 'client', $username, $before);
+            if ((string) $before['sn'] !== '') {
+                OltChangelog::add((int) $before['olt_id'], 'unlink_onu', (string) $before['sn'], null, ['client' => $username]);
+            }
         }
     }
 

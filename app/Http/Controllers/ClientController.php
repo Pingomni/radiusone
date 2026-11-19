@@ -350,7 +350,7 @@ final class ClientController extends Controller
     /** The online-payment switch exists once migration 035 (contracts and the pay page) is applied. */
     private static function payPageReady(): bool
     {
-        return \App\Support\SchemaCompatibility::problems('contracts') === [];
+        return SchemaCompatibility::problems('contracts') === [];
     }
 
     /** Uploads were validated by Security::uploadInfo; under PHPUnit they are local temp files. */

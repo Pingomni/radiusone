@@ -9,6 +9,7 @@ use App\Http\Support\MonitoringData;
 use App\Support\Auth;
 use App\Support\Db;
 use App\Support\Olt\HuaweiCli;
+use App\Support\Olt\OltChangelog;
 use App\Support\Olt\OltInventory;
 use App\Support\Olt\OltManager;
 use App\Support\Olt\OltMapper;
@@ -42,6 +43,8 @@ final class OnuController extends Controller
         return Inertia::render('olts/Onu', [
             'olt' => ['id' => (int) $olt['id'], 'name' => (string) $olt['name'], 'canRead' => OltManager::canRead($olt), 'canChange' => OltManager::canChange($olt), 'rxWarning' => (float) ($olt['rx_warning'] ?? -27), 'rxCritical' => (float) ($olt['rx_critical'] ?? -30)],
             'disconnections' => OltMonitor::disconnections((int) $olt['id'], (string) $row['sn']),
+            'history' => OltChangelog::forOnu((int) $olt['id'], (string) $row['sn']),
+            'addedAt' => OltChangelog::addedAt((int) $olt['id'], (string) $row['sn']),
             'timeline' => OltMonitor::timeline((int) $olt['id'], (string) $row['sn']),
             // How long the ONU has been in its current state, worked out here so the browser's clock and timezone do not matter.
             'since' => (static function () use ($row): ?int {

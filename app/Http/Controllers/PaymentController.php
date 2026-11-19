@@ -183,7 +183,7 @@ final class PaymentController extends Controller
     /**
      * What was paid, by currency: amounts in different currencies are never added together.
      *
-     * @param list<string> $params
+     * @param  list<string>  $params
      */
     private function sum(string $condition, array $params): string
     {

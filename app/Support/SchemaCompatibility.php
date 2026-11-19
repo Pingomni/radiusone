@@ -18,7 +18,7 @@ final class SchemaCompatibility
         'snmp_v3' => ['nas_snmp' => ['v3_user', 'v3_auth_protocol', 'v3_auth_password', 'v3_priv_protocol', 'v3_priv_password', 'v3_context']],
         'usage' => ['usage_daily' => ['username', 'day', 'down', 'up'], 'usage_session_marks' => ['radacctid', 'seen_at'], 'usage_cycles' => ['cycle_start', 'capped'], 'service_metadata' => ['cap_action', 'cap_service_group']],
         'contracts' => ['customer_contracts' => ['contract_number', 'active_flag', 'body'], 'pay_payments' => ['token', 'provider', 'mode', 'provider_order_id'], 'customer_profiles' => ['online_pay']],
-        'olt' => ['olts' => ['last_sync_at', 'last_mac_error', 'manage_enabled', 'provision_defaults', 'inventory', 'last_backup_at', 'rx_warning'], 'olt_onus' => ['last_online_at', 'active', 'counters_at'], 'olt_samples' => ['sampled_at', 'online'], 'olt_boards' => ['slot', 'status_code', 'online_code'], 'olt_fans' => ['label', 'ok', 'speed_rpm'], 'olt_config_backups' => ['sha256', 'body'], 'olt_port_samples' => ['if_index', 'in_bps'], 'olt_onu_samples' => ['sn', 'down_bps'], 'olt_ports' => ['if_index', 'oper_up'], 'olt_hw_samples' => ['sampled_at', 'cpu_pct']],
+        'olt' => ['olts' => ['last_sync_at', 'last_mac_error', 'manage_enabled', 'provision_defaults', 'inventory', 'last_backup_at', 'rx_warning'], 'olt_onus' => ['last_online_at', 'active', 'counters_at'], 'olt_samples' => ['sampled_at', 'online'], 'olt_boards' => ['slot', 'status_code', 'online_code'], 'olt_fans' => ['label', 'ok', 'speed_rpm'], 'olt_config_backups' => ['sha256', 'body'], 'olt_port_samples' => ['if_index', 'in_bps'], 'olt_onu_samples' => ['sn', 'down_bps'], 'olt_changes' => ['action', 'detail'], 'olt_ports' => ['if_index', 'oper_up'], 'olt_hw_samples' => ['sampled_at', 'cpu_pct']],
         'policy' => ['subscriptions' => ['policy_revision', 'policy_hash', 'dirty', 'next_transition_at'], 'network_operations' => ['dedupe_key', 'session_json', 'result_code'], 'access_policies' => ['listener_key', 'valid_until'], 'service_metadata' => ['policy_revision'], 'access_auth_events' => ['decision', 'reason']],
     ];
     public static function problems(string $feature): array
@@ -42,7 +42,7 @@ final class SchemaCompatibility
     {
         if (self::problems($feature)) {
             throw new SchemaMismatch('Action blocked: incompatible ' . $feature . ' schema. Rehearse and deploy migration ' . match ($feature) {
-                'billing' => '017','notifications' => '019','snmp' => '020','snmp_v3' => '021','snmp_history' => '022','snmp_health' => '023','snmp_temperature' => '024','usage' => '029','olt' => '040','contracts' => '035',default => '018'
+                'billing' => '017','notifications' => '019','snmp' => '020','snmp_v3' => '021','snmp_history' => '022','snmp_health' => '023','snmp_temperature' => '024','usage' => '029','olt' => '041','contracts' => '035',default => '018'
             } . ' with this release; no live migration is automatic.');
         }
     }

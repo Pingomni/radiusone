@@ -13,10 +13,8 @@ use App\Support\App;
 use App\Support\Audit;
 use App\Support\Auth;
 use App\Support\BillingDocuments;
-use App\Support\Contracts;
-use App\Support\Pay\Gateways;
-use App\Support\PayPage;
 use App\Support\Branding;
+use App\Support\Contracts;
 use App\Support\Currency;
 use App\Support\CustomerNotifications;
 use App\Support\Db;
@@ -24,6 +22,8 @@ use App\Support\EmailProviders;
 use App\Support\License;
 use App\Support\NotificationService;
 use App\Support\Paths;
+use App\Support\Pay\Gateways;
+use App\Support\PayPage;
 use App\Support\Retention;
 use App\Support\SchemaCompatibility;
 use App\Support\Security;
@@ -537,7 +537,7 @@ final class SettingsController extends Controller
     {
         try {
             Gateways::test($provider, $mode);
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             return $this->fail($e->getMessage(), '/settings?tab=pay');
         }
         return $this->ok('/settings?tab=pay', Gateways::NAMES[$provider] . ' accepted the ' . $mode . ' key.');

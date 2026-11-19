@@ -7,6 +7,7 @@ namespace Tests\Feature;
 use App\Support\Db;
 use App\Support\Olt\HuaweiCli;
 use App\Support\Olt\HuaweiMa5800;
+use App\Support\Olt\OltChangelog;
 use App\Support\Olt\OltInventory;
 use App\Support\Olt\OltManager;
 use App\Support\Olt\OltMonitor;
@@ -437,7 +438,7 @@ final class OltManageTest extends TestCase
         $newest = (int) Db::value('SELECT MAX(id) FROM olt_config_backups');
         $this->get("/olts/{$olt['id']}/backups/$newest")->assertOk()->assertSee('sysname renamed-olt', false)->assertHeader('Content-Disposition');
         $this->assertSame(1, (int) Db::value('SELECT COUNT(*) FROM audit_logs WHERE action="backup_download"'));
-        $this->get('/olts/' . $olt['id'])->assertInertia(fn ($p) => $p->has('backups', 2)->where('history.0.action', 'backup_download'));
+        $this->get('/olts/' . $olt['id'])->assertInertia(fn ($p) => $p->has('backups', 2)->where('changelog', fn ($rows) => !collect($rows)->contains('action', 'backup_download')));
         // Another OLT's copy cannot be fetched through this one.
         $this->get('/olts/' . ($olt['id'] + 1) . "/backups/$newest")->assertNotFound();
 
@@ -482,7 +483,7 @@ final class OltManageTest extends TestCase
         $this->post("$base/on")->assertSessionHas('flash.type', 'success');
         $this->assertSame(['port 0 ont-auto-find disable', 'port 0 ont-auto-find enable', 'ont reset 0 all', 'shutdown 0', 'undo shutdown 0'], $this->changes());
         $this->assertSame(5, (int) Db::value('SELECT COUNT(*) FROM audit_logs WHERE action LIKE "port\_%"'));
-        $this->get('/olts/' . $olt['id'])->assertInertia(fn ($p) => $p->where('history.0.action', 'port_on')->where('history.0.detail', 'undo shutdown 0'));
+        $this->get('/olts/' . $olt['id'])->assertInertia(fn ($p) => $p->where('changelog.0.action', 'port_on')->where('changelog.0.position', '0/1/0')->where('changelog.0.commands', ['undo shutdown 0']));
         // An uplink is not a PON port, and nothing else may be asked for.
         $this->post("/olts/{$olt['id']}/ports/7/autofind-off")->assertNotFound();
         $this->post("$base/delete")->assertNotFound();
@@ -660,7 +661,7 @@ final class OltManageTest extends TestCase
         $this->post("$base/vlan-edit", ['vlan' => 300, 'name' => 'office', 'desc' => '', 'uplinks' => []])->assertSessionHas('flash.type', 'success');
         $this->assertSame(['vlan name 300 office', 'vlan desc 300 description "Main office"', 'port vlan 300 0/9 0', 'undo vlan desc 300', 'undo port vlan 300 0/9 0'], $this->changes());
         $this->assertSame(['type' => 'smart', 'name' => 'office', 'desc' => ''], OltInventory::saved(Olts::find((int) $olt['id']))['vlanInfo'][300]);
-        $this->get('/olts/' . $olt['id'])->assertInertia(fn ($p) => $p->where('history.0.action', 'vlan_edit'));
+        $this->get('/olts/' . $olt['id'])->assertInertia(fn ($p) => $p->where('changelog.0.action', 'vlan_edit')->where('changelog.0.detail.vlan', 300));
 
         // The OLT's own VLAN never comes off an uplink, and NOC may add a port but not take one off.
         $this->post("$base/vlan-edit", ['vlan' => 100, 'name' => 'internet', 'desc' => 'Customers', 'uplinks' => []])->assertSessionHas('flash.message', fn (string $m) => str_contains($m, 'its own address'));
@@ -671,6 +672,107 @@ final class OltManageTest extends TestCase
         $this->assertSame(['port vlan 300 0/9 0'], array_slice($this->changes(), 5));
         $this->actingAsOperator('view');
         $this->post("$base/vlan-edit", ['vlan' => 300, 'name' => 'x', 'uplinks' => ['7']])->assertForbidden();
+    }
+
+    public function test_the_changelog_keeps_what_was_done_from_the_portal(): void
+    {
+        $this->startAgent();
+        $olt = $this->olt();
+        $onu = $this->onu($olt);
+        $this->actingAsOperator('noc', ['username' => 'teknik']);
+        $this->post("/olts/{$olt['id']}/onus/$onu/reboot")->assertSessionHas('flash.type', 'success');
+        $this->post("/olts/{$olt['id']}/onus/$onu/describe", ['description' => 'Flux 503'])->assertSessionHas('flash.type', 'success');
+        $this->post("/olts/{$olt['id']}/provision", ['sn' => 'HWTCAAAA0001', 'mode' => 'bridge', 'line_profile' => '6', 'service_profile' => '1', 'vlan' => '100', 'gem' => '1', 'traffic_up' => '8', 'traffic_down' => '9', 'description' => 'New one'])->assertSessionHas('flash.type', 'success');
+        $rows = Db::select('SELECT actor,source,action,sn,position,detail FROM olt_changes ORDER BY id');
+        $this->assertSame(['onu_reboot', 'onu_describe', 'onu_add'], array_column($rows, 'action'));
+        $this->assertSame(['teknik', 'portal', 'HWTC1234ABCD', '0/1/0:3'], [$rows[0]['actor'], $rows[0]['source'], $rows[0]['sn'], $rows[0]['position']]);
+        $this->assertSame(['before' => 'Kati 2 hyrja A', 'after' => 'Flux 503'], array_intersect_key(json_decode($rows[1]['detail'], true), array_flip(['before', 'after'])));
+
+        $this->actingAsOperator('view');
+        $this->get('/olts/' . $olt['id'])->assertInertia(fn ($p) => $p
+            ->where('changelog.0.action', 'onu_add')->where('changelog.0.sn', 'HWTCAAAA0001')->where('changelog.0.onuName', 'New one')
+            ->where('changelog.2.action', 'onu_reboot')->where('changelog.2.commands', ['ont reset 0 3'])->where('changelog.2.onuId', $onu));
+        $new = (int) Db::value('SELECT id FROM olt_onus WHERE sn="HWTCAAAA0001"');
+        $this->get("/olts/{$olt['id']}/onus/$new")->assertInertia(fn ($p) => $p->has('history', 1)->where('history.0.action', 'onu_add')->where('addedAt', fn ($at) => $at !== null));
+        $this->get("/olts/{$olt['id']}/onus/$onu")->assertInertia(fn ($p) => $p->has('history', 2)->where('addedAt', null));
+    }
+
+    public function test_the_changelog_finds_what_was_changed_on_the_olt_itself(): void
+    {
+        $this->startAgent();
+        $olt = $this->olt(false);
+        $onu = static fn (int $id, string $sn, string $desc, int $active = 1) => ['frame' => 0, 'slot' => 1, 'port' => 0, 'ont_id' => $id, 'sn' => $sn, 'description' => $desc, 'onu_model' => 'EG8145V5', 'line_profile' => 'SmartOLT_G', 'service_profile' => 'HG8346M', 'status' => 'online', 'active' => $active];
+        // The first read finds every ONU: that is not a change.
+        OltSync::saveOnus($olt, [$onu(1, 'HWTC00000001', 'Ana'), $onu(2, 'HWTC00000002', 'Ben'), $onu(3, 'HWTC00000003', 'Cel')]);
+        $this->assertSame(0, (int) Db::value('SELECT COUNT(*) FROM olt_changes'));
+        // Done elsewhere: 1 renamed, 2 moved and turned off, 3 removed, 4 added. The reads are minutes apart, as the poller's are.
+        Db::exec('UPDATE olt_onus SET seen_at=seen_at-INTERVAL 5 MINUTE');
+        OltSync::saveOnus($olt, [$onu(1, 'HWTC00000001', 'Ana Hoxha'), $onu(7, 'HWTC00000002', 'Ben', 0), $onu(4, 'HWTC00000004', 'Dea')]);
+        $rows = Db::select('SELECT actor,source,action,sn,position,detail FROM olt_changes ORDER BY id');
+        $this->assertSame(['onu_renamed', 'onu_moved', 'onu_disabled', 'onu_found', 'onu_gone'], array_column($rows, 'action'));
+        $this->assertSame(['olt'], array_values(array_unique(array_column($rows, 'source'))));
+        $this->assertSame('', $rows[0]['actor']);
+        $this->assertSame(['from' => '0/1/0:2'], json_decode($rows[1]['detail'], true));
+        $this->assertSame(['HWTC00000004', '0/1/0:4'], [$rows[3]['sn'], $rows[3]['position']]);
+        // Nothing changed: nothing written.
+        Db::exec('UPDATE olt_onus SET seen_at=seen_at-INTERVAL 5 MINUTE');
+        OltSync::saveOnus($olt, [$onu(1, 'HWTC00000001', 'Ana Hoxha'), $onu(7, 'HWTC00000002', 'Ben', 0), $onu(4, 'HWTC00000004', 'Dea')]);
+        $this->assertSame([], array_column(array_slice(Db::select('SELECT action,detail FROM olt_changes ORDER BY id'), 5), 'detail', 'action'));
+    }
+
+    public function test_a_changed_configuration_is_in_the_changelog_without_its_secrets(): void
+    {
+        $this->startAgent();
+        $olt = $this->olt(false);
+        $this->assertTrue(OltInventory::backup($olt));
+        $this->assertSame(0, (int) Db::value('SELECT COUNT(*) FROM olt_changes'));
+        file_put_contents($this->log . '.sysname', 'renamed-olt');
+        $this->assertTrue(OltInventory::backup($olt));
+        $row = Db::row('SELECT * FROM olt_changes');
+        $this->assertSame(['config_changed', 'olt'], [$row['action'], $row['source']]);
+        $diff = json_decode($row['detail'], true);
+        $this->assertSame([' sysname renamed-olt'], $diff['added']);
+        $this->assertSame([' sysname MA5800-X7'], $diff['removed']);
+        $this->assertStringNotContainsString('secret-in-the-config', $row['detail']);
+        $this->assertSame(' snmp-agent community read cipher ***', OltChangelog::mask(' snmp-agent community read cipher "secret-in-the-config"'));
+        $this->assertSame(' ont add 0 3 password-auth *** omci', OltChangelog::mask(' ont add 0 3 password-auth 1234 omci'));
+    }
+
+    public function test_only_terminal_commands_that_change_something_are_kept(): void
+    {
+        $this->startAgent();
+        $olt = $this->olt();
+        foreach (['display ont info 0 1 0 3', 'config', 'interface gpon 0/1', 'quit', 'scroll 512', ''] as $read) {
+            OltChangelog::terminal((int) $olt['id'], $read);
+        }
+        OltChangelog::terminal((int) $olt['id'], 'ont reset 0 3', ['config', 'interface gpon 0/1']);
+        $this->assertSame(['olt_terminal'], array_column(Db::select('SELECT action FROM olt_changes'), 'action'));
+        $this->assertSame('console', Db::value('SELECT source FROM olt_changes'));
+    }
+
+    public function test_the_history_already_in_the_audit_log_is_copied_once(): void
+    {
+        $this->startAgent();
+        $olt = $this->olt();
+        $customer = $this->insertRow('customer_profiles', ['username' => 'gtest', 'account_status' => 'active', 'enabled' => 1]);
+        $this->onu($olt);
+        $this->insertRow('audit_logs', ['actor_username' => 'ana', 'action' => 'onu_reboot', 'entity_type' => 'onu', 'entity_id' => 'HWTC1234ABCD', 'after_json' => json_encode(['olt' => 'olt-1', 'position' => '0/1/0:3', 'commands' => ['ont reset 0 3']]), 'created_at' => '2026-11-10 10:00:00']);
+        $this->insertRow('audit_logs', ['actor_username' => 'ana', 'action' => 'vlan_add', 'entity_type' => 'olt', 'entity_id' => (string) $olt['id'], 'after_json' => json_encode(['vlan' => 300, 'commands' => ['vlan 300 smart']]), 'created_at' => '2026-11-10 10:01:00']);
+        $this->insertRow('audit_logs', ['actor_username' => 'ana', 'action' => 'olt_terminal', 'entity_type' => 'olt', 'entity_id' => (string) $olt['id'], 'after_json' => json_encode(['commands' => ['display version']]), 'created_at' => '2026-11-10 10:02:00']);
+        $this->insertRow('audit_logs', ['actor_username' => 'ana', 'action' => 'backup_download', 'entity_type' => 'olt', 'entity_id' => (string) $olt['id'], 'after_json' => json_encode(['backup' => 1]), 'created_at' => '2026-11-10 10:03:00']);
+        $this->insertRow('audit_logs', ['actor_username' => 'ana', 'action' => 'link_onu', 'entity_type' => 'client', 'entity_id' => 'gtest', 'after_json' => json_encode(['sn' => 'HWTC1234ABCD', 'source' => 'manual']), 'created_at' => '2026-11-10 10:04:00']);
+        $sql = (string) file_get_contents(base_path('database/sql/041_olt_changelog.sql'));
+        $statements = array_filter(array_map('trim', preg_split('/;\s*\n/', (string) preg_replace('/^--.*$/m', '', $sql)) ?: []));
+        foreach ([1, 2] as $run) {
+            foreach ($statements as $statement) {
+                Db::pdo()->exec($statement);
+            }
+        }
+        $rows = Db::select('SELECT actor,action,sn,position,detail FROM olt_changes ORDER BY created_at');
+        $this->assertSame(['onu_reboot', 'vlan_add', 'link_onu'], array_column($rows, 'action'));
+        $this->assertSame(['HWTC1234ABCD', '0/1/0:3'], [$rows[0]['sn'], $rows[0]['position']]);
+        $this->assertSame('gtest', json_decode($rows[2]['detail'], true)['client']);
+        $this->assertGreaterThan(0, $customer);
     }
 
     public function test_each_olt_has_its_own_signal_levels(): void
