@@ -4,6 +4,14 @@ RadiusOne follows [semantic versioning](https://semver.org): **major** for chang
 upgrading, **minor** for new features, **patch** for fixes. The version is in the `VERSION` file and shows in
 the portal's sidebar and under Settings → System information.
 
+## 2.19.0 (2026-11-19)
+
+A new top for the OLT's page. Update with **Settings → Overview → Software update** or `sudo radiusone-update`.
+
+- **The OLT's front panel:** every slot, card and port with its light; a PON port shows its customers online, and choosing
+  it lists its ONUs in place.
+- **A customers column** (online, offline, weak signal, uplinks, needs a look), grouped tabs, and a layout for phones.
+
 ## 2.18.0 (2026-11-19)
 
 A changelog for each OLT. Update with **Settings → Overview → Software update** or `sudo radiusone-update`.

@@ -164,6 +164,18 @@ final class OltController extends Controller
         if (in_array($status, ['online', 'offline'], true)) {
             $where .= ' AND o.status=?';
             $params[] = $status;
+        } elseif ($status === 'weak') {
+            $weak = (float) ($olt['rx_warning'] ?? -27);
+            $where .= ' AND (o.rx_dbm<? OR o.olt_rx_dbm<?)';
+            array_push($params, $weak, $weak);
+        }
+        // One PON port, chosen on the OLT's front panel: "frame/slot/port".
+        $port = trim((string) $request->query('port', ''));
+        if (preg_match('~^(\d{1,2})/(\d{1,2})/(\d{1,3})$~D', $port, $at)) {
+            $where .= ' AND o.frame=? AND o.slot=? AND o.port=?';
+            array_push($params, (int) $at[1], (int) $at[2], (int) $at[3]);
+        } else {
+            $port = '';
         }
         if ($q !== '') {
             $like = '%' . addcslashes($q, '%_\\') . '%';
@@ -183,7 +195,7 @@ final class OltController extends Controller
                 'error' => (string) ($olt['last_error'] ?? ''), 'macError' => (string) ($olt['last_mac_error'] ?? ''),
             ],
             'counts' => array_map('intval', $counts ?? []),
-            'filters' => ['q' => $q, 'status' => $status],
+            'filters' => ['q' => $q, 'status' => $status, 'port' => $port],
             'hardware' => self::hardware($olt),
             'details' => self::details($olt),
             'backups' => Auth::can('nas.manage') ? array_map(static fn (array $b) => ['id' => (int) $b['id'], 'taken' => (string) $b['taken_at'], 'checked' => (string) $b['checked_at'], 'bytes' => (int) $b['bytes']], Db::select('SELECT id,taken_at,checked_at,bytes FROM olt_config_backups WHERE olt_id=? ORDER BY taken_at DESC,id DESC', [$olt['id']])) : null,

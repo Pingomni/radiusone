@@ -775,6 +775,20 @@ final class OltManageTest extends TestCase
         $this->assertGreaterThan(0, $customer);
     }
 
+    public function test_the_onu_list_shows_one_port_or_the_weak_signals(): void
+    {
+        $this->startAgent();
+        $olt = $this->olt(false);
+        $a = $this->onu($olt);
+        $b = $this->insertRow('olt_onus', ['olt_id' => $olt['id'], 'frame' => 0, 'slot' => 1, 'port' => 15, 'ont_id' => 0, 'sn' => 'HWTC0000000F', 'description' => 'Other port', 'status' => 'online', 'active' => 1, 'rx_dbm' => -29.5, 'seen_at' => date('Y-m-d H:i:s')]);
+        $this->actingAsOperator('view');
+        $this->get("/olts/{$olt['id']}?port=0/1/15")->assertInertia(fn ($p) => $p->where('filters.port', '0/1/15')->where('result.total', 1)->where('result.rows.0.id', $b));
+        $this->get("/olts/{$olt['id']}?status=weak")->assertInertia(fn ($p) => $p->where('result.total', 1)->where('result.rows.0.sn', 'HWTC0000000F'));
+        $this->get("/olts/{$olt['id']}?port=0/1/0&status=online")->assertInertia(fn ($p) => $p->where('result.total', 1)->where('result.rows.0.id', $a));
+        // Anything else is no filter at all, not an error.
+        $this->get("/olts/{$olt['id']}?port=0/1/15;drop")->assertInertia(fn ($p) => $p->where('filters.port', '')->where('result.total', 2));
+    }
+
     public function test_each_olt_has_its_own_signal_levels(): void
     {
         $this->startAgent();
