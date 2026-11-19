@@ -1,5 +1,5 @@
 import { Link } from '@inertiajs/react';
-import { useMemo, useRef, useState, type ReactNode } from 'react';
+import { useMemo, useRef, useState, type HTMLAttributes, type ReactNode } from 'react';
 import type { Paginated } from '@/lib/types';
 
 export interface Column<T> {
@@ -23,6 +23,8 @@ type TableProps<T> = {
     resetHref?: string;
     emptyText?: ReactNode;
     perPage?: number;
+    /** Extra attributes for a row (a selected class, a click handler). */
+    rowProps?: (row: T) => HTMLAttributes<HTMLTableRowElement>;
 };
 
 function textOf(node: ReactNode): string {
@@ -35,7 +37,7 @@ function textOf(node: ReactNode): string {
  * Data table with the legacy behaviour: data-label per cell for the mobile card layout,
  * client-side pages of 30 for unpaginated lists, and CSV export of what is on screen.
  */
-export function DataTable<T>({ columns, rows, rowKey, exportRows = false, serverPaginated = false, resetHref, emptyText = 'No records found.', perPage = 30 }: TableProps<T>) {
+export function DataTable<T>({ columns, rows, rowKey, exportRows = false, serverPaginated = false, resetHref, emptyText = 'No records found.', perPage = 30, rowProps }: TableProps<T>) {
     const [page, setPage] = useState(1);
     const tableRef = useRef<HTMLTableElement>(null);
     const paged = !serverPaginated && rows.length > perPage;
@@ -88,7 +90,7 @@ export function DataTable<T>({ columns, rows, rowKey, exportRows = false, server
                             </tr>
                         )}
                         {visible.map((row, index) => (
-                            <tr key={rowKey ? rowKey(row, index) : index}>
+                            <tr key={rowKey ? rowKey(row, index) : index} {...rowProps?.(row)}>
                                 {columns.map((c, i) => {
                                     const content = c.cell(row, index);
                                     const plain = textOf(content);

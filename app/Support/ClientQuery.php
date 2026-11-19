@@ -41,9 +41,10 @@ final class ClientQuery
         $pages = max(1, (int) ceil($total / $size));
         $page = max(1, min($pages, $page));
         $offset = ($page - 1) * $size;
+        $order = ($filters['status'] ?? '') === 'expiring' ? 'c.expiry_date, c.username' : 'c.updated_at DESC, c.id DESC';
         $rows = Db::select("SELECT c.*, s.name AS service_name
             FROM customer_profiles c LEFT JOIN service_metadata s ON s.group_name=c.service_group
-            WHERE $where ORDER BY c.updated_at DESC, c.id DESC LIMIT $size OFFSET $offset", $params);
+            WHERE $where ORDER BY $order LIMIT $size OFFSET $offset", $params);
         self::accountingForPage($rows);
         return compact('rows', 'total', 'page', 'pages', 'size');
     }
@@ -175,7 +176,29 @@ final class ClientQuery
         } elseif ($status === 'expired') {
             $conditions[] = '(c.account_status="expired" OR (c.enabled=1 AND c.account_status="active" AND c.expiry_date < ?))';
             $params[] = Entitlement::today();
+        } elseif ($status === 'expiring') {
+            // Active clients whose service ends within the next 7 days (the Overview's "Expiring this week").
+            $conditions[] = 'c.enabled=1 AND c.account_status="active" AND c.expiry_date >= ? AND c.expiry_date <= ?';
+            $params[] = Entitlement::today();
+            $params[] = date('Y-m-d', strtotime(Entitlement::today() . ' +7 days'));
         }
         return [implode(' AND ', $conditions), $params];
+    }
+
+    /**
+     * How many clients each view tab of the client list holds, by the same rules as the status filter.
+     * Cached for 30 seconds: the counts sit beside the tabs, not in the rows.
+     *
+     * @return array<string, int>
+     */
+    public static function viewCounts(): array
+    {
+        return MicroCache::remember('clients:view-counts:' . Entitlement::today(), 30, static function (): array {
+            $counts = [];
+            foreach (['', 'online', 'expiring', 'expired', 'suspended', 'disabled', 'archived'] as $status) {
+                $counts[$status === '' ? 'all' : $status] = self::count(['status' => $status]);
+            }
+            return $counts;
+        });
     }
 }

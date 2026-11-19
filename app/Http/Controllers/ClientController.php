@@ -20,6 +20,7 @@ use App\Support\Currency;
 use App\Support\Db;
 use App\Support\Diagnostics;
 use App\Support\Documents;
+use App\Support\Entitlement;
 use App\Support\License;
 use App\Support\NetworkOperations;
 use App\Support\RadiusRepository;
@@ -61,8 +62,10 @@ final class ClientController extends Controller
     {
         $filters = array_map(static fn ($v) => is_scalar($v) ? trim((string) $v) : '', $request->only(self::FILTERS)) + array_fill_keys(self::FILTERS, '');
         $result = ClientQuery::page($request->query(), (int) $request->query('page', 1));
+        $today = strtotime(Entitlement::today());
         return Inertia::render('clients/Index', [
             'filters' => $filters,
+            'counts' => ClientQuery::viewCounts(),
             'plans' => array_map(static fn ($p) => ['value' => (string) $p['group_name'], 'label' => (string) ($p['name'] ?: $p['group_name'])], Db::select('SELECT group_name, name FROM service_metadata ORDER BY name')),
             'nasOptions' => array_map(static fn ($n) => ['value' => (string) $n['nasname'], 'label' => trim(($n['shortname'] ?: 'NAS') . ' - ' . $n['nasname'], ' -')], Db::select('SELECT nasname, shortname FROM nas ORDER BY shortname, nasname')),
             'result' => [
@@ -84,8 +87,13 @@ final class ClientController extends Controller
                     'online' => (bool) $r['online_ip'],
                     'traffic' => Format::bytes((int) $r['down'] + (int) $r['up']),
                     'expiry' => (string) ($r['expiry_date'] ?: '-'),
+                    'expiresIn' => $r['expiry_date'] ? (int) round((strtotime((string) $r['expiry_date']) - $today) / 86400) : null,
                     'balance' => Format::money($r['balance']),
+                    'owes' => (float) $r['balance'] < 0,
                     'archived' => Clients::isArchived($r),
+                    'name' => Clients::displayName($r),
+                    'live' => $r['online_count'] ? 'online' : ($r['stale_count'] ? 'stale' : 'offline'),
+                    'account' => Clients::statusLabel($r),
                 ], $result['rows']),
             ],
         ]);
@@ -246,6 +254,61 @@ final class ClientController extends Controller
         $row = Db::row('SELECT * FROM customer_profiles WHERE username = ?', [$username]);
         abort_if(!$row, 404, 'Client not found.');
         return response()->json(Clients::overview($row))->header('Cache-Control', 'no-store');
+    }
+
+    /** The client list's side panel: subscription, balance, connection and fibre signal of one client. */
+    public function panel(string $username): JsonResponse
+    {
+        $row = Db::row('SELECT c.*, s.name AS service_name, s.download_speed, s.upload_speed, s.price, s.currency, s.billing_period
+            FROM customer_profiles c LEFT JOIN service_metadata s ON s.group_name = c.service_group WHERE c.username = ?', [$username]);
+        abort_if(!$row, 404, 'Client not found.');
+        $ids = ClientQuery::usernames($username);
+        $live = Db::row('SELECT r.framedipaddress, r.nasipaddress, r.callingstationid, r.acctstarttime, r.acctinputoctets, r.acctoutputoctets, n.shortname
+            FROM radacct r LEFT JOIN nas n ON n.nasname = r.nasipaddress OR n.shortname = r.nasipaddress
+            WHERE ' . ClientQuery::inUsernames('r.username', $ids) . ' AND ' . Accounting::freshSql('r') . ' ORDER BY r.acctstarttime DESC LIMIT 1', $ids);
+        $expiry = (string) ($row['expiry_date'] ?? '');
+        $days = $expiry !== '' ? (int) round((strtotime($expiry) - strtotime(Entitlement::today())) / 86400) : null;
+        $onu = null;
+        try {
+            $onu = Db::row('SELECT o.rx_dbm, o.olt_rx_dbm, o.status, o.frame, o.slot, o.port, o.ont_id, o.id, t.id AS olt_id, t.name AS olt, t.rx_warning, t.rx_critical
+                FROM customer_onus l JOIN olt_onus o ON o.olt_id = l.olt_id AND o.sn = l.sn JOIN olts t ON t.id = l.olt_id WHERE l.customer_id = ? LIMIT 1', [(int) $row['id']]);
+        } catch (Throwable) {
+            $onu = null;
+        }
+        $speed = trim(implode(' down, ', array_filter([(string) ($row['download_speed'] ?? ''), (string) ($row['upload_speed'] ?? '')])), ' ,');
+        $status = Clients::statusLabel($row);
+
+        return response()->json([
+            'username' => $username,
+            'name' => Clients::displayName($row),
+            'phone' => (string) (($row['cell_phone'] ?? '') ?: ($row['phone'] ?? '')),
+            'account' => ['label' => ucfirst($status), 'tone' => match ($status) {
+                'enabled' => 'good', 'expired' => 'warning', 'draft' => 'neutral', default => 'danger'
+            }],
+            'service' => [
+                'name' => (string) (($row['service_name'] ?? '') ?: ($row['service_group'] ?? '')),
+                'speed' => $speed !== '' ? $speed . ' up' : '',
+                'price' => $row['price'] !== null && (float) $row['price'] > 0 ? Currency::amount($row['price'], (string) ($row['currency'] ?: Currency::code())) . ' ' . ($row['billing_period'] === 'monthly' ? 'a month' : (string) $row['billing_period']) : '',
+            ],
+            'expiry' => ['date' => $expiry, 'days' => $days, 'tone' => $days === null ? '' : ($days < 0 ? 'danger' : ($days <= 7 ? 'warning' : ''))],
+            'balance' => Auth::can('billing.view') ? ['text' => Format::money($row['balance']), 'owes' => (float) $row['balance'] < 0] : null,
+            'live' => $live ? [
+                'ip' => (string) $live['framedipaddress'],
+                'nas' => (string) ($live['shortname'] ?: $live['nasipaddress']),
+                'mac' => (string) $live['callingstationid'],
+                'since' => (string) $live['acctstarttime'],
+                'traffic' => Format::bytes((int) $live['acctinputoctets'] + (int) $live['acctoutputoctets']),
+            ] : null,
+            'onu' => $onu && Auth::can('nas.view') ? [
+                'rx' => $onu['rx_dbm'] === null ? null : (float) $onu['rx_dbm'],
+                'oltRx' => $onu['olt_rx_dbm'] === null ? null : (float) $onu['olt_rx_dbm'],
+                'weak' => (float) $onu['rx_warning'],
+                'veryWeak' => (float) $onu['rx_critical'],
+                'where' => $onu['olt'] . ', ' . $onu['frame'] . '/' . $onu['slot'] . '/' . $onu['port'] . ', ONU ' . $onu['ont_id'],
+                'href' => '/olts/' . (int) $onu['olt_id'] . '/onus/' . (int) $onu['id'],
+                'online' => $onu['status'] === 'online',
+            ] : null,
+        ])->header('Cache-Control', 'no-store');
     }
 
     /** Download and upload per day (7 or 30 days) or per month (12 months), for the client page's Usage card. */
