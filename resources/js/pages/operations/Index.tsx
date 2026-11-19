@@ -14,7 +14,7 @@ export default function Operations({ worker, metrics, operations }: { worker: { 
         <AppLayout title="Network operations">
             {worker.stuck && (
                 <div className="flash danger" role="status">
-                    <strong>The network worker is not running.</strong> {worker.detail} Queued changes stay here until the network operations worker is scheduled.
+                    <strong>The network worker is not running.</strong> {worker.detail} Queued changes wait here until it runs.
                 </div>
             )}
             <MetricCards metrics={metrics} />

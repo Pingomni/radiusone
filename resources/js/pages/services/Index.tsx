@@ -1,3 +1,4 @@
+import Icon from '@/components/Icon';
 import { Link } from '@inertiajs/react';
 import { DeleteButton } from '@/components/confirm';
 import { DataTable } from '@/components/table';
@@ -25,14 +26,16 @@ function DeleteControl({ s }: { s: Service }) {
 export default function Services({ services }: { services: Service[] }) {
     const can = useCan();
     return (
-        <AppLayout title="Services">
-            {can('services.manage') && (
-                <div className="toolbar">
-                    <Link className="button" href="/services/ip-pools">Manage IP pools</Link>
-                    <Link className="button primary" href="/services/create">New service plan</Link>
-                </div>
-            )}
-            <Panel title="Internet Service Plans">
+        <AppLayout
+            title="Services"
+            actions={can('services.manage') ? (
+                <>
+                    <Link className="button" href="/services/ip-pools">Static IP pools</Link>
+                    <Link className="button primary" href="/services/create"><Icon name="plus" />New service plan</Link>
+                </>
+            ) : undefined}
+        >
+            <Panel title="Service plans">
                 <DataTable
                     rows={services}
                     rowKey={(s) => s.id}

@@ -10,14 +10,8 @@ type Pool = { id: number; name: string; key: string; ips: number; price: string;
 export default function Pools({ pools }: { pools: Pool[] }) {
     const can = useCan();
     return (
-        <AppLayout title="Static IP Pools">
-            {can('services.manage') && (
-                <div className="toolbar">
-                    <Link className="button primary" href="/services/ip-pools/create">Add IP pool</Link>
-                    <Link className="button" href="/clients">Back to clients</Link>
-                </div>
-            )}
-            <Panel title="Static IP Pools">
+        <AppLayout title="Static IP pools" actions={can('services.manage') ? <Link className="button primary" href="/services/ip-pools/create">Add IP pool</Link> : undefined}>
+            <Panel title="Pools">
                 <DataTable
                     rows={pools}
                     rowKey={(p) => p.id}

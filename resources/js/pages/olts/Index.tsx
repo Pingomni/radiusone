@@ -1,3 +1,4 @@
+import Icon from '@/components/Icon';
 import { Link } from '@inertiajs/react';
 import { DataTable } from '@/components/table';
 import { Badge, Empty, Panel, Time } from '@/components/ui';
@@ -15,13 +16,16 @@ function State({ olt }: { olt: Olt }) {
 export default function OltIndex({ olts }: { olts: Olt[] }) {
     const can = useCan();
     return (
-        <AppLayout title="OLT">
-            <div className="toolbar">
-                <Link className="button" href="/olts/mapping">Client mapping</Link>
-                {can('nas.manage') && <Link className="button primary" href="/olts/create">New OLT</Link>}
-            </div>
+        <AppLayout
+            title="OLT and ONU"
+            actions={(
+                <>
+                    <Link className="button" href="/olts/mapping">Client mapping</Link>
+                    {can('nas.manage') && <Link className="button primary" href="/olts/create"><Icon name="plus" />New OLT</Link>}
+                </>
+            )}
+        >
             <Panel title="OLTs">
-                <p className="hint">The portal only reads from the OLT. It never changes anything on it.</p>
                 {olts.length ? (
                     <DataTable
                         rows={olts}

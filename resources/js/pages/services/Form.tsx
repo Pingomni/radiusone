@@ -23,7 +23,7 @@ export default function ServiceForm({ service, clientCount, expiredOptions, capO
     );
 
     return (
-        <AppLayout title={service.id ? 'Edit Service' : 'New Service'}>
+        <AppLayout title={service.id ? 'Edit service' : 'New service'}>
             <Panel title="Service Plan">
                 <ErrorSummary errors={form.errors} />
                 <form

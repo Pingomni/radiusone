@@ -68,7 +68,7 @@ function StatusBody({ status, restartable }: { status: Status; restartable: Reco
 
 export default function Server({ host, status, history, serverId, restartable }: { host: string; status: Status; history: History; serverId: number; restartable: Record<string, string> }) {
     return (
-        <AppLayout title="RADIUS Server">
+        <AppLayout title="RADIUS server">
             <div className="toolbar">
                 <Link className="button" href="/monitoring">Back to monitoring</Link>
                 <PollButton target={String(serverId)} back="/monitoring/server" label="Poll server now" />

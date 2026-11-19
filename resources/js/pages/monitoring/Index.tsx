@@ -107,15 +107,15 @@ function OverviewBody({ data, canManage }: { data: Overview; canManage: boolean 
 export default function Monitoring({ overview, lastPoll }: { overview: Overview; lastPoll: { age: string; stale: boolean } | null }) {
     const can = useCan();
     return (
-        <AppLayout title="Monitoring">
-            <div className="toolbar">
-                <PollButton target="all" back="/monitoring" label="Poll all devices now" />
-                {lastPoll === null
-                    ? <span className="hint">No poll recorded yet.</span>
-                    : lastPoll.stale
-                        ? <span className="field-warning">The scheduled poller last ran {lastPoll.age} ago. Check <code>/etc/cron.d/radiusone</code>.</span>
-                        : <span className="hint">Polled automatically every minute; last run {lastPoll.age} ago.</span>}
-            </div>
+        <AppLayout
+            title="Monitoring"
+            subtitle={lastPoll === null
+                ? 'No poll yet.'
+                : lastPoll.stale
+                    ? <span className="field-warning">Last poll {lastPoll.age} ago. Check <code>/etc/cron.d/radiusone</code>.</span>
+                    : `Polled every minute, last ${lastPoll.age} ago.`}
+            actions={<PollButton target="all" back="/monitoring" label="Poll now" />}
+        >
             <LivePanel
                 title="Status"
                 url="/monitoring/live"

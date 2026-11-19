@@ -50,9 +50,9 @@ export default function Reports({ filters, metrics, quality, online, daily, sess
     return (
         <AppLayout title="Reports">
             <MetricCards metrics={metrics} />
-            <div className="notice">
-                Counters are cumulative session snapshots, not usage within a day or billing period. Dates use the database timezone. Fresh means an accounting update within five minutes, not verified connectivity. Open stale/unknown sessions: {quality.stale}; timestamp/counter anomalies: {quality.anomalous}. Raw records are retained.
-            </div>
+            {(quality.stale > 0 || quality.anomalous > 0) && (
+                <p className="notice">Sessions without a recent update: {quality.stale}. Sessions with odd times or counters: {quality.anomalous}.</p>
+            )}
             <div className="stack-panels">
                 <Panel title="Open accounting sessions (latest 200)">
                     <DataTable

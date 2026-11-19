@@ -24,7 +24,6 @@ export default function OltMapping({ filters, counts, canLink, result }: { filte
     const client = (u: string) => `/clients/${encodeURIComponent(u)}`;
     return (
         <AppLayout title="Client mapping">
-            <div className="toolbar"><Link className="button" href="/olts">All OLTs</Link></div>
             <StatCards stats={[
                 { label: 'Linked', value: String(counts.linked), note: `of ${counts.all} clients`, tone: '' },
                 { label: 'No ONU yet', value: String(counts.unlinked), note: '', tone: counts.unlinked ? 'warning' : '' },

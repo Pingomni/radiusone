@@ -12,13 +12,17 @@ type Device = { id: number; name: string; ip: string; vendor: string; enabled: b
 export default function NasIndex({ devices }: { devices: Device[] }) {
     const can = useCan();
     return (
-        <AppLayout title="NAS Devices">
-            <div className="toolbar">
-                <Link className="button" href="/monitoring"><Icon name="activity" />Monitoring</Link>
-                {can('nas.manage') && <Link className="button primary" href="/nas/create">New NAS device</Link>}
-            </div>
+        <AppLayout
+            title="NAS devices"
+            actions={(
+                <>
+                    <Link className="button" href="/monitoring"><Icon name="activity" />Monitoring</Link>
+                    {can('nas.manage') && <Link className="button primary" href="/nas/create"><Icon name="plus" />New NAS device</Link>}
+                </>
+            )}
+        >
             <UnknownRouters canAdd={can('nas.manage')} />
-            <Panel title="BRAS / NAS Devices">
+            <Panel title="Routers">
                 <DataTable
                     rows={devices}
                     rowKey={(d) => d.id}

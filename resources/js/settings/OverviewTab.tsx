@@ -12,7 +12,7 @@ function Destination({ title, href, icon, status }: { title: string; description
             <span className="account-section-icon"><Icon name={icon} /></span>
             <h3>{title}</h3>
             <span className="settings-destination-status">{status}</span>
-            <span className="settings-destination-action">Configure <span aria-hidden="true">→</span></span>
+            <span className="settings-destination-action">Configure</span>
         </Link>
     );
 }

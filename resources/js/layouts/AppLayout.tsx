@@ -367,7 +367,7 @@ export default function AppLayout({ title, heading = true, subtitle, actions, ch
                             {place ? (
                                 <>
                                     <span>{place.group}</span>
-                                    {place.label === title ? <span aria-current="page">{title}</span> : <><Link href={place.href}>{place.label}</Link><span aria-current="page">{title}</span></>}
+                                    {place.label.toLowerCase() === title.toLowerCase() ? <span aria-current="page">{title}</span> : <><Link href={place.href}>{place.label}</Link><span aria-current="page">{title}</span></>}
                                 </>
                             ) : <span aria-current="page">{title}</span>}
                         </nav>

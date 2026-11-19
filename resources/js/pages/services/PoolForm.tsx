@@ -10,7 +10,7 @@ export default function PoolForm({ pool, isNew }: { pool: PoolValues; isNew: boo
     const form = useForm<PoolValues>(pool);
     const { currency } = useShared();
     return (
-        <AppLayout title={isNew ? 'Add IP Pool' : 'Edit IP Pool'}>
+        <AppLayout title={isNew ? 'Add IP pool' : 'Edit IP pool'}>
             <Panel title="Static IP Pool">
                 <ErrorSummary errors={form.errors} />
                 <form className="form-grid" onSubmit={(event) => { event.preventDefault(); form.post('/services/ip-pools/save', { preserveScroll: true }); }}>

@@ -37,7 +37,7 @@ export default function UserForm({ user, self, roles, roleDescriptions }: {
     };
 
     return (
-        <AppLayout title={user ? 'Edit User' : 'New User'}>
+        <AppLayout title={user ? 'Edit user' : 'New user'}>
             <div className="settings-console">
                 <SettingsLinkNav active="users" />
                 <Link className="account-back" href="/settings?tab=users">‹ All users</Link>

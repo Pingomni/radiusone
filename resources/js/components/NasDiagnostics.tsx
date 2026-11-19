@@ -166,7 +166,7 @@ export function UnknownRouters({ canAdd }: { canAdd: boolean }) {
     return (
         <section className="panel">
             <h2>Addresses not in your NAS list</h2>
-            <p className="hint">These sent RADIUS requests in the last 24 hours and were refused. Add the ones that are your routers. Addresses you don&apos;t recognise may be scanners on the internet: don&apos;t add those.</p>
+            <p className="hint">Refused in the last 24 hours. Add only your own routers.</p>
             <UnknownRouterTable
                 rows={rows}
                 action={canAdd ? (address) => <Link className="link" href={`/nas/create?nasname=${encodeURIComponent(address)}`}>Add as NAS</Link> : undefined}

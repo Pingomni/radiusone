@@ -3,7 +3,7 @@ import Icon from '@/components/Icon';
 import NasDiagnostics from '@/components/NasDiagnostics';
 import { DataTable } from '@/components/table';
 import { Tabs } from '@/components/tabs';
-import { Badge, Check, ConnectionState, Empty, ErrorSummary, Field, Panel, Select } from '@/components/ui';
+import { Check, ConnectionState, Empty, ErrorSummary, Field, Panel, Select, Status } from '@/components/ui';
 import AppLayout from '@/layouts/AppLayout';
 import { bind, bindCheck } from '@/lib/form';
 
@@ -142,15 +142,17 @@ function Summary({ nas }: { nas: NasInfo }) {
     return (
         <section className="client-hero nas-summary" aria-label="NAS summary">
             <div className="client-identity">
-                <span className="client-avatar nas-avatar" aria-hidden="true"><Icon name="server" /></span>
                 <div className="client-identity-text">
-                    <h2>{nas.name}</h2>
+                    <h1>{nas.name}</h1>
                     <div className="client-identity-meta">
-                        <code>{nas.ip}</code>
-                        <Badge tone="info">{nas.vendorLabel}</Badge>
-                        {nas.enabled ? <Badge tone="success">accepting RADIUS</Badge> : <Badge tone="danger">RADIUS disabled</Badge>}
+                        <span className="mono">{nas.ip}</span>
+                        <span>{nas.vendorLabel}</span>
+                        <Status tone={nas.enabled ? 'good' : 'danger'}>{nas.enabled ? 'Accepting RADIUS' : 'RADIUS turned off'}</Status>
                     </div>
                     {nas.description && <div className="client-contacts"><span>{nas.description}</span></div>}
+                </div>
+                <div className="client-hero-actions">
+                    <Link className="button" href={`/nas/${nas.id}/monitor`}><Icon name="signal" />Live monitor</Link>
                 </div>
             </div>
             <div className="client-stats">
@@ -174,7 +176,7 @@ export default function NasForm({ device, vendors, setupSteps, canManage, nas, a
 }) {
     if (!nas) {
         return (
-            <AppLayout title="New NAS Device">
+            <AppLayout title="New NAS device">
                 <div className="toolbar"><Link className="button" href="/nas">Back to NAS devices</Link></div>
                 <Panel title="New NAS device">
                     <p className="hint">Add the router first. The RouterOS API and SNMP monitoring are set up on its page afterwards.</p>
@@ -190,11 +192,7 @@ export default function NasForm({ device, vendors, setupSteps, canManage, nas, a
     }
 
     return (
-        <AppLayout title="Edit NAS Device" heading={false}>
-            <div className="toolbar">
-                <Link className="button" href="/nas">Back to NAS devices</Link>
-                <Link className="button" href={`/nas/${nas.id}/monitor`}><Icon name="signal" />Live monitor</Link>
-            </div>
+        <AppLayout title={nas.name} heading={false}>
             <Summary nas={nas} />
             <Tabs
                 label="NAS settings"
