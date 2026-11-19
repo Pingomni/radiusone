@@ -1581,14 +1581,15 @@ tr.is-clickable { cursor: pointer; }
    -------------------------------------------------------------------------- */
 .client-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 300px;
-  gap: var(--sp-3);
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: var(--sp-4);
   align-items: start;
 }
+.client-layout.is-new { grid-template-columns: minmax(0, 1fr); max-width: 1100px; }
 .client-layout > form { min-width: 0; margin: 0; }
 .client-layout > form > .tabs { overflow: clip; }
-.client-layout > form > .tabs > .tab-buttons { background: var(--surface-2); border-radius: var(--radius) var(--radius) 0 0; }
-.client-layout .tab { display: grid; gap: var(--sp-3); padding: var(--sp-3); }
+.client-layout > form > .tabs > .tab-buttons { background: var(--surface); border-radius: var(--radius) var(--radius) 0 0; }
+.client-layout .tab { display: grid; gap: var(--sp-4); padding: var(--sp-4); }
 .client-layout .tab[hidden] { display: none; }
 .client-layout .tab > .toolbar { justify-content: flex-end; }
 .client-layout .tab > .table-wrap { border: 1px solid var(--line); border-radius: var(--radius); }
@@ -1596,17 +1597,8 @@ tr.is-clickable { cursor: pointer; }
 .client-layout > form > .tabs:has(+ .sticky-actions) { border-radius: var(--radius) var(--radius) 0 0; }
 
 /* Profile header: identity, quick actions and key figures above the tabs. */
-.client-hero {
-  display: grid;
-  gap: var(--sp-3);
-  margin-bottom: var(--sp-3);
-  padding: var(--sp-3) var(--sp-4);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--surface);
-  box-shadow: var(--shadow-sm);
-}
-.client-identity { display: flex; align-items: center; gap: var(--sp-3); min-width: 0; }
+.client-hero { display: grid; gap: var(--sp-4); }
+.client-identity { display: flex; align-items: flex-end; gap: var(--sp-3) var(--sp-4); min-width: 0; }
 .client-avatar {
   display: grid;
   place-items: center;
@@ -1621,30 +1613,29 @@ tr.is-clickable { cursor: pointer; }
   font-weight: 700;
   letter-spacing: .02em;
 }
-.client-identity-text { display: grid; gap: 4px; flex: 1; min-width: 0; }
-.client-identity-text h2 { margin: 0; color: var(--text-strong); font-size: var(--fs-2xl); line-height: 1.2; overflow-wrap: anywhere; }
-.client-identity-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.client-identity-text { display: grid; gap: 6px; flex: 1; min-width: 0; }
+.client-identity-text h1 { margin: 0; color: var(--text-strong); font-size: 24px; letter-spacing: -.022em; line-height: 1.2; overflow-wrap: anywhere; }
+.client-identity-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; color: var(--text-muted); }
 .client-identity-meta code { padding: 1px 6px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface-2); color: var(--text); font-family: var(--font-mono); font-size: var(--fs-sm); }
 .client-contacts { display: flex; flex-wrap: wrap; gap: 2px var(--sp-4); color: var(--text-muted); font-size: var(--fs-sm); }
 .client-contacts span { display: inline-flex; align-items: center; gap: 5px; min-width: 0; overflow-wrap: anywhere; }
 .client-contacts svg.icon { width: 13px; height: 13px; flex: none; }
-.client-hero-actions { display: flex; flex-wrap: wrap; gap: var(--sp-2); align-self: flex-start; }
+.client-hero-actions { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+/* Key figures of a client (and of a client's billing): the same strip of numbers as the rest of the portal. */
 .client-stats {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  overflow: hidden;
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  background: var(--surface-2);
+  background: var(--surface);
 }
-.client-stat { display: grid; gap: 2px; min-width: 0; padding: var(--sp-2) var(--sp-3); border-left: 3px solid transparent; }
-.client-stat + .client-stat { box-shadow: -1px 0 0 var(--line); }
+.client-stat { display: grid; align-content: start; gap: 2px; min-width: 0; padding: 13px 18px 14px; box-shadow: -1px 0 0 var(--line), 0 -1px 0 var(--line); }
 .client-stat > span { color: var(--text-muted); font-size: var(--fs-sm); }
-.client-stat > strong { color: var(--text-strong); font-size: var(--fs-xl); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.client-stat > strong { color: var(--text-strong); font-size: 20px; font-weight: 600; letter-spacing: -.02em; line-height: 1.25; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .client-stat > small { color: var(--text-muted); font-size: var(--fs-sm); }
-.client-stat.tone-warning { border-left-color: var(--warning); }
-.client-stat.tone-warning > small { color: var(--warning); font-weight: 600; }
-.client-stat.tone-danger { border-left-color: var(--danger); }
-.client-stat.tone-danger > small { color: var(--danger); font-weight: 600; }
+.client-stat.tone-warning > small, .client-stat.tone-warning > strong { color: var(--warning); }
+.client-stat.tone-danger > small, .client-stat.tone-danger > strong { color: var(--danger); }
 
 .client-layout .tab-buttons svg.icon { width: 15px; height: 15px; }
 .tab-count {
@@ -1659,18 +1650,18 @@ tr.is-clickable { cursor: pointer; }
   font-size: var(--fs-xs);
   font-variant-numeric: tabular-nums;
 }
-.tab-buttons > button.active .tab-count { background: var(--accent-bg); color: var(--accent); }
+.tab-buttons > button.active .tab-count { background: var(--neutral-bg); color: var(--text-strong); }
 
 /* Form groups inside the client tabs. */
 .client-section { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
-.client-section-head { display: flex; align-items: center; gap: var(--sp-2); padding: var(--sp-2) var(--sp-3); border-bottom: 1px solid var(--line); background: var(--surface-2); border-radius: var(--radius) var(--radius) 0 0; }
+.client-section-head { display: flex; align-items: center; gap: var(--sp-2); padding: 10px var(--sp-3); border-bottom: 1px solid var(--line); border-radius: var(--radius) var(--radius) 0 0; }
 .client-section-head h3 { margin: 0; color: var(--text-strong); font-size: var(--fs-md); }
 .client-section-head p { margin: 0; color: var(--text-muted); font-size: var(--fs-sm); }
 .client-section > .form-grid { padding: var(--sp-3); }
 .client-section .alert-options { align-items: center; gap: var(--sp-2) var(--sp-4); padding: var(--sp-2) var(--sp-3); border: 1px dashed var(--line-strong); border-radius: var(--radius); }
 .alert-options-label { color: var(--text); font-size: var(--fs-sm); font-weight: 600; }
 
-.overview { position: sticky; top: calc(var(--topbar-h) + var(--sp-3)); padding: 0 var(--sp-3) var(--sp-3); }
+.overview { position: sticky; top: calc(8px + var(--topbar-h) + var(--sp-4)); padding: 0 var(--sp-3) var(--sp-3); }
 /* Client page right column: the Usage card, then the (sticky) Account Overview. */
 .client-side { display: grid; gap: var(--sp-3); align-self: stretch; align-content: start; min-width: 0; }
 
@@ -2172,7 +2163,7 @@ tr.is-clickable { cursor: pointer; }
   .traffic-filter-if { flex: 1 1 100%; }
   .nas-monitor-grid { grid-template-columns: minmax(0, 1fr); }
   .nas-gauges { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .client-hero { padding: var(--sp-3); }
+  .client-hero { padding: 0; }
   .client-identity { flex-wrap: wrap; }
   .client-avatar { width: 44px; height: 44px; font-size: var(--fs-lg); }
   .client-hero-actions { flex-basis: 100%; }

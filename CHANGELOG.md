@@ -4,6 +4,13 @@ RadiusOne follows [semantic versioning](https://semver.org): **major** for chang
 upgrading, **minor** for new features, **patch** for fixes. The version is in the `VERSION` file and shows in
 the portal's sidebar and under Settings → System information.
 
+## 2.25.0 (2026-11-19)
+
+A new client page. Update with **Settings → Overview → Software update** or `sudo radiusone-update`.
+
+- **Name as title, key figures in one strip,** and an Overview tab with data used and recent sessions.
+- **Shorter hints and notices.**
+
 ## 2.24.0 (2026-11-19)
 
 A new client list. Update with **Settings → Overview → Software update** or `sudo radiusone-update`.

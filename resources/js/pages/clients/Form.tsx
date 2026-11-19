@@ -58,10 +58,9 @@ function ProfileHeader({ username, header }: { username: string; header: Header 
     return (
         <section className="client-hero" aria-label="Client summary">
             <div className="client-identity">
-                <span className="client-avatar" aria-hidden="true">{header.initials}</span>
                 <div className="client-identity-text">
-                    <h2>{header.name}</h2>
-                    <div className="client-identity-meta"><code>{username}</code><Tag tag={header.status} /><Tag tag={header.auth} /></div>
+                    <h1>{header.name}</h1>
+                    <div className="client-identity-meta"><span className="mono">{username}</span><Tag tag={header.status} />{header.auth.text !== 'PPPoE' && <Tag tag={header.auth} />}</div>
                     {header.contacts.length > 0 && (
                         <div className="client-contacts">{header.contacts.map((c) => <span key={c.icon}><Icon name={c.icon} />{c.text}</span>)}</div>
                     )}
@@ -80,7 +79,7 @@ function OverviewPanel({ username, initial }: { username: string; initial: Overv
     const enc = encodeURIComponent(username);
     return (
         <LivePanel
-            title="Account Overview"
+            title="Account"
             url={`/clients/${enc}/overview`}
             interval={15}
             initial={initial}
@@ -94,7 +93,7 @@ function OverviewPanel({ username, initial }: { username: string; initial: Overv
                     {o.revealPassword && (
                         <>
                             <PostButton action={`/clients/${enc}/reveal-password`} className="button wide" label="Reveal saved password" />
-                            <small className="overview-note">Requires recent sign-in confirmation. Each reveal is recorded in the audit log.</small>
+                            <small className="overview-note">Each reveal is logged.</small>
                         </>
                     )}
                     {o.disconnect && (o.disconnect.ready ? (
@@ -134,7 +133,6 @@ function TrafficGraph({ rows }: { rows: { day: string; down: number; up: number 
     return (
         <div className="traffic-graph">
             <svg viewBox="0 0 760 250" role="img" aria-label="Cumulative session counters grouped by last update date">
-                <text className="traffic-title" x="380" y="18" textAnchor="middle">Session totals by last update date</text>
                 <text className="traffic-axis" x="18" y={top + plotHeight / 2} transform={`rotate(-90 18 ${top + plotHeight / 2})`}>Data</text>
                 <rect className="traffic-plot" x={left} y={top} width={plotWidth} height={plotHeight} />
                 <g className="traffic-grid">
@@ -154,8 +152,8 @@ function TrafficGraph({ rows }: { rows: { day: string; down: number; up: number 
                 <g className="traffic-labels">{rows.map((r, i) => <text key={r.day} x={xAt(i)} y="198" textAnchor="middle">{r.day.slice(5)}</text>)}</g>
             </svg>
             <div className="traffic-legend">
-                <span><i className="legend-down" />DL Cur: {bytes(latest.down)} Avg: {bytes(Math.round(avg('down')))} Max: {bytes(peak('down'))}</span>
-                <span><i className="legend-up" />UL Cur: {bytes(latest.up)} Avg: {bytes(Math.round(avg('up')))} Max: {bytes(peak('up'))}</span>
+                <span><i className="legend-down" />Download: latest {bytes(latest.down)}, average {bytes(Math.round(avg('down')))}, peak {bytes(peak('down'))}</span>
+                <span><i className="legend-up" />Upload: latest {bytes(latest.up)}, average {bytes(Math.round(avg('up')))}, peak {bytes(peak('up'))}</span>
             </div>
         </div>
     );
@@ -170,7 +168,6 @@ function StaticIpFields({ staticIps, value, disabled, error, onChange }: { stati
             <Select
                 label="Static IP pool"
                 name="static_ip_pool"
-                hint="Choose a pool only when this client needs a static IP."
                 disabled={disabled}
                 value={pool}
                 placeholder="Use dynamic IP / no static IP"
@@ -181,7 +178,6 @@ function StaticIpFields({ staticIps, value, disabled, error, onChange }: { stati
                 <Select
                     label="Static IP address"
                     name="framed_ip_address"
-                    hint="Choose an available address from the selected pool."
                     disabled={disabled}
                     error={error}
                     value={value}
@@ -209,9 +205,9 @@ export default function ClientForm({ values, draftRestored, draftTab, canEdit, c
     const can = useCan();
     const ask = useConfirm();
     const form = useForm<Values>({ ...values, id_front: null, id_back: null });
-    const [tab, setTab] = useState(draftTab ?? (typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('tab') : null) ?? 'account');
-    // Accounting, Billing and Logs are read-only views: the form's Save bar does not apply there.
-    const formTab = !['accounting', 'billing', 'logs', 'onu'].includes(tab);
+    const [tab, setTab] = useState(draftTab ?? (typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('tab') : null) ?? (client ? 'overview' : 'account'));
+    // Overview, Accounting, Billing and Logs are read-only views: the form's Save bar does not apply there.
+    const formTab = !['overview', 'accounting', 'billing', 'logs', 'onu'].includes(tab);
     const [generated, setGenerated] = useState(false);
     const disabled = !canEdit;
     const dhcp = form.data.auth_method === 'dhcp';
@@ -239,7 +235,7 @@ export default function ClientForm({ values, draftRestored, draftTab, canEdit, c
                         required={!client}
                         disabled={disabled}
                         autoComplete="new-password"
-                        hint={client ? 'Leave blank to keep the saved password. Use “Reveal saved password” to read it.' : undefined}
+                        hint={client ? 'Leave blank to keep the current password.' : undefined}
                         {...bind(form, 'password')}
                     />
                 )}
@@ -247,7 +243,7 @@ export default function ClientForm({ values, draftRestored, draftTab, canEdit, c
                     <div className="span2 inline-actions">
                         <button type="button" className="button" onClick={() => { form.setData('password', randomPassword(14)); setGenerated(true); }}>Generate password</button>
                         {generated && <button type="button" className="button" onClick={() => void navigator.clipboard?.writeText(form.data.password)}>Copy password</button>}
-                        {generated && <span className="hint" role="status">Generated password is shown so you can read it to the customer. It is saved when you save the client.</span>}
+                        {generated && <span className="hint" role="status">Saved when you save the client.</span>}
                     </div>
                 )}
             </Section>
@@ -271,11 +267,11 @@ export default function ClientForm({ values, draftRestored, draftTab, canEdit, c
             <Section title="Access restrictions" description="Limit where and from which device the account can connect." icon="shield">
                 {binding ? (
                     <>
-                        {field('DHCP client identifier', 'dhcp_client_id', { hint: 'Optional exact identifier, distinct from MAC. Empty permits any identifier in this trusted context.' })}
-                        {field('Trusted NAS access circuit', 'circuit_id', { hint: 'NAS-generated port/interface identifier. Requires an isolated access port/VLAN; never use a customer-supplied circuit claim.' })}
+                        {field('DHCP client identifier', 'dhcp_client_id', { hint: 'Optional. Empty allows any identifier.' })}
+                        {field('Trusted NAS access circuit', 'circuit_id', { hint: 'Only on an isolated access port or VLAN.' })}
                     </>
                 ) : <p className="span2">Access profiles require migration 018 before provisioning.</p>}
-                {field('CPE MAC address', 'mac_address', { hint: 'DHCP uses this MAC as its identity; the client identifier is stored separately.', required: dhcp })}
+                {field('CPE MAC address', 'mac_address', { required: dhcp })}
                 {!dhcp && <Check label="Allow this MAC only" disabled={disabled} {...bindCheck(form, 'mac_lock')} />}
                 <Select label="NAS restriction" disabled={disabled} options={{ all: 'All NAS', nas_ip: 'NAS-IP-Address', nas_identifier: 'NAS-Identifier' }} {...bind(form, 'nas_restriction_type')} />
                 {field('NAS restriction value', 'nas_restriction_value')}
@@ -308,38 +304,46 @@ export default function ClientForm({ values, draftRestored, draftTab, canEdit, c
             <Section title="Contract and notes" description="Agreement reference and internal remarks." icon="logs">
                 {field('Contract ID', 'contract_id')}
                 {field('Contract valid until', 'contract_valid_until', { type: 'date' })}
-                <p className="span2 hint"><a href="/contracts">Contracts</a> are issued and kept under Contracts; these two fields follow the active one.</p>
+                <p className="span2 hint">Filled from the active <a href="/contracts">contract</a>.</p>
                 <TextArea label="Notes/comments" disabled={disabled} {...bind(form, 'notes')} />
             </Section>
         </>
     );
 
+    const sessionColumns = [
+        { header: 'Started', cell: (r: Session) => r.start },
+        { header: 'Ended', cell: (r: Session) => r.stop || <ConnectionState state={r.state} /> },
+        { header: 'Lasted', cell: (r: Session) => r.time },
+        { header: 'IP', cell: (r: Session) => <span className="mono">{r.ip}</span> },
+        { header: 'Router', cell: (r: Session) => r.nas },
+        { header: 'Download', className: 'num', cell: (r: Session) => r.down },
+        { header: 'Upload', className: 'num', cell: (r: Session) => r.up },
+        { header: 'Why it ended', cell: (r: Session) => r.cause },
+    ];
+
     const tabs = [
+        ...(client ? [{
+            key: 'overview', title: 'Overview', icon: 'dashboard',
+            content: (
+                <>
+                    <UsageCard username={client.username} initial={client.usage} />
+                    <Panel title="Recent sessions">
+                        <DataTable rows={client.sessions.slice(0, 6)} emptyText="No sessions yet." columns={sessionColumns} />
+                    </Panel>
+                </>
+            ),
+        }] : []),
         { key: 'account', title: 'Account', icon: 'lock', keepMounted: true, content: accountTab },
-        { key: 'personal', title: 'Personal Info', icon: 'user', keepMounted: true, content: personalTab },
+        { key: 'personal', title: 'Personal info', icon: 'user', keepMounted: true, content: personalTab },
         {
             key: 'accounting', title: 'Accounting', icon: 'signal',
             content: client ? (
                 <>
-                    <Panel title="Session totals by last update date (7 days)">
-                        <p>Each day adds up whole sessions by the day they were last updated, so it is close to, but not exactly, daily usage.</p>
+                    <Panel title="Session totals by last update date, 7 days">
                         <TrafficGraph rows={client.weeklyTraffic} />
                     </Panel>
-                    <Panel title="Accounting Sessions">
-                        <DataTable
-                            rows={client.sessions}
-                            exportRows
-                            columns={[
-                                { header: 'Start', cell: (r) => r.start },
-                                { header: 'Stop', cell: (r) => r.stop || <ConnectionState state={r.state} /> },
-                                { header: 'Time', cell: (r) => r.time },
-                                { header: 'IP', cell: (r) => r.ip },
-                                { header: 'NAS', cell: (r) => r.nas },
-                                { header: 'Download', cell: (r) => r.down },
-                                { header: 'Upload', cell: (r) => r.up },
-                                { header: 'Cause', cell: (r) => r.cause },
-                            ]}
-                        />
+                    <Panel title="Sessions">
+                        <DataTable rows={client.sessions} exportRows columns={sessionColumns} />
                     </Panel>
                 </>
             ) : <Empty>Session details appear after the client is saved and connects.</Empty>,
@@ -425,7 +429,7 @@ export default function ClientForm({ values, draftRestored, draftTab, canEdit, c
     ].filter((t) => client || !['accounting', 'billing', 'logs'].includes(t.key));
 
     return (
-        <AppLayout title={client ? 'Client Profile' : 'New Client'} heading={!client}>
+        <AppLayout title={client ? client.header.name : 'New client'} heading={!client}>
             {client && <ProfileHeader username={client.username} header={client.header} />}
             {client?.revealed && (
                 <Panel title={`Saved PPPoE password for ${client.username}`}>
@@ -433,14 +437,14 @@ export default function ClientForm({ values, draftRestored, draftTab, canEdit, c
                     <p className="hint">This reveal was recorded in the audit log. The password is not stored in your browser history.</p>
                 </Panel>
             )}
-            <div className="client-layout">
+            <div className={`client-layout${client ? '' : ' is-new'}`}>
                 <form
                     id="client-form"
                     tabIndex={-1}
                     onSubmit={(event) => { event.preventDefault(); void submit(); }}
                 >
                     {draftRestored && (
-                        <p className="recovery-notice">Your edits were restored for review. Passwords and authentication codes were not retained; enter them again when needed. Files were not retained; reselect any files you want to upload. Nothing was submitted automatically.</p>
+                        <p className="recovery-notice">Your unsaved edits are back. Enter passwords and choose files again; nothing was saved yet.</p>
                     )}
                     <ErrorSummary errors={form.errors} />
                     <Tabs label="Client sections" tabs={tabs} defaultTab={tab} onChange={setTab} />
@@ -449,20 +453,10 @@ export default function ClientForm({ values, draftRestored, draftTab, canEdit, c
                         <Link className="button" href="/clients">Back to clients</Link>
                     </div>}
                 </form>
-                {client ? (
+                {client && (
                     <div className="client-side">
-                        <UsageCard username={client.username} initial={client.usage} />
                         <OverviewPanel username={client.username} initial={client.overview} />
                     </div>
-                ) : (
-                    <aside className="overview">
-                        <div className="overview-head"><h3>Set up a client</h3></div>
-                        <ol className="setup-guide">
-                            <li><strong>Configure access</strong><span>Choose authentication, a service plan and an expiry date.</span></li>
-                            <li><strong>Add customer details</strong><span>Use Personal Info for contact and contract details.</span></li>
-                            <li><strong>Save the account</strong><span>Session and usage details appear here after the client connects.</span></li>
-                        </ol>
-                    </aside>
                 )}
             </div>
         </AppLayout>

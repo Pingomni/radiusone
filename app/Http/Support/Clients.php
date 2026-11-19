@@ -156,8 +156,6 @@ final class Clients
             ['Username', $username],
             ['Authentication', $authMethod === 'dhcp' ? 'DHCP MAC' : 'PPPoE'],
             ['Connection status', $state, $state === 'fresh accounting' ? 'online' : 'warning'],
-            ['Live source', $online ? 'Recent RADIUS accounting (not a reachability probe)' : '-'],
-            ['RADIUS accounting', $online ? 'yes' : '-'],
             ['Current IP', (string) ($online['framedipaddress'] ?? ($row['framed_ip_address'] ?? '-'))],
             ['Connected NAS', $nasLabel],
             ['Session ID', (string) ($online['acctsessionid'] ?? '-')],
