@@ -10,8 +10,6 @@ export interface TabDef {
     content: ReactNode;
     /** Rendered even when hidden (forms whose fields must submit from every tab). */
     keepMounted?: boolean;
-    /** Tabs of one group sit together; a new group starts with a gap before it. */
-    group?: string;
 }
 
 /** Scrolls a horizontal tab strip so its current item is in view (phones show only part of the strip). */
@@ -108,7 +106,7 @@ export function Tabs({ tabs, defaultTab, label, className = 'tabs', listClassNam
                             aria-controls={`tab-${tab.key}`}
                             aria-selected={selected}
                             tabIndex={selected ? 0 : -1}
-                            className={[selected ? 'active' : '', tab.group && index > 0 && tabs[index - 1].group !== tab.group ? 'tab-group-start' : ''].filter(Boolean).join(' ') || undefined}
+                            className={selected ? 'active' : undefined}
                             title={tab.hint}
                             onClick={() => select(tab.key, true)}
                             onKeyDown={(event) => onKeyDown(event, index)}
