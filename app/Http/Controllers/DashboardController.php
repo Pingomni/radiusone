@@ -16,6 +16,7 @@ use App\Support\License;
 use App\Support\MicroCache;
 use App\Support\NasMonitor;
 use App\Support\NasRepository;
+use App\Support\Olt\OltInventory;
 use App\Support\Olt\Olts;
 use Illuminate\Http\JsonResponse;
 use Inertia\Inertia;
@@ -173,7 +174,7 @@ final class DashboardController extends Controller
         }
         if ($canNas) {
             try {
-                $olts = Db::select('SELECT t.id, t.name, t.last_sync_ok, t.last_error, t.rx_warning, t.rx_critical,
+                $olts = Db::select('SELECT t.id, t.name, t.last_sync_ok, t.last_error, t.rx_warning, t.rx_critical, t.inventory,
                     COALESCE(SUM(' . Olts::weakSql('o', 't.rx_warning') . '), 0) AS weak,
                     COALESCE(SUM(' . Olts::weakSql('o', 't.rx_critical') . '), 0) AS very_weak
                     FROM olts t LEFT JOIN olt_onus o ON o.olt_id = t.id WHERE t.enabled = 1 GROUP BY t.id ORDER BY t.name');
@@ -184,6 +185,13 @@ final class DashboardController extends Controller
                 if ($o['last_sync_ok'] !== null && (int) $o['last_sync_ok'] === 0) {
                     $items[] = ['tone' => 'danger', 'title' => $o['name'] . ' cannot be read', 'detail' => mb_strimwidth((string) $o['last_error'], 0, 90, '…'),
                         'action' => ['label' => 'Open', 'href' => '/olts/' . (int) $o['id']], 'phrase' => $o['name'] . ' cannot be read'];
+                }
+                // A rogue ONU takes a whole PON port down: as urgent as an OLT that cannot be read.
+                $rogue = array_keys(OltInventory::rogueValues(OltInventory::saved($o)));
+                if ($rogue) {
+                    $items[] = ['tone' => 'danger', 'title' => (count($rogue) === 1 ? 'Rogue ONU on port ' . $rogue[0] : 'Rogue ONUs on ' . count($rogue) . ' ports') . ' of ' . $o['name'],
+                        'detail' => count($rogue) === 1 ? 'Every ONU on this port may be offline.' : implode(', ', $rogue),
+                        'action' => ['label' => 'See ports', 'href' => '/olts/' . (int) $o['id'] . '?tab=ports'], 'phrase' => count($rogue) === 1 ? 'a rogue ONU is on ' . $o['name'] : 'rogue ONUs are on ' . $o['name']];
                 }
             }
             $weakTotal = array_sum(array_map(static fn (array $o) => (int) $o['weak'], $olts));

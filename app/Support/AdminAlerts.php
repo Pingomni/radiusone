@@ -7,6 +7,7 @@ namespace App\Support;
 use App\Http\Support\Format;
 use App\Http\Support\MonitoringData;
 use App\Http\Support\Present;
+use App\Support\Olt\OltInventory;
 use InvalidArgumentException;
 use RuntimeException;
 use Throwable;
@@ -27,6 +28,7 @@ final class AdminAlerts
         'resources' => 'Disk or memory almost full on the server',
         'jobs' => 'Background job stuck',
         'pay' => 'Online payment needs review',
+        'olt' => 'OLT problem (rogue ONU, OLT cannot be read)',
     ];
     /**
      * Message templates (Settings → Notifications → Admin alerts → Message templates); blank uses the default.
@@ -178,6 +180,16 @@ final class AdminAlerts
         if (in_array('pay', $checks, true) && !SchemaCompatibility::problems('contracts')) {
             foreach (Db::select('SELECT id, username, amount, currency FROM pay_payments WHERE status="mismatch" ORDER BY id DESC LIMIT 20') as $p) {
                 $problems['pay:' . $p['id']] = "Online payment of {$p['amount']} {$p['currency']} from {$p['username']} needs review (Settings → Pay page)";
+            }
+        }
+        if (in_array('olt', $checks, true) && !SchemaCompatibility::problems('olt')) {
+            foreach (Db::select('SELECT id, name, last_sync_ok, last_error, inventory FROM olts WHERE enabled = 1') as $olt) {
+                if ($olt['last_sync_ok'] !== null && (int) $olt['last_sync_ok'] === 0) {
+                    $problems['olt:' . $olt['id']] = 'OLT ' . $olt['name'] . ' cannot be read: ' . mb_strimwidth((string) $olt['last_error'], 0, 120, '…');
+                }
+                foreach (array_keys(OltInventory::rogueValues(OltInventory::saved($olt))) as $port) {
+                    $problems['rogue:' . $olt['id'] . ':' . $port] = 'Rogue ONU on port ' . $port . ' of OLT ' . $olt['name'];
+                }
             }
         }
         if (in_array('nas', $checks, true) || in_array('jobs', $checks, true)) {

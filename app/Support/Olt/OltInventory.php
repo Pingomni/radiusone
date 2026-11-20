@@ -104,8 +104,48 @@ final class OltInventory
                 }
             }
         }
+        $previous = self::saved($olt);
+        if (isset($previous['pon'])) {
+            self::logRogue((int) $olt['id'], self::rogueValues($previous), self::rogueValues($inventory));
+        }
         Db::exec('UPDATE olts SET inventory=?,last_inventory_at=NOW(),last_inventory_error=NULL WHERE id=?', [json_encode($inventory, JSON_INVALID_UTF8_SUBSTITUTE), $olt['id']]);
         return $inventory;
+    }
+
+    /**
+     * PON ports where the OLT reports a rogue ONU ("Illegal rogue ONT" other than "Inexistent"): one ONU sending light
+     * out of turn, which knocks every ONU on that port offline.
+     *
+     * @param  array<string, mixed>  $inventory
+     * @return array<string, string> F/S/P => what the OLT reported
+     */
+    public static function rogueValues(array $inventory): array
+    {
+        $found = [];
+        foreach (($inventory['pon'] ?? []) as $key => $pon) {
+            $value = trim((string) ($pon['rogue'] ?? ''));
+            if ($value !== '' && $value !== '-' && strtolower($value) !== 'inexistent') {
+                $found[(string) $key] = $value;
+            }
+        }
+        return $found;
+    }
+
+    /**
+     * Rogue ONUs as they appear and clear, in the OLT's changelog. Nothing on the first reading, which has nothing to
+     * compare with.
+     *
+     * @param  array<string, string>  $before
+     * @param  array<string, string>  $after
+     */
+    private static function logRogue(int $oltId, array $before, array $after): void
+    {
+        foreach (array_diff_key($after, $before) as $port => $value) {
+            OltChangelog::add($oltId, 'rogue_found', null, $port, ['state' => $value], 'olt', '');
+        }
+        foreach (array_diff_key($before, $after) as $port => $value) {
+            OltChangelog::add($oltId, 'rogue_gone', null, $port, [], 'olt', '');
+        }
     }
 
     /**

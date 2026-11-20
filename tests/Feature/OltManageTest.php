@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Support\AdminAlerts;
 use App\Support\Db;
 use App\Support\Olt\HuaweiCli;
 use App\Support\Olt\HuaweiMa5800;
@@ -411,6 +412,30 @@ final class OltManageTest extends TestCase
             ->where('hardware.ports.1.pon.tx', 7.12)->where('hardware.ports.1.pon.autofind', true)->where('hardware.ports.1.onus.total', 1)
             // Configuration copies are not for people who may only look.
             ->where('backups', null));
+    }
+
+    public function test_a_rogue_onu_is_shown_logged_and_alerted_until_it_clears(): void
+    {
+        $this->startAgent();
+        $olt = $this->olt(false);
+        $this->ports($olt);
+        // The last reading saw a rogue ONU on 0/1/0.
+        Db::exec('UPDATE olts SET inventory=? WHERE id=?', [json_encode(['pon' => ['0/1/0' => ['rogue' => 'Exist'], '0/1/1' => ['rogue' => 'Inexistent']]]), $olt['id']]);
+        $saved = Olts::find((int) $olt['id']);
+        $this->assertSame(['0/1/0' => 'Exist'], OltInventory::rogueValues(OltInventory::saved($saved)));
+        $this->assertSame('Rogue ONU on port 0/1/0 of OLT olt-1', AdminAlerts::problems(['olt'])['rogue:' . $olt['id'] . ':0/1/0'] ?? null);
+
+        $this->actingAsOperator('view');
+        $this->get('/')->assertOk()->assertInertia(fn ($p) => $p
+            ->where('attention.0.title', 'Rogue ONU on port 0/1/0 of olt-1')->where('attention.0.tone', 'danger')
+            ->where('attention.0.action.href', '/olts/' . $olt['id'] . '?tab=ports'));
+
+        // The OLT now reports "Inexistent" again: the changelog says it cleared, and the alert and the item go away.
+        OltInventory::read($saved);
+        $this->assertSame([['rogue_gone', '0/1/0', 'olt']], array_map(static fn (array $r) => [$r['action'], $r['position'], $r['source']],
+            Db::select('SELECT action, position, source FROM olt_changes WHERE olt_id=? AND action LIKE "rogue%"', [$olt['id']])));
+        $this->assertSame([], array_filter(array_keys(AdminAlerts::problems(['olt'])), static fn (string $k) => str_starts_with($k, 'rogue:')));
+        $this->assertSame([], $this->changes());
     }
 
     public function test_a_configuration_copy_is_kept_sealed_and_only_when_it_changed(): void

@@ -22,6 +22,7 @@ const ACTIONS: Record<string, [string, Kind]> = {
     link_onu: ['Linked to a client', 'onu'], unlink_onu: ['Unlinked from its client', 'onu'],
     port_autofind_on: ['Autofind turned on', 'ports'], port_autofind_off: ['Autofind turned off', 'ports'], port_restart_onus: ['All ONUs on a port restarted', 'ports'],
     port_off: ['PON port turned off', 'ports'], port_on: ['PON port turned on', 'ports'], card_restart: ['Card restarted', 'ports'],
+    rogue_found: ['Rogue ONU on the port', 'ports'], rogue_gone: ['Rogue ONU cleared', 'ports'],
     vlan_add: ['VLAN created', 'network'], vlan_edit: ['VLAN changed', 'network'], vlan_remove: ['VLAN deleted', 'network'],
     uplink_vlan_add: ['VLAN added to an uplink', 'network'], uplink_vlan_remove: ['VLAN taken off an uplink', 'network'],
     ntp_add: ['Time server added', 'network'], ntp_remove: ['Time server removed', 'network'], olt_traffic_table_add: ['Speed added', 'network'],
