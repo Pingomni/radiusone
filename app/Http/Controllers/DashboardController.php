@@ -111,6 +111,8 @@ final class DashboardController extends Controller
     /**
      * The routers table: one parallel SNMP GET for the listed NAS (at most 6, bounded at 1.5 s), the latest CPU sample
      * from the last 15 minutes, and one status word per router.
+     *
+     * @return array<int, array<string, mixed>>
      */
     private static function routers(): array
     {
@@ -160,6 +162,7 @@ final class DashboardController extends Controller
      * What needs a look, most urgent first: routers not answering, OLTs that cannot be read, ONUs with a weak signal,
      * routers waiting for a FreeRADIUS restart and overdue invoices. Each item names the page that fixes it.
      *
+     * @param  array<int, array<string, mixed>>  $routers
      * @return list<array{tone:string, title:string, detail:string, action:?array{label:string, href:string}, phrase:string}>
      */
     private static function attention(array $routers): array
@@ -228,7 +231,11 @@ final class DashboardController extends Controller
         return $items;
     }
 
-    /** The page's title: the state of the network in one sentence, from the two most urgent kinds of problem. */
+    /**
+     * The page's title: the state of the network in one sentence, from the two most urgent kinds of problem.
+     *
+     * @param  array<int, array<string, mixed>>  $attention
+     */
     private static function headline(array $attention): string
     {
         $phrases = array_values(array_unique(array_filter(array_column($attention, 'phrase'))));
@@ -239,11 +246,15 @@ final class DashboardController extends Controller
         return $text . '.';
     }
 
-    /** Active clients whose service ends in the next 7 days, soonest first; how many in all. */
+    /**
+     * Active clients whose service ends in the next 7 days, soonest first; how many in all.
+     *
+     * @return array<string, mixed>
+     */
     private static function expiring(): array
     {
         $today = Entitlement::today();
-        $until = date('Y-m-d', strtotime($today . ' +7 days'));
+        $until = date('Y-m-d', (int) strtotime($today . ' +7 days'));
         $where = 'c.account_status = "active" AND c.enabled = 1 AND c.expiry_date >= ? AND c.expiry_date <= ?';
         $rows = Db::select("SELECT c.username, c.first_name, c.last_name, c.company_name, c.expiry_date, c.balance, s.name AS service
             FROM customer_profiles c LEFT JOIN service_metadata s ON s.group_name = c.service_group WHERE $where ORDER BY c.expiry_date, c.username LIMIT 6", [$today, $until]);

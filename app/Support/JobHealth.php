@@ -21,7 +21,7 @@ final class JobHealth
         'notifications' => ['Expiry reminders (legacy)', 300, 'Older expiry-reminder sender.'],
     ];
 
-    /** @return array<string, array{label:string,state:string,ago:?int,detail:string,does:string}> */
+    /** @return array<string, array<string, mixed>> label, state, ago, detail and does per job */
     public static function all(?int $now = null): array
     {
         $now ??= time();

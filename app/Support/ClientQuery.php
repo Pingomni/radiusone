@@ -180,7 +180,7 @@ final class ClientQuery
             // Active clients whose service ends within the next 7 days (the Overview's "Expiring this week").
             $conditions[] = 'c.enabled=1 AND c.account_status="active" AND c.expiry_date >= ? AND c.expiry_date <= ?';
             $params[] = Entitlement::today();
-            $params[] = date('Y-m-d', strtotime(Entitlement::today() . ' +7 days'));
+            $params[] = date('Y-m-d', (int) strtotime(Entitlement::today() . ' +7 days'));
         }
         return [implode(' AND ', $conditions), $params];
     }
