@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Middleware;
 
+use App\Support\PayPage;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -20,7 +21,7 @@ final class ForceHttps
             return response('Use HTTPS for this request.', 400, ['Content-Type' => 'text/plain; charset=utf-8']);
         }
         // The pay page stays on its own address; every other name goes to the portal's.
-        if (\App\Support\PayPage::isPayHost($request->getHost())) {
+        if (PayPage::isPayHost($request->getHost())) {
             return redirect()->away('https://' . strtolower($request->getHost()) . $request->getRequestUri(), 301);
         }
         $canonical = rtrim((string) config('app.url'), '/');

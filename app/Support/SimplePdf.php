@@ -78,7 +78,7 @@ final class SimplePdf
      * A text document of any length, such as a contract: the company's band on the first page, then the text over as many
      * pages as it needs. A line starting with "# " is a heading.
      *
-     * @param array{title: string, subtitle?: string, app_name: string, logo_path?: ?string, company_details?: list<string>, body: string} $data
+     * @param  array{title: string, subtitle?: string, app_name: string, logo_path?: ?string, company_details?: list<string>, body: string}  $data
      */
     public static function contract(array $data): string
     {
