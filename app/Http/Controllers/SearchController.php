@@ -8,10 +8,15 @@ use App\Support\Auth;
 use App\Support\ClientQuery;
 use App\Support\Db;
 use App\Support\License;
+use App\Support\Olt\Olts;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Throwable;
 
-/** The top bar's search (Ctrl K): clients by name, username, phone, IP or MAC, and invoices by number. */
+/**
+ * The top bar's search (Ctrl K): clients by name, username, phone, IP or MAC; invoices by number; and the network:
+ * ONUs by name or serial on every OLT, OLTs and routers by name or address.
+ */
 final class SearchController extends Controller
 {
     private const LIMIT = 6;
@@ -21,6 +26,8 @@ final class SearchController extends Controller
         $q = mb_substr(trim((string) $request->query('q', '')), 0, 64);
         $clients = [];
         $invoices = [];
+        $onus = [];
+        $devices = [];
         if (mb_strlen($q) >= 2) {
             if (Auth::can('clients.view')) {
                 $page = ClientQuery::page(['q' => $q], 1, self::LIMIT);
@@ -41,6 +48,24 @@ final class SearchController extends Controller
                     $invoices[] = ['number' => (string) $row['invoice_number'], 'username' => (string) $row['username'], 'href' => '/billing/invoices/' . (int) $row['id']];
                 }
             }
+            if (Auth::can('nas.view')) {
+                $like = '%' . addcslashes($q, '%_\\') . '%';
+                try {
+                    foreach (Db::select('SELECT o.id, o.olt_id, o.sn, o.description, o.status, o.frame, o.slot, o.port, o.ont_id, t.name AS olt FROM olt_onus o JOIN olts t ON t.id=o.olt_id
+                        WHERE o.sn LIKE ? OR o.description LIKE ? ORDER BY o.description LIMIT ' . self::LIMIT, [$like, $like]) as $row) {
+                        $onus[] = ['name' => (string) ($row['description'] ?: $row['sn']), 'sn' => (string) $row['sn'], 'where' => $row['olt'] . ' ' . Olts::position($row), 'online' => $row['status'] === 'online',
+                            'href' => '/olts/' . (int) $row['olt_id'] . '/onus/' . (int) $row['id']];
+                    }
+                    foreach (Db::select('SELECT id, name, host FROM olts WHERE name LIKE ? OR host LIKE ? ORDER BY name LIMIT 3', [$like, $like]) as $row) {
+                        $devices[] = ['name' => (string) $row['name'], 'sub' => 'OLT ' . $row['host'], 'href' => '/olts/' . (int) $row['id']];
+                    }
+                } catch (Throwable) {
+                    // No OLT tables on this install: the search still finds clients and routers.
+                }
+                foreach (Db::select('SELECT id, shortname, nasname FROM nas WHERE shortname LIKE ? OR nasname LIKE ? ORDER BY shortname LIMIT 3', [$like, $like]) as $row) {
+                    $devices[] = ['name' => (string) $row['shortname'], 'sub' => 'Router ' . $row['nasname'], 'href' => '/nas/' . (int) $row['id'] . '/edit'];
+                }
+            }
         }
 
         return response()->json([
@@ -48,6 +73,8 @@ final class SearchController extends Controller
             'clients' => $clients,
             'clientTotal' => $clientTotal ?? 0,
             'invoices' => $invoices,
+            'onus' => $onus,
+            'devices' => $devices,
         ])->header('Cache-Control', 'no-store');
     }
 }

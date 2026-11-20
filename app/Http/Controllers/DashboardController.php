@@ -160,11 +160,12 @@ final class DashboardController extends Controller
         $other = $offline - $sum('power') - $sum('los');
         $weak = $sum('weak');
         $metric = static fn (string $label, int $value, string $icon, string $tone, string $href, string $note) => ['label' => $label, 'value' => number_format($value), 'icon' => $icon, 'tone' => $tone, 'href' => $href, 'note' => $note];
-        $list = static fn (string $status) => $one === null ? '/olts' : $one . '?status=' . $status;
+        // The list of every ONU on every OLT, so the figures work the same with one OLT or twenty.
+        $list = static fn (string $status) => '/onus?status=' . $status;
         $waitingTotal = array_sum($waiting);
         return [
             'figures' => [
-                $metric('ONUs waiting', $waitingTotal, 'plus', $waitingTotal > 0 ? 'warning' : '', $one !== null && $rows[0]['canAdd'] ? $one . '/provision' : ($one ?? '/olts'), $waitingTotal > 0 ? 'Not added yet' : 'None to add'),
+                $metric('ONUs waiting', $waitingTotal, 'plus', $waitingTotal > 0 ? 'warning' : '', '/onus?status=waiting', $waitingTotal > 0 ? 'Not added yet' : 'None to add'),
                 $metric('ONUs online', $sum('online'), 'fiber', '', $list('online'), 'of ' . number_format($sum('onus'))),
                 $metric('ONUs offline', $offline, 'offline', $offline > 0 ? 'warning' : '', $list('offline'), 'Power ' . $sum('power') . ' · LOS ' . $sum('los') . ' · Other ' . $other),
                 $metric('Weak signal', $weak, 'alert', $sum('very_weak') > 0 ? 'danger' : ($weak > 0 ? 'warning' : ''), $list('weak'), 'Warning ' . ($weak - $sum('very_weak')) . ' · Critical ' . $sum('very_weak')),
@@ -279,7 +280,7 @@ final class DashboardController extends Controller
                     'tone' => (int) $o['very_weak'] > 0 ? 'danger' : 'warning',
                     'title' => ($weak === 1 ? 'One ONU has' : $weak . ' ONUs have') . ' a weak signal on ' . $o['name'],
                     'detail' => $port && (int) $port['n'] > 1 && $weak > 1 ? $port['n'] . ' of them on port ' . $port['frame'] . '/' . $port['slot'] . '/' . $port['port'] . '.' : 'Below ' . rtrim(rtrim((string) $o['rx_warning'], '0'), '.') . ' dBm.',
-                    'action' => ['label' => 'See them', 'href' => '/olts/' . (int) $o['id'] . '?status=weak'],
+                    'action' => ['label' => 'See them', 'href' => '/onus?olt=' . (int) $o['id'] . '&status=weak'],
                     'phrase' => $weakTotal === 1 ? 'one ONU has a weak signal' : $weakTotal . ' ONUs have a weak signal',
                 ];
             }

@@ -17,7 +17,7 @@ export default function OltIndex({ olts }: { olts: Olt[] }) {
     const can = useCan();
     return (
         <AppLayout
-            title="OLT and ONU"
+            title="OLTs"
             actions={(
                 <>
                     <Link className="button" href="/olts/mapping">Client mapping</Link>

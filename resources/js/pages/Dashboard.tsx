@@ -36,7 +36,7 @@ function Routers({ rows }: { rows: Router[] }) {
 
 /** One row per OLT; every number opens its list. */
 function Olts({ rows }: { rows: OltRow[] }) {
-    const count = (o: OltRow, n: number, status: string, tone = '') => (n > 0 ? <Link className={tone} href={`/olts/${o.id}?status=${status}`}>{n}</Link> : <span className="is-empty-text">0</span>);
+    const count = (o: OltRow, n: number, status: string, tone = '') => (n > 0 ? <Link className={tone} href={`/onus?olt=${o.id}&status=${status}`}>{n}</Link> : <span className="is-empty-text">0</span>);
     return (
         <DataTable
             rows={rows}
@@ -44,10 +44,10 @@ function Olts({ rows }: { rows: OltRow[] }) {
             columns={[
                 { header: 'OLT', cell: (o) => <span className="list-cell-stack"><Link className="nowrap" href={`/olts/${o.id}`}>{o.name}</Link><span className="list-subline mono">{o.host}</span></span> },
                 { header: 'Status', cell: (o) => <span title={o.error || undefined}><Status tone={o.tone}>{o.status}</Status></span> },
-                { header: 'Online', className: 'num', cell: (o) => <Link href={`/olts/${o.id}?status=online`}><strong>{o.online}</strong> / {o.onus}</Link> },
+                { header: 'Online', className: 'num', cell: (o) => <Link href={`/onus?olt=${o.id}&status=online`}><strong>{o.online}</strong> / {o.onus}</Link> },
                 { header: 'Offline', className: 'num', cell: (o) => count(o, o.offline, 'offline', 'field-warning') },
                 { header: 'Weak', className: 'num', cell: (o) => count(o, o.weak, 'weak', 'field-warning') },
-                { header: 'Waiting', className: 'num', cell: (o) => (o.waiting > 0 ? <Link href={o.canAdd ? `/olts/${o.id}/provision` : `/olts/${o.id}`}>{o.waiting}</Link> : <span className="is-empty-text">0</span>) },
+                { header: 'Waiting', className: 'num', cell: (o) => (o.waiting > 0 ? <Link href={`/onus?olt=${o.id}&status=waiting`}>{o.waiting}</Link> : <span className="is-empty-text">0</span>) },
                 { header: '', cell: (o) => (o.canAdd ? <Link className="nowrap" href={`/olts/${o.id}/provision`}>Add ONU</Link> : null) },
             ]}
         />

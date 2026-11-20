@@ -36,6 +36,91 @@ final class OnuController extends Controller
         return [$olt, $row];
     }
 
+    private const PAGE_SIZE = 50;
+
+    /**
+     * Every ONU on every OLT in one list: the place to find an ONU without first choosing its OLT. Filtered by state
+     * (online, offline, weak, or "waiting": new on the fibre and not added yet), by OLT, and by name, serial or client.
+     */
+    public function index(Request $request): Response
+    {
+        $olts = Db::select('SELECT * FROM olts ORDER BY name');
+        $q = trim((string) $request->query('q', ''));
+        $status = (string) $request->query('status', '');
+        $status = in_array($status, ['online', 'offline', 'weak', 'waiting'], true) ? $status : '';
+        $oltId = (int) $request->query('olt', 0);
+        $oltId = in_array($oltId, array_map(static fn (array $o) => (int) $o['id'], $olts), true) ? $oltId : 0;
+
+        // The OLT filter narrows the counts too, so the tabs always add up to what the list shows.
+        $scope = $oltId ? ' AND o.olt_id=?' : '';
+        $scopeParams = $oltId ? [$oltId] : [];
+        $counts = Db::row('SELECT COUNT(*) AS total, COALESCE(SUM(o.status="online"),0) AS online, COALESCE(SUM(o.status="offline"),0) AS offline,
+            COALESCE(SUM(' . Olts::weakSql('o', 't.rx_warning') . '),0) AS weak FROM olt_onus o JOIN olts t ON t.id=o.olt_id WHERE 1=1' . $scope, $scopeParams) ?? [];
+        $waiting = [];
+        foreach ($olts as $o) {
+            if ($oltId && (int) $o['id'] !== $oltId) {
+                continue;
+            }
+            foreach ((OltInventory::saved($o)['waiting'] ?? []) as $w) {
+                $waiting[] = ['sn' => (string) ($w['sn'] ?? ''), 'position' => (string) ($w['position'] ?? ''), 'model' => (string) ($w['model'] ?? ''),
+                    'oltId' => (int) $o['id'], 'olt' => (string) $o['name'], 'canAdd' => Auth::can('nas.manage') && OltManager::canChange($o)];
+            }
+        }
+
+        $where = ' WHERE 1=1' . $scope;
+        $params = $scopeParams;
+        if ($status === 'online' || $status === 'offline') {
+            $where .= ' AND o.status=?';
+            $params[] = $status;
+        } elseif ($status === 'weak') {
+            $where .= ' AND ' . Olts::weakSql('o', 't.rx_warning');
+        }
+        if ($q !== '') {
+            $like = '%' . addcslashes($q, '%_\\') . '%';
+            $where .= ' AND (o.sn LIKE ? OR o.description LIKE ? OR EXISTS (SELECT 1 FROM customer_onus l JOIN customer_profiles c ON c.id=l.customer_id WHERE l.olt_id=o.olt_id AND l.sn=o.sn AND (c.username LIKE ? OR CONCAT(c.first_name, " ", c.last_name) LIKE ?)))';
+            array_push($params, $like, $like, $like, $like);
+        }
+        $total = $status === 'waiting' ? 0 : (int) Db::value('SELECT COUNT(*) FROM olt_onus o JOIN olts t ON t.id=o.olt_id' . $where, $params);
+        $pages = max(1, (int) ceil($total / self::PAGE_SIZE));
+        $page = max(1, min($pages, (int) $request->query('page', 1)));
+        $rows = $status === 'waiting' ? [] : Db::select('SELECT o.*, t.name AS olt_name, t.rx_warning, t.rx_critical,
+            (SELECT GROUP_CONCAT(c.username ORDER BY c.username SEPARATOR "\n") FROM customer_onus l JOIN customer_profiles c ON c.id=l.customer_id WHERE l.olt_id=o.olt_id AND l.sn=o.sn) AS clients
+            FROM olt_onus o JOIN olts t ON t.id=o.olt_id' . $where . ' ORDER BY t.name,o.frame,o.slot,o.port,o.ont_id LIMIT ' . self::PAGE_SIZE . ' OFFSET ' . (($page - 1) * self::PAGE_SIZE), $params);
+
+        return Inertia::render('olts/Onus', [
+            'olts' => array_map(static fn (array $o) => ['id' => (int) $o['id'], 'name' => (string) $o['name']], $olts),
+            'counts' => array_map('intval', $counts) + ['waiting' => count($waiting)],
+            'filters' => ['q' => $q, 'status' => $status, 'olt' => $oltId],
+            'waiting' => $waiting,
+            'result' => ['rows' => array_map(static fn (array $r) => OltController::onuRow($r) + [
+                'oltId' => (int) $r['olt_id'], 'olt' => (string) $r['olt_name'], 'weak' => (float) $r['rx_warning'], 'veryWeak' => (float) $r['rx_critical'],
+            ], $rows), 'total' => $total, 'page' => $page, 'pages' => $pages, 'size' => self::PAGE_SIZE],
+        ]);
+    }
+
+    /**
+     * The ONUs before and after this one, in the order of the list (OLT, then port, then number), so the page can step
+     * from one ONU to the next without going back to the list.
+     *
+     * @param  array<string, mixed>  $olt
+     * @param  array<string, mixed>  $row
+     * @return array{previous: ?array<string, mixed>, next: ?array<string, mixed>}
+     */
+    private static function neighbours(array $olt, array $row): array
+    {
+        $at = [(int) $row['frame'], (int) $row['slot'], (int) $row['port'], (int) $row['ont_id']];
+        $link = static fn (?array $o) => $o === null ? null : ['href' => '/olts/' . (int) $o['olt_id'] . '/onus/' . (int) $o['id'], 'name' => (string) ($o['description'] ?: $o['sn']), 'position' => Olts::position($o)];
+        $step = static function (string $compare, string $order) use ($olt, $at): ?array {
+            return Db::row("SELECT id,olt_id,sn,description,frame,slot,port,ont_id FROM olt_onus WHERE olt_id=? AND (frame,slot,port,ont_id) $compare (?,?,?,?) ORDER BY frame $order,slot $order,port $order,ont_id $order LIMIT 1", [$olt['id'], ...$at]);
+        };
+        // At either end of an OLT, on to the neighbouring OLT by name.
+        $other = static function (string $compare, string $order) use ($olt): ?array {
+            $o = Db::row("SELECT id FROM olts WHERE name $compare ? ORDER BY name $order LIMIT 1", [$olt['name']]);
+            return $o === null ? null : Db::row("SELECT id,olt_id,sn,description,frame,slot,port,ont_id FROM olt_onus WHERE olt_id=? ORDER BY frame $order,slot $order,port $order,ont_id $order LIMIT 1", [$o['id']]);
+        };
+        return ['previous' => $link($step('<', 'DESC') ?? $other('<', 'DESC')), 'next' => $link($step('>', 'ASC') ?? $other('>', 'ASC'))];
+    }
+
     public function show(string $id, string $onu): Response
     {
         [$olt, $row] = self::find($id, $onu);
@@ -55,6 +140,7 @@ final class OnuController extends Controller
             'trafficTables' => OltInventory::saved($olt)['trafficTables'] ?? [],
             'ranges' => array_map(static fn (array $r) => $r[2], OltMonitor::RANGES),
             'onu' => OltController::onuRow($row + ['clients' => implode("\n", array_column($clients, 'username'))]),
+            'neighbours' => self::neighbours($olt, $row),
             'clients' => array_map(static fn (array $c) => [
                 'username' => (string) $c['username'], 'name' => trim($c['first_name'] . ' ' . $c['last_name']) ?: (string) $c['company_name'], 'address' => trim($c['address'] . ' ' . $c['city']), 'phone' => trim((string) ($c['cell_phone'] ?: $c['phone'])),
                 // Whether the client's RADIUS login can be pushed to the ONU for PPPoE. The password itself never leaves the server.

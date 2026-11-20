@@ -4,6 +4,12 @@ RadiusOne follows [semantic versioning](https://semver.org): **major** for chang
 upgrading, **minor** for new features, **patch** for fixes. The version is in the `VERSION` file and shows in
 the portal's sidebar and under Settings → System information.
 
+## 2.36.0 (2026-11-20)
+
+Update with **Settings → Overview → Software update** or `sudo radiusone-update`.
+
+- **ONUs:** one list of every ONU on every OLT (tabs, search, OLT filter, Waiting); Previous / Next on the ONU page; ONUs, OLTs and routers in the top search.
+
 ## 2.35.4 (2026-11-20)
 
 Update with **Settings → Overview → Software update** or `sudo radiusone-update`. (2.35.3 was not released: its build failed.)

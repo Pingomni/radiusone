@@ -36,7 +36,7 @@ final class DashboardTest extends TestCase
             ->where('attention.0.tone', 'danger')
             ->where('attention.0.title', '3 ONUs have a weak signal on OLT-Center')
             ->where('attention.0.detail', '3 of them on port 0/1/3.')
-            ->where('attention.0.action.href', '/olts/' . $olt . '?status=weak'));
+            ->where('attention.0.action.href', '/onus?olt=' . $olt . '&status=weak'));
     }
 
     public function test_the_fibre_figures_count_onus_by_state_and_link_to_their_lists(): void
@@ -53,18 +53,34 @@ final class DashboardTest extends TestCase
             ->has('kpis', 6)
             ->where('kpis.0.label', 'Clients online')->where('kpis.0.icon', 'clients')->where('kpis.0.href', '/clients?status=online')
             ->where('kpis.1.label', 'Expired')->where('kpis.1.href', '/clients?status=expired')
-            ->where('kpis.2', ['label' => 'ONUs waiting', 'value' => '1', 'icon' => 'plus', 'tone' => 'warning', 'href' => '/olts/' . $olt, 'note' => 'Not added yet'])
-            ->where('kpis.3.value', '3')->where('kpis.3.note', 'of 6')->where('kpis.3.href', '/olts/' . $olt . '?status=online')
-            ->where('kpis.4.value', '3')->where('kpis.4.note', 'Power 1 · LOS 1 · Other 1')->where('kpis.4.href', '/olts/' . $olt . '?status=offline')
-            ->where('kpis.5.value', '2')->where('kpis.5.note', 'Warning 1 · Critical 1')->where('kpis.5.tone', 'danger')->where('kpis.5.href', '/olts/' . $olt . '?status=weak')
+            ->where('kpis.2', ['label' => 'ONUs waiting', 'value' => '1', 'icon' => 'plus', 'tone' => 'warning', 'href' => '/onus?status=waiting', 'note' => 'Not added yet'])
+            ->where('kpis.3.value', '3')->where('kpis.3.note', 'of 6')->where('kpis.3.href', '/onus?status=online')
+            ->where('kpis.4.value', '3')->where('kpis.4.note', 'Power 1 · LOS 1 · Other 1')->where('kpis.4.href', '/onus?status=offline')
+            ->where('kpis.5.value', '2')->where('kpis.5.note', 'Warning 1 · Critical 1')->where('kpis.5.tone', 'danger')->where('kpis.5.href', '/onus?status=weak')
             ->where('fibre.olts.0.name', 'OLT-Center')->where('fibre.olts.0.online', 3)->where('fibre.olts.0.waiting', 1)->where('fibre.olts.0.status', 'Reading')
             ->where('fibre.chart.url', '/olts/' . $olt . '/graph?chart=onus&range=24h');
         $this->get('/')->assertOk()->assertInertia($figures);
         $this->getJson('/fragments/dashboard-fibre')->assertOk()->assertJsonPath('olts.0.online', 3);
         $this->getJson('/fragments/dashboard-kpis')->assertOk()->assertJsonPath('3.value', '3');
-        // The lists the figures open show the same ONUs.
-        $this->get('/olts/' . $olt . '?status=offline')->assertOk()->assertInertia(fn (AssertableInertia $page) => $page->where('result.total', 3));
-        $this->get('/olts/' . $olt . '?status=online')->assertOk()->assertInertia(fn (AssertableInertia $page) => $page->where('result.total', 3));
+        // The list the figures open: every ONU on every OLT, with the same counts.
+        $other = $this->insertRow('olts', ['name' => 'OLT-North', 'model' => 'MA5800', 'host' => '10.0.9.3', 'enabled' => 1, 'rx_warning' => -27, 'rx_critical' => -30, 'last_sync_ok' => 1]);
+        $far = $this->insertRow('olt_onus', ['olt_id' => $other, 'frame' => 0, 'slot' => 2, 'port' => 0, 'ont_id' => 0, 'sn' => 'HWTCNORTH001', 'description' => 'North shop', 'status' => 'online', 'rx_dbm' => -20]);
+        $this->get('/onus')->assertOk()->assertInertia(fn (AssertableInertia $page) => $page->component('olts/Onus')
+            ->where('counts', ['total' => 7, 'online' => 4, 'offline' => 3, 'weak' => 2, 'waiting' => 1])
+            ->where('result.total', 7)->where('result.rows.0.olt', 'OLT-Center')->where('result.rows.6.olt', 'OLT-North')->where('result.rows.6.description', 'North shop'));
+        $this->get('/onus?status=offline')->assertOk()->assertInertia(fn (AssertableInertia $page) => $page->where('result.total', 3));
+        $this->get('/onus?status=weak')->assertOk()->assertInertia(fn (AssertableInertia $page) => $page->where('result.total', 2));
+        $this->get('/onus?olt=' . $other)->assertOk()->assertInertia(fn (AssertableInertia $page) => $page->where('result.total', 1)->where('counts.total', 1)->where('counts.waiting', 0));
+        $this->get('/onus?q=north')->assertOk()->assertInertia(fn (AssertableInertia $page) => $page->where('result.total', 1)->where('result.rows.0.sn', 'HWTCNORTH001'));
+        $this->get('/onus?status=waiting')->assertOk()->assertInertia(fn (AssertableInertia $page) => $page->where('waiting.0.sn', 'HWTCAAAA0001')->where('waiting.0.olt', 'OLT-Center'));
+        // From one ONU to the next without the list: the last ONU of an OLT leads on to the first of the next OLT.
+        $last = (int) \App\Support\Db::value('SELECT id FROM olt_onus WHERE olt_id=? ORDER BY ont_id DESC LIMIT 1', [$olt]);
+        $this->get('/olts/' . $olt . '/onus/' . $last)->assertOk()->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('neighbours.next.href', '/olts/' . $other . '/onus/' . $far)->where('neighbours.next.name', 'North shop')
+            ->where('neighbours.previous.position', '0/1/3:4'));
+        // The top search finds ONUs, OLTs and routers too.
+        $this->getJson('/search?q=north')->assertOk()->assertJsonPath('onus.0.href', '/olts/' . $other . '/onus/' . $far)->assertJsonPath('onus.0.where', 'OLT-North 0/2/0:0')
+            ->assertJsonPath('devices.0.name', 'OLT-North');
     }
 
     public function test_menu_overview_and_olt_page_count_weak_onus_the_same_way(): void

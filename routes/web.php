@@ -206,6 +206,7 @@ Route::middleware('frweb.auth')->group(function () {
     // NAS devices and monitoring.
     // OLTs and their ONUs.
     Route::middleware('permission:nas.view')->group(function () {
+        Route::get('/onus', [OnuController::class, 'index']);
         Route::get('/olts', [OltController::class, 'index']);
         Route::get('/olts/mapping', [OltController::class, 'mapping']);
         Route::post('/clients/{username}/onu', [OltController::class, 'link']);

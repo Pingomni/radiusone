@@ -1460,6 +1460,13 @@ th.num, td.num { text-align: right; }
 .overview-figures .stat-strip { grid-template-columns: repeat(6, minmax(0, 1fr)); }
 /* Room for the top bar when the page jumps to a list. */
 .list-panel { scroll-margin-top: 76px; }
+/* ONU page: back to the list of all ONUs, and step to the ONU before or after this one. */
+.onu-switch { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); margin-bottom: var(--sp-2); font-size: var(--fs-sm); font-weight: 500; }
+.onu-switch > a { display: inline-flex; align-items: center; gap: 6px; }
+.onu-switch > a svg.icon { width: 14px; height: 14px; }
+.onu-switch > span { display: inline-flex; gap: 16px; }
+.clients-toolbar > input[type="search"] { flex: 1 1 260px; max-width: 380px; }
+.clients-toolbar > select { flex: 0 1 200px; }
 .row-links { display: inline-flex; gap: 12px; white-space: nowrap; }
 .attention-list { display: grid; margin: 0; padding: 0; list-style: none; }
 .attention-list > li { display: flex; align-items: center; gap: var(--sp-3); padding: 11px var(--sp-3); border-bottom: 1px solid var(--line); }

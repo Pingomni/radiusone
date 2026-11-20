@@ -15,7 +15,8 @@ const NAV: [href: string, label: string, permission: string, icon: string, group
     ['/clients', 'Clients', 'clients.view', 'clients', 'Operations', 'clients'],
     ['/services', 'Services', 'services.view', 'services', 'Operations'],
     ['/nas', 'NAS devices', 'nas.view', 'server', 'Network'],
-    ['/olts', 'OLT and ONU', 'nas.view', 'fiber', 'Network', 'weakOnus'],
+    ['/onus', 'ONUs', 'nas.view', 'onu', 'Network', 'weakOnus'],
+    ['/olts', 'OLTs', 'nas.view', 'fiber', 'Network'],
     ['/monitoring', 'Monitoring', 'nas.view', 'activity', 'Network'],
     ['/operations', 'Network operations', 'operations.view', 'signal', 'Network'],
     ['/billing', 'Billing', 'billing.view', 'billing', 'Finance'],
@@ -109,7 +110,7 @@ function useMobileNav() {
     return { mobile, open, setOpen };
 }
 
-type SearchResults = { q: string; clients: { username: string; name: string; ip: string; online: boolean; href: string }[]; clientTotal: number; invoices: { number: string; username: string; href: string }[] };
+type SearchResults = { q: string; clients: { username: string; name: string; ip: string; online: boolean; href: string }[]; clientTotal: number; invoices: { number: string; username: string; href: string }[]; onus?: { name: string; sn: string; where: string; online: boolean; href: string }[]; devices?: { name: string; sub: string; href: string }[] };
 
 /** The top bar's search: Ctrl K (⌘K) jumps to it; typing lists clients and invoices; Enter opens the client list. */
 function TopSearch({ initial }: { initial: string }) {
@@ -150,6 +151,8 @@ function TopSearch({ initial }: { initial: string }) {
 
     const items = results ? [
         ...results.clients.map((c) => ({ key: `c-${c.username}`, href: c.href, title: c.name || c.username, sub: [c.username, c.ip].filter(Boolean).join('  '), online: c.online, kind: 'client' as const })),
+        ...(results.onus ?? []).map((o) => ({ key: `o-${o.href}`, href: o.href, title: o.name, sub: `${o.sn}  ${o.where}`, online: o.online, kind: 'onu' as const })),
+        ...(results.devices ?? []).map((d) => ({ key: `d-${d.href}`, href: d.href, title: d.name, sub: d.sub, online: false, kind: 'device' as const })),
         ...results.invoices.map((i) => ({ key: `i-${i.number}`, href: i.href, title: i.number, sub: i.username, online: false, kind: 'invoice' as const })),
     ] : [];
     const showAll = !!results && results.clientTotal > results.clients.length;
@@ -207,7 +210,7 @@ function TopSearch({ initial }: { initial: string }) {
                             className={i === active ? 'active' : undefined}
                             onMouseDown={(e) => { e.preventDefault(); go(item.href); }}
                         >
-                            <span className={`search-kind ${item.kind}`}>{item.kind === 'client' ? <span className={`status-dot ${item.online ? 'is-online' : ''}`} /> : <Icon name="billing" />}</span>
+                            <span className={`search-kind ${item.kind}`}>{item.kind === 'client' ? <span className={`status-dot ${item.online ? 'is-online' : ''}`} /> : <Icon name={item.kind === 'onu' ? 'onu' : item.kind === 'device' ? 'server' : 'billing'} />}</span>
                             <span><strong>{item.title}</strong><small className={item.kind === 'client' ? 'mono' : undefined}>{item.sub}</small></span>
                         </a>
                     ))}

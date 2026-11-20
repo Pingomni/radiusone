@@ -671,8 +671,10 @@ function Waiting({ live }: { live: LiveState }) {
     return null;
 }
 
-export default function OnuPage({ olt, onu, clients, disconnections, timeline, since, trafficTables, ranges, history, addedAt }: {
-    olt: OltInfo; onu: OnuRow; clients: Client[]; disconnections: { day: number; week: number }; timeline: Timeline; since: number | null; trafficTables: TrafficTable[]; ranges: Record<string, string>; history: Change[]; addedAt: string | null;
+type Neighbour = { href: string; name: string; position: string };
+
+export default function OnuPage({ olt, onu, neighbours, clients, disconnections, timeline, since, trafficTables, ranges, history, addedAt }: {
+    olt: OltInfo; onu: OnuRow; neighbours: { previous: Neighbour | null; next: Neighbour | null }; clients: Client[]; disconnections: { day: number; week: number }; timeline: Timeline; since: number | null; trafficTables: TrafficTable[]; ranges: Record<string, string>; history: Change[]; addedAt: string | null;
 }) {
     const can = useCan();
     const base = `/olts/${olt.id}/onus/${onu.id}`;
@@ -732,6 +734,13 @@ export default function OnuPage({ olt, onu, clients, disconnections, timeline, s
         <AppLayout title={onu.description || `ONU ${onu.sn}`} heading={false}>
             {can('nas.manage') && !olt.canChange && <p className="hint">Read only. <Link href={`/olts/${olt.id}/edit`}>Allow changes</Link> on this OLT to restart, rename or remove ONUs.</p>}
 
+            <nav className="onu-switch" aria-label="Other ONUs">
+                <Link href="/onus"><Icon name="menu" />All ONUs</Link>
+                <span>
+                    {neighbours.previous ? <Link href={neighbours.previous.href} title={`${neighbours.previous.name}, ${neighbours.previous.position}`}>‹ Previous</Link> : <span className="is-empty-text">‹ Previous</span>}
+                    {neighbours.next ? <Link href={neighbours.next.href} title={`${neighbours.next.name}, ${neighbours.next.position}`}>Next ›</Link> : <span className="is-empty-text">Next ›</span>}
+                </span>
+            </nav>
             <section className={`onu-hero ${status === 'online' ? 'is-online' : status === 'off' ? 'is-off' : status === 'offline' ? 'is-offline' : ''}`.trim()} aria-label="ONU at a glance">
                 <div className="onu-hero-top">
                     <div className="onu-identity">
