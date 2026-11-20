@@ -138,7 +138,7 @@ function ClientPanel({ username, onClose }: { username: string; onClose: () => v
                     {data.onu && (
                         <section>
                             <h3>Fibre signal</h3>
-                            <SignalReading dbm={data.onu.rx} weak={data.onu.weak} veryWeak={data.onu.veryWeak} second={data.onu.oltRx === null ? undefined : `OLT ${data.onu.oltRx.toFixed(1).replace('-', '−')}`} />
+                            <SignalReading dbm={data.onu.rx} weak={data.onu.weak} veryWeak={data.onu.veryWeak} oltDbm={data.onu.oltRx} />
                             <p className="list-subline"><Link href={data.onu.href}>{data.onu.where}</Link></p>
                         </section>
                     )}

@@ -695,7 +695,7 @@ export default function OltShow({ olt, counts, filters, hardware, details, backu
                         { header: 'Status', cell: (o) => (o.active === false ? <State tone="warning">Turned off</State> : <OnuStatus status={o.status} />) },
                         { header: 'Port', cell: (o) => <span className="mono">{o.position}</span> },
                         { header: 'Client', cell: (o) => (o.clients.length ? o.clients.map((u) => <div key={u}><Link href={`/clients/${encodeURIComponent(u)}/edit?tab=onu`}>{u}</Link></div>) : <span className="onu-pending">Not linked</span>) },
-                        { header: 'Signal at the ONU, dBm', cell: (o) => <SignalReading dbm={o.rx} weak={olt.rxWarning} veryWeak={olt.rxCritical} second={o.oltRx === null ? undefined : `OLT ${o.oltRx.toFixed(1).replace('-', '\u2212')}`} /> },
+                        { header: 'Signal at the ONU, dBm', cell: (o) => <SignalReading dbm={o.rx} weak={olt.rxWarning} veryWeak={olt.rxCritical} oltDbm={o.oltRx} /> },
                         { header: 'Distance', cell: (o) => (o.distance === null ? '-' : `${o.distance} m`) },
                         { header: 'Last offline', className: 'wrap', cell: (o) => (o.lastDown || o.downCause ? <>{o.lastDown && <Time value={o.lastDown} />}{o.downCause && <div>{o.downCause}</div>}</> : '-') },
                         { header: 'Model', cell: (o) => o.model || '-' },

@@ -4,6 +4,12 @@ RadiusOne follows [semantic versioning](https://semver.org): **major** for chang
 upgrading, **minor** for new features, **patch** for fixes. The version is in the `VERSION` file and shows in
 the portal's sidebar and under Settings → System information.
 
+## 2.35.2 (2026-11-20)
+
+Update with **Settings → Overview → Software update** or `sudo radiusone-update`.
+
+- **Fixed:** an ONU that is weak only at the OLT end showed as green; the OLT reading now has its own colour and mark.
+
 ## 2.35.1 (2026-11-20)
 
 Update with **Settings → Overview → Software update** or `sudo radiusone-update`.

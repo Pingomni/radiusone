@@ -38,7 +38,7 @@ export function signalLevel(dbm: number | null, weak = -27, veryWeak = -30): 'no
  * The fibre signal scale: one bar from -32 to -5 dBm in red (very weak), amber (weak), green and amber again (too strong),
  * with a marker at the reading. The same part on the client, OLT and ONU pages; the zones follow the OLT's own levels.
  */
-export function SignalScale({ dbm, weak = -27, veryWeak = -30 }: { dbm: number | null; weak?: number; veryWeak?: number }) {
+export function SignalScale({ dbm, weak = -27, veryWeak = -30, second = null }: { dbm: number | null; weak?: number; veryWeak?: number; second?: number | null }) {
     const span = SCALE_MAX - SCALE_MIN;
     const pct = (v: number) => (Math.min(SCALE_MAX, Math.max(SCALE_MIN, v)) - SCALE_MIN) / span * 100;
     const zones: [string, number][] = [
@@ -50,6 +50,7 @@ export function SignalScale({ dbm, weak = -27, veryWeak = -30 }: { dbm: number |
     return (
         <span className={`signal-scale${dbm === null ? ' is-empty' : ''}`} aria-hidden="true">
             {zones.map(([zone, width], i) => <i key={i} className={zone} style={{ width: `${width}%` }} />)}
+            {second !== null && <b className="is-second" style={{ left: `${pct(second)}%` }} />}
             {dbm !== null && <b style={{ left: `${pct(dbm)}%` }} />}
         </span>
     );
@@ -57,17 +58,23 @@ export function SignalScale({ dbm, weak = -27, veryWeak = -30 }: { dbm: number |
 
 const LEVEL_WORDS = { none: 'no reading', danger: 'very weak', warning: 'weak', good: 'good' } as const;
 
-/** The scale with the number beside it, coloured and worded by level. `second` adds a small line under the number. */
-export function SignalReading({ dbm, weak = -27, veryWeak = -30, second }: { dbm: number | null; weak?: number; veryWeak?: number; second?: string }) {
+/**
+ * The scale with the number beside it, coloured and worded by level. `oltDbm` is the same fibre measured at the OLT:
+ * a small line under the number with its own colour, and a thin mark on the scale, so a link that is weak in one
+ * direction only shows which one.
+ */
+export function SignalReading({ dbm, weak = -27, veryWeak = -30, oltDbm = null }: { dbm: number | null; weak?: number; veryWeak?: number; oltDbm?: number | null }) {
     const level = signalLevel(dbm, weak, veryWeak);
+    const oltLevel = signalLevel(oltDbm, weak, veryWeak);
+    const minus = (v: number) => v.toFixed(1).replace('-', '\u2212');
     const words = dbm !== null && dbm > SCALE_STRONG ? 'too strong' : LEVEL_WORDS[level];
     return (
-        <span className={`signal-reading is-${level}`} title={dbm === null ? 'No reading' : `${dbm.toFixed(2)} dBm, ${words}`}>
-            <SignalScale dbm={dbm} weak={weak} veryWeak={veryWeak} />
+        <span className={`signal-reading is-${level}`} title={`${dbm === null ? 'No reading at the ONU' : `At the ONU ${dbm.toFixed(2)} dBm, ${words}`}${oltDbm === null ? '' : `. At the OLT ${oltDbm.toFixed(2)} dBm, ${LEVEL_WORDS[oltLevel]}`}`}>
+            <SignalScale dbm={dbm} weak={weak} veryWeak={veryWeak} second={oltDbm} />
             <strong>
-                {dbm === null ? '-' : dbm.toFixed(1).replace('-', '\u2212')}
+                {dbm === null ? '-' : minus(dbm)}
                 <span className="sr-only"> dBm, {words}</span>
-                {second && <small>{second}</small>}
+                {oltDbm !== null && <small className={`is-${oltLevel}`}>OLT {minus(oltDbm)}<span className="sr-only">, {LEVEL_WORDS[oltLevel]}</span></small>}
             </strong>
         </span>
     );

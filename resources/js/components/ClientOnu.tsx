@@ -36,7 +36,7 @@ export default function ClientOnu({ username, data, canLink }: { username: strin
                         {onu ? (
                             <>
                                 <Row label="Status">{onu.active === false ? <State tone="warning">Turned off</State> : <OnuStatus status={onu.status} />}</Row>
-                                <Row label="Signal at the ONU, dBm"><SignalReading dbm={onu.rx} second={onu.oltRx === null ? undefined : `OLT ${onu.oltRx.toFixed(1).replace('-', '\u2212')}`} /></Row>
+                                <Row label="Signal at the ONU, dBm"><SignalReading dbm={onu.rx} oltDbm={onu.oltRx} /></Row>
                                 <Row label="OLT and port"><Link href={`/olts/${current.oltId}?q=${encodeURIComponent(current.sn)}`}>{current.olt}</Link> <span className="mono">{onu.position}</span></Row>
                                 <Row label="Serial number"><span className="mono">{onu.sn}</span></Row>
                                 <Row label="Description on the OLT">{onu.description || '-'}</Row>

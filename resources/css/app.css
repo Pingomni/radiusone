@@ -1434,6 +1434,10 @@ a.stat:hover { background: var(--surface-2); text-decoration: none; }
 .signal-reading.is-warning > strong { color: var(--warning); }
 .signal-reading.is-danger > strong { color: var(--danger); }
 .signal-reading small { display: block; color: var(--text-muted); font-size: var(--fs-sm); font-weight: 400; }
+.signal-reading small.is-warning { color: var(--warning); font-weight: 500; }
+.signal-reading small.is-danger { color: var(--danger); font-weight: 500; }
+/* The reading at the OLT: a thinner, shorter mark than the ONU's. */
+.signal-scale > b.is-second { top: -2px; width: 2px; height: 10px; margin-left: -1px; background: var(--text-muted); box-shadow: 0 0 0 1px var(--surface); }
 .signal-ends { display: flex; justify-content: space-between; margin-top: 6px; color: var(--text-faint); font-size: var(--fs-xs); font-variant-numeric: tabular-nums; }
 
 /* --------------------------------------------------------------------------
