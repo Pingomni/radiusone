@@ -1,5 +1,6 @@
 import { Link } from '@inertiajs/react';
 import Icon from '@/components/Icon';
+import { ChartOrMessage, type ChartPayload } from '@/components/LineChart';
 import { LivePanel } from '@/components/LivePanel';
 import { MetricCards, type Metric } from '@/components/metrics';
 import { DataTable } from '@/components/table';
@@ -11,6 +12,8 @@ type Router = { id: number; name: string; vendor: string; address: string; href:
 type Attention = { tone: 'danger' | 'warning'; title: string; detail: string; action: { label: string; href: string } | null };
 type ExpiringRow = { username: string; name: string; service: string; expires: string; when: string; soon: boolean; balance: number | null; balanceText: string | null };
 type Reject = { username: string; reply: string; authdate: string };
+type OltRow = { id: number; name: string; host: string; tone: StatusTone; status: string; error: string; online: number; onus: number; offline: number; weak: number; waiting: number; read: string | null; canAdd: boolean };
+type Fibre = { olts: OltRow[]; chart: { url: string; data: ChartPayload } | null };
 type TopUser = { username: string; down: string; up: string; total: string };
 
 function Routers({ rows }: { rows: Router[] }) {
@@ -26,6 +29,26 @@ function Routers({ rows }: { rows: Router[] }) {
                 { header: 'CPU', cell: (r) => (r.cpu === null ? <span className="is-empty-text">-</span> : <span className="cpu-cell"><span className="cpu-bar"><i className={r.cpu > 70 ? 'is-high' : undefined} style={{ width: `${r.cpu}%` }} /></span>{r.cpu}%</span>) },
                 { header: 'Sessions', className: 'num', cell: (r) => <strong>{r.sessions.toLocaleString('en-US')}</strong> },
                 { header: 'Uptime', cell: (r) => <span className="list-subline">{r.uptime ?? '-'}</span> },
+            ]}
+        />
+    );
+}
+
+/** One row per OLT; every number opens its list. */
+function Olts({ rows }: { rows: OltRow[] }) {
+    const count = (o: OltRow, n: number, status: string, tone = '') => (n > 0 ? <Link className={tone} href={`/olts/${o.id}?status=${status}`}>{n}</Link> : <span className="is-empty-text">0</span>);
+    return (
+        <DataTable
+            rows={rows}
+            rowKey={(o) => o.id}
+            columns={[
+                { header: 'OLT', cell: (o) => <span className="list-cell-stack"><Link className="nowrap" href={`/olts/${o.id}`}>{o.name}</Link><span className="list-subline mono">{o.host}</span></span> },
+                { header: 'Status', cell: (o) => <span title={o.error || undefined}><Status tone={o.tone}>{o.status}</Status></span> },
+                { header: 'Online', className: 'num', cell: (o) => <Link href={`/olts/${o.id}?status=online`}><strong>{o.online}</strong> / {o.onus}</Link> },
+                { header: 'Offline', className: 'num', cell: (o) => count(o, o.offline, 'offline', 'field-warning') },
+                { header: 'Weak', className: 'num', cell: (o) => count(o, o.weak, 'weak', 'field-warning') },
+                { header: 'Waiting', className: 'num', cell: (o) => (o.waiting > 0 ? <Link href={o.canAdd ? `/olts/${o.id}/provision` : `/olts/${o.id}`}>{o.waiting}</Link> : <span className="is-empty-text">0</span>) },
+                { header: '', cell: (o) => (o.canAdd ? <Link className="nowrap" href={`/olts/${o.id}/provision`}>Add ONU</Link> : null) },
             ]}
         />
     );
@@ -49,9 +72,10 @@ function NeedsAttention({ items }: { items: Attention[] }) {
     );
 }
 
-export default function Dashboard({ state, kpis, routers, routerTotal, attention, expiring, rejects, topUsers }: {
+export default function Dashboard({ state, kpis, fibre, routers, routerTotal, attention, expiring, rejects, topUsers }: {
     state: { headline: string; line: string };
     kpis: Metric[];
+    fibre: Fibre | null;
     routers: Router[];
     routerTotal: number;
     attention: Attention[];
@@ -72,7 +96,7 @@ export default function Dashboard({ state, kpis, routers, routerTotal, attention
                 </div>
                 {can('clients.manage') && <Link className="button primary" href="/clients/create"><Icon name="plus" />New client</Link>}
             </div>
-            <LivePanel title="Key figures" url="/fragments/dashboard-kpis" interval={60} initial={kpis} className="live-bare overview-figures" render={(m) => <MetricCards metrics={m} />} />
+            <LivePanel title="Key figures" url="/fragments/dashboard-kpis" interval={60} initial={kpis} className="live-bare overview-figures" render={(m) => <MetricCards metrics={m} icons />} />
             <div className="overview-grid">
                 <LivePanel
                     title="Routers"
@@ -86,6 +110,12 @@ export default function Dashboard({ state, kpis, routers, routerTotal, attention
                     <NeedsAttention items={attention} />
                 </Panel>
             </div>
+            {fibre && (
+                <div className="overview-grid halves">
+                    <LivePanel title="OLTs" url="/fragments/dashboard-fibre" interval={60} initial={{ olts: fibre.olts }} headerLink={can('nas.view') ? <Link href="/olts">All</Link> : undefined} render={(f) => <Olts rows={f.olts} />} />
+                    {fibre.chart && <LivePanel title="ONUs, last 24 hours" url={fibre.chart.url} interval={300} initial={fibre.chart.data} className="traffic-panel" render={(d) => <ChartOrMessage payload={d} />} />}
+                </div>
+            )}
             <div className="overview-grid thirds">
                 {expiring && (
                     <Panel title="Expiring this week" actions={expiring.total > expiring.rows.length ? <span className="list-subline">{expiring.total} in all</span> : undefined}>

@@ -1,4 +1,5 @@
 import { Link } from '@inertiajs/react';
+import Icon from './Icon';
 
 /**
  * A key figure, built server-side by App\Http\Support\Present::metric. Shown in one strip of numbers split by hairlines:
@@ -6,10 +7,10 @@ import { Link } from '@inertiajs/react';
  */
 export type Metric = { label: string; value: string; icon: string; tone: string; href: string; note?: string };
 
-export function MetricCard({ metric }: { metric: Metric }) {
+export function MetricCard({ metric, icons = false }: { metric: Metric; icons?: boolean }) {
     const body = (
         <>
-            <span className="stat-label">{metric.label}</span>
+            <span className="stat-label">{icons && metric.icon && <span className="stat-icon"><Icon name={metric.icon} /></span>}{metric.label}</span>
             <strong className="stat-value">{metric.value}</strong>
             {metric.note && <span className="stat-note">{metric.note}</span>}
         </>
@@ -19,10 +20,11 @@ export function MetricCard({ metric }: { metric: Metric }) {
     return metric.href ? <Link className={className} href={metric.href}>{body}</Link> : <div className={className}>{body}</div>;
 }
 
-export function MetricCards({ metrics }: { metrics: Metric[] }) {
+/** icons: the Overview shows each figure's icon; other pages keep the plain strip. */
+export function MetricCards({ metrics, icons = false }: { metrics: Metric[]; icons?: boolean }) {
     return (
         <section className="stat-strip" aria-label="Key figures">
-            {metrics.map((m) => <MetricCard key={m.label} metric={m} />)}
+            {metrics.map((m) => <MetricCard key={m.label} metric={m} icons={icons} />)}
         </section>
     );
 }

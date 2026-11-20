@@ -39,6 +39,34 @@ final class DashboardTest extends TestCase
             ->where('attention.0.action.href', '/olts/' . $olt . '?status=weak'));
     }
 
+    public function test_the_fibre_figures_count_onus_by_state_and_link_to_their_lists(): void
+    {
+        $this->actingAsOperator();
+        $this->get('/')->assertOk()->assertInertia(fn (AssertableInertia $page) => $page->where('fibre', null)->where('kpis.4.label', 'Data today')->where('kpis.4.href', '/reports'));
+        $olt = $this->insertRow('olts', ['name' => 'OLT-Center', 'model' => 'MA5800', 'host' => '10.0.9.2', 'enabled' => 1, 'rx_warning' => -27, 'rx_critical' => -30, 'last_sync_ok' => 1,
+            'inventory' => json_encode(['waiting' => [['sn' => 'HWTCAAAA0001', 'position' => '0/1/0', 'model' => 'EG8145V5']]])]);
+        foreach ([['online', -19.5, ''], ['online', -28.1, ''], ['online', -31.0, ''], ['offline', null, 'Power off (dying gasp)'], ['offline', null, 'LOS'], ['offline', null, '']] as $i => [$status, $rx, $cause]) {
+            $this->insertRow('olt_onus', ['olt_id' => $olt, 'frame' => 0, 'slot' => 1, 'port' => 3, 'ont_id' => $i, 'sn' => 'HWTC000' . $i, 'status' => $status, 'rx_dbm' => $rx, 'down_cause' => $cause]);
+        }
+        $figures = fn (AssertableInertia $page) => $page
+            // One strip of six: two for clients, four for ONUs, each with an icon and a list behind it.
+            ->has('kpis', 6)
+            ->where('kpis.0.label', 'Clients online')->where('kpis.0.icon', 'clients')->where('kpis.0.href', '/clients?status=online')
+            ->where('kpis.1.label', 'Expired')->where('kpis.1.href', '/clients?status=expired')
+            ->where('kpis.2', ['label' => 'ONUs waiting', 'value' => '1', 'icon' => 'plus', 'tone' => 'warning', 'href' => '/olts/' . $olt, 'note' => 'Not added yet'])
+            ->where('kpis.3.value', '3')->where('kpis.3.note', 'of 6')->where('kpis.3.href', '/olts/' . $olt . '?status=online')
+            ->where('kpis.4.value', '3')->where('kpis.4.note', 'Power 1 · LOS 1 · Other 1')->where('kpis.4.href', '/olts/' . $olt . '?status=offline')
+            ->where('kpis.5.value', '2')->where('kpis.5.note', 'Warning 1 · Critical 1')->where('kpis.5.tone', 'danger')->where('kpis.5.href', '/olts/' . $olt . '?status=weak')
+            ->where('fibre.olts.0.name', 'OLT-Center')->where('fibre.olts.0.online', 3)->where('fibre.olts.0.waiting', 1)->where('fibre.olts.0.status', 'Reading')
+            ->where('fibre.chart.url', '/olts/' . $olt . '/graph?chart=onus&range=24h');
+        $this->get('/')->assertOk()->assertInertia($figures);
+        $this->getJson('/fragments/dashboard-fibre')->assertOk()->assertJsonPath('olts.0.online', 3);
+        $this->getJson('/fragments/dashboard-kpis')->assertOk()->assertJsonPath('3.value', '3');
+        // The lists the figures open show the same ONUs.
+        $this->get('/olts/' . $olt . '?status=offline')->assertOk()->assertInertia(fn (AssertableInertia $page) => $page->where('result.total', 3));
+        $this->get('/olts/' . $olt . '?status=online')->assertOk()->assertInertia(fn (AssertableInertia $page) => $page->where('result.total', 3));
+    }
+
     public function test_menu_overview_and_olt_page_count_weak_onus_the_same_way(): void
     {
         $this->actingAsOperator();

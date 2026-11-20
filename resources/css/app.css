@@ -1390,14 +1390,19 @@ td .list-menu > summary:hover { border-color: var(--line); background: var(--sur
 .stat {
   display: grid;
   align-content: start;
-  gap: 2px;
+  gap: 4px;
   min-width: 0;
   padding: 14px 18px 15px;
   box-shadow: -1px 0 0 var(--line), 0 -1px 0 var(--line);
   color: var(--text);
 }
 a.stat:hover { background: var(--surface-2); text-decoration: none; }
-.stat-label { overflow: hidden; color: var(--text-muted); font-size: var(--fs-sm); white-space: nowrap; text-overflow: ellipsis; }
+.stat-label { display: flex; align-items: center; gap: 8px; overflow: hidden; color: var(--text-muted); font-size: var(--fs-sm); white-space: nowrap; text-overflow: ellipsis; }
+/* The figure's icon: a small tile that takes the figure's tone. */
+.stat-icon { display: inline-grid; place-items: center; flex: none; width: 26px; height: 26px; border-radius: 7px; background: var(--accent-bg); color: var(--accent); }
+.stat-icon svg.icon { width: 15px; height: 15px; }
+.stat.is-warning .stat-icon { background: var(--warning-bg); color: var(--warning); }
+.stat.is-danger .stat-icon { background: var(--danger-bg); color: var(--danger); }
 .stat-value { color: var(--text-strong); font-size: var(--fs-metric); font-weight: 600; letter-spacing: -.03em; line-height: 1.2; font-variant-numeric: tabular-nums; }
 .stat-note { overflow: hidden; color: var(--text-muted); font-size: var(--fs-sm); white-space: nowrap; text-overflow: ellipsis; }
 .stat.is-warning .stat-value { color: var(--warning); }
@@ -1445,6 +1450,8 @@ th.num, td.num { text-align: right; }
 .panel > .live-body:has(> .table-wrap:only-child) { margin: 0; }
 .overview-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 420px); gap: var(--sp-4); align-items: start; }
 .overview-grid.thirds { grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+.overview-grid.halves { grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); }
+.row-links { display: inline-flex; gap: 12px; white-space: nowrap; }
 .attention-list { display: grid; margin: 0; padding: 0; list-style: none; }
 .attention-list > li { display: flex; align-items: center; gap: var(--sp-3); padding: 11px var(--sp-3); border-bottom: 1px solid var(--line); }
 .attention-list > li:last-child { border-bottom: 0; }
@@ -1461,6 +1468,7 @@ th.num, td.num { text-align: right; }
   .overview-grid { grid-template-columns: minmax(0, 1fr); }
   /* One column: what needs attention comes before the routers. */
   .overview-grid > :last-child:not(:only-child) { order: -1; }
+  .overview-grid.halves > :last-child:not(:only-child) { order: 0; }
 }
 
 /* --------------------------------------------------------------------------

@@ -34,7 +34,7 @@ final class OltInventory
         }
         $commands = ['display version', 'display vlan all', 'display ont-lineprofile gpon all', 'display ont-srvprofile gpon all', 'display dba-profile all',
             'display traffic table ip from-index 0', 'display ntp-service sessions', 'display autosave configuration',
-            'display current-configuration section vlan-config', 'display interface vlanif'];
+            'display current-configuration section vlan-config', 'display interface vlanif', 'display ont autofind all'];
         $global = count($commands);
         $want = [];
         foreach ($ports['uplink'] as $card => $list) {
@@ -73,6 +73,8 @@ final class OltInventory
             'ntp' => HuaweiCli::ntp($out[6]), 'autosave' => HuaweiCli::autosave($out[7]),
             // Each VLAN's name and description, and the VLANs the OLT's own management address is on.
             'vlanInfo' => HuaweiCli::vlanConfig($out[8])['vlans'], 'ownVlans' => HuaweiCli::ownVlans($out[9]),
+            // New ONUs on the fibre that nobody has added yet (the Overview's "Waiting" figure).
+            'waiting' => array_map(static fn (array $o) => ['sn' => (string) $o['sn'], 'position' => $o['frame'] . '/' . $o['slot'] . '/' . $o['port'], 'model' => $o['model']], HuaweiCli::autofind($out[10])),
             'uplinks' => [], 'pon' => [],
         ];
         foreach ($want as $i => [$what, $card, $port]) {

@@ -55,7 +55,7 @@ Route::middleware('frweb.auth')->group(function () {
     Route::middleware('permission:dashboard.view')->group(function () {
         Route::get('/', [DashboardController::class, 'dashboard']);
         Route::get('/dashboard', [DashboardController::class, 'dashboard']);
-        Route::get('/fragments/{fragment}', [DashboardController::class, 'fragment'])->whereIn('fragment', ['dashboard-kpis', 'dashboard-nas', 'dashboard-rejects']);
+        Route::get('/fragments/{fragment}', [DashboardController::class, 'fragment'])->whereIn('fragment', ['dashboard-kpis', 'dashboard-fibre', 'dashboard-nas', 'dashboard-rejects']);
     });
 
     // The top bar's search; each kind of result checks its own permission.

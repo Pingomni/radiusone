@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers;
 
 use App\Http\Support\Format;
+use App\Http\Support\MonitoringData;
 use App\Http\Support\Present;
 use App\Support\Accounting;
 use App\Support\Auth;
@@ -17,7 +18,9 @@ use App\Support\MicroCache;
 use App\Support\NasMonitor;
 use App\Support\NasRepository;
 use App\Support\Olt\OltInventory;
+use App\Support\Olt\OltManager;
 use App\Support\Olt\Olts;
+use App\Support\SchemaCompatibility;
 use Illuminate\Http\JsonResponse;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -37,13 +40,15 @@ final class DashboardController extends Controller
         $routers = self::routers();
         $attention = self::attention($routers);
         $online = ClientQuery::count(['status' => 'online']);
+        $fibre = self::fibre();
 
         return Inertia::render('Dashboard', [
             'state' => [
                 'headline' => self::headline($attention),
                 'line' => number_format($online) . ' ' . ($online === 1 ? 'client is' : 'clients are') . ' online.',
             ],
-            'kpis' => self::kpis($online),
+            'kpis' => self::kpis($online, $fibre),
+            'fibre' => $fibre === null ? null : ['olts' => $fibre['olts'], 'chart' => $fibre['chart']],
             'routers' => $routers,
             'routerTotal' => (int) Db::value('SELECT COUNT(*) FROM nas'),
             'attention' => $attention,
@@ -64,6 +69,7 @@ final class DashboardController extends Controller
         Auth::requireCan($fragment === 'dashboard-rejects' ? 'logs.view' : 'dashboard.view');
         return response()->json(match ($fragment) {
             'dashboard-kpis' => self::kpis(),
+            'dashboard-fibre' => ['olts' => (self::fibre() ?? abort(404))['olts']],
             'dashboard-nas' => self::routers(),
             'dashboard-rejects' => self::rejects(),
             default => abort(404),
@@ -84,22 +90,83 @@ final class DashboardController extends Controller
     }
 
     /** Key figures for the strip. Expired needs follow-up (amber); figures that match a client filter link to the list. */
-    private static function kpis(?int $online = null): array
+    private static function kpis(?int $online = null, ?array $fibre = null): array
     {
         $counts = self::clientCounts();
         $today = (int) Db::value('SELECT COALESCE(SUM(COALESCE(acctinputoctets,0) + COALESCE(acctoutputoctets,0)),0) FROM radacct WHERE acctstarttime >= CURDATE() AND acctstarttime < DATE_ADD(CURDATE(), INTERVAL 1 DAY)');
-        $month = (int) Db::value('SELECT COALESCE(SUM(COALESCE(acctinputoctets,0) + COALESCE(acctoutputoctets,0)),0) FROM radacct WHERE acctstarttime >= DATE_FORMAT(CURDATE(), "%Y-%m-01") AND acctstarttime < DATE_ADD(DATE_FORMAT(CURDATE(), "%Y-%m-01"),INTERVAL 1 MONTH)');
         $clients = Auth::can('clients.view');
-        $metric = static fn (string $label, string|int $value, string $tone = '', string $href = '', string $note = '') => ['label' => $label, 'value' => is_int($value) ? number_format($value) : $value, 'icon' => '', 'tone' => $tone, 'href' => $href, 'note' => $note];
+        $reports = Auth::can('reports.view') ? '/reports' : '';
+        $metric = static fn (string $label, string|int $value, string $icon, string $tone = '', string $href = '', string $note = '') => ['label' => $label, 'value' => is_int($value) ? number_format($value) : $value, 'icon' => $icon, 'tone' => $tone, 'href' => $href, 'note' => $note];
         $expired = $counts['expired'] ?? 0;
+        $onlineNow = $online ?? ClientQuery::count(['status' => 'online']);
+        $fibre ??= self::fibre();
+        if ($fibre !== null) {
+            // With an OLT: clients and ONUs in one strip of six. Active, disabled and today's data ride as the small lines.
+            return [
+                $metric('Clients online', $onlineNow, 'clients', '', $clients ? '/clients?status=online' : '', number_format($counts['enabled'] ?? 0) . ' active · ' . Format::bytes($today) . ' today'),
+                $metric('Expired', $expired, 'calendar', $expired > 0 ? 'warning' : '', $clients ? '/clients?status=expired' : '', number_format($counts['disabled'] ?? 0) . ' disabled'),
+                ...$fibre['figures'],
+            ];
+        }
+        $month = (int) Db::value('SELECT COALESCE(SUM(COALESCE(acctinputoctets,0) + COALESCE(acctoutputoctets,0)),0) FROM radacct WHERE acctstarttime >= DATE_FORMAT(CURDATE(), "%Y-%m-01") AND acctstarttime < DATE_ADD(DATE_FORMAT(CURDATE(), "%Y-%m-01"),INTERVAL 1 MONTH)');
 
         return [
-            $metric('Online now', $online ?? ClientQuery::count(['status' => 'online']), '', $clients ? '/clients?status=online' : ''),
-            $metric('Active clients', $counts['enabled'] ?? 0, '', $clients ? '/clients?status=enabled' : '', number_format($counts['total'] ?? 0) . ' in total'),
-            $metric('Expired', $expired, $expired > 0 ? 'warning' : '', $clients ? '/clients?status=expired' : ''),
-            $metric('Disabled', $counts['disabled'] ?? 0, '', $clients ? '/clients?status=disabled' : ''),
-            $metric('Data today', Format::bytes($today)),
-            $metric('Data this month', Format::bytes($month)),
+            $metric('Online now', $onlineNow, 'clients', '', $clients ? '/clients?status=online' : ''),
+            $metric('Active clients', $counts['enabled'] ?? 0, 'user', '', $clients ? '/clients?status=enabled' : '', number_format($counts['total'] ?? 0) . ' in total'),
+            $metric('Expired', $expired, 'calendar', $expired > 0 ? 'warning' : '', $clients ? '/clients?status=expired' : ''),
+            $metric('Disabled', $counts['disabled'] ?? 0, 'lock', '', $clients ? '/clients?status=disabled' : ''),
+            $metric('Data today', Format::bytes($today), 'activity', '', $reports),
+            $metric('Data this month', Format::bytes($month), 'reports', '', $reports),
+        ];
+    }
+
+    /**
+     * The fibre side, as SmartOLT's four boxes: ONUs waiting to be added, online, offline (by cause) and with a weak
+     * signal, each linking to its list; one row per OLT; and the ONU graph of the last day. Null without an OLT.
+     *
+     * @return array{figures: list<array<string, mixed>>, olts: list<array<string, mixed>>, chart: ?array<string, mixed>}|null
+     */
+    private static function fibre(): ?array
+    {
+        if (!Auth::can('nas.view') || SchemaCompatibility::problems('olt')) {
+            return null;
+        }
+        $olts = Db::select('SELECT t.*, COUNT(o.id) AS onus,
+            COALESCE(SUM(o.status = "online"), 0) AS online,
+            COALESCE(SUM(o.status <> "online"), 0) AS offline,
+            COALESCE(SUM(o.status <> "online" AND o.down_cause LIKE "%dying%"), 0) AS power,
+            COALESCE(SUM(o.status <> "online" AND o.down_cause LIKE "%LOS%"), 0) AS los,
+            COALESCE(SUM(' . Olts::weakSql('o', 't.rx_warning') . '), 0) AS weak,
+            COALESCE(SUM(' . Olts::weakSql('o', 't.rx_critical') . '), 0) AS very_weak
+            FROM olts t LEFT JOIN olt_onus o ON o.olt_id = t.id WHERE t.enabled = 1 GROUP BY t.id ORDER BY t.name');
+        if (!$olts) {
+            return null;
+        }
+        $one = count($olts) === 1 ? '/olts/' . (int) $olts[0]['id'] : null;
+        $sum = static fn (string $key) => array_sum(array_map(static fn (array $o) => (int) $o[$key], $olts));
+        $waiting = array_map(static fn (array $o) => count(OltInventory::saved($o)['waiting'] ?? []), $olts);
+        $rows = [];
+        foreach ($olts as $i => $o) {
+            $read = $o['last_sync_ok'] === null ? ['neutral', 'Not read yet'] : ((int) $o['last_sync_ok'] === 1 ? ['good', 'Reading'] : ['danger', 'Cannot be read']);
+            $rows[] = ['id' => (int) $o['id'], 'name' => (string) $o['name'], 'host' => (string) $o['host'], 'tone' => $read[0], 'status' => $read[1], 'error' => (string) ($o['last_error'] ?? ''),
+                'online' => (int) $o['online'], 'onus' => (int) $o['onus'], 'offline' => (int) $o['offline'], 'weak' => (int) $o['weak'], 'waiting' => $waiting[$i],
+                'read' => $o['last_sync_at'] === null ? null : substr((string) $o['last_sync_at'], 11, 5), 'canAdd' => Auth::can('nas.manage') && OltManager::canChange($o)];
+        }
+        $offline = $sum('offline');
+        $other = $offline - $sum('power') - $sum('los');
+        $weak = $sum('weak');
+        $metric = static fn (string $label, int $value, string $icon, string $tone, string $href, string $note) => ['label' => $label, 'value' => number_format($value), 'icon' => $icon, 'tone' => $tone, 'href' => $href, 'note' => $note];
+        $list = static fn (string $status) => $one === null ? '/olts' : $one . '?status=' . $status;
+        $waitingTotal = array_sum($waiting);
+        return [
+            'figures' => [
+                $metric('ONUs waiting', $waitingTotal, 'plus', $waitingTotal > 0 ? 'warning' : '', $one !== null && $rows[0]['canAdd'] ? $one . '/provision' : ($one ?? '/olts'), $waitingTotal > 0 ? 'Not added yet' : 'None to add'),
+                $metric('ONUs online', $sum('online'), 'fiber', '', $list('online'), 'of ' . number_format($sum('onus'))),
+                $metric('ONUs offline', $offline, 'offline', $offline > 0 ? 'warning' : '', $list('offline'), 'Power ' . $sum('power') . ' · LOS ' . $sum('los') . ' · Other ' . $other),
+                $metric('Weak signal', $weak, 'alert', $sum('very_weak') > 0 ? 'danger' : ($weak > 0 ? 'warning' : ''), $list('weak'), 'Warning ' . ($weak - $sum('very_weak')) . ' · Critical ' . $sum('very_weak')),
+            ],
+            'olts' => $rows,
+            'chart' => $one === null ? null : ['url' => $one . '/graph?chart=onus&range=24h', 'data' => MonitoringData::oltChart($olts[0], '24h')],
         ];
     }
 

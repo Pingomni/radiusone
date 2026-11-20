@@ -415,6 +415,8 @@ final class OltManageTest extends TestCase
         $this->assertSame([7.12, true, 20, 'online'], [$inventory['pon']['0/1/0']['tx'], $inventory['pon']['0/1/0']['autofind'], $inventory['pon']['0/1/0']['max_km'], $inventory['pon']['0/1/0']['state']]);
         $this->assertSame(['on' => true, 'minutes' => 60], $inventory['autosave']);
         $this->assertSame('192.0.2.123', $inventory['ntp'][0]['server']);
+        // The new ONU on the fibre that nobody has added yet.
+        $this->assertSame(['sn' => 'HWTCAAAA0001', 'position' => '0/1/0'], array_intersect_key($inventory['waiting'][0], array_flip(['sn', 'position'])));
         $this->assertSame([], $this->changes());
         $this->assertNotContains('display current-configuration', $this->commands());
 
