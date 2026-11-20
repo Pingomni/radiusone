@@ -50,7 +50,8 @@ export function statusTone(tone?: string | null): StatusTone {
 
 /** A state word from the server ("enabled", "stale accounting") as dot + text, first letter capital. */
 export function State({ tone, children }: { tone?: string | null; children: ReactNode }) {
-    const text = typeof children === 'string' && children ? children.charAt(0).toUpperCase() + children.slice(1) : children;
+    // Only plain words get a capital: "v2c" or "pppoe_20m" keep their case.
+    const text = typeof children === 'string' && /^[a-z]+(\s|$)/.test(children) ? children.charAt(0).toUpperCase() + children.slice(1) : children;
     return <Status tone={statusTone(tone)}>{text}</Status>;
 }
 
