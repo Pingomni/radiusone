@@ -4,6 +4,12 @@ RadiusOne follows [semantic versioning](https://semver.org): **major** for chang
 upgrading, **minor** for new features, **patch** for fixes. The version is in the `VERSION` file and shows in
 the portal's sidebar and under Settings → System information.
 
+## 2.39.0 (2026-11-20)
+
+Update with **Settings → Overview → Software update** or `sudo radiusone-update`.
+
+- **Menu:** NAS devices and OLTs are now tabs of Devices (All, Routers, OLTs, Needs a look).
+
 ## 2.38.1 (2026-11-20)
 
 Update with **Settings → Overview → Software update** or `sudo radiusone-update`.

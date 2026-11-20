@@ -16,10 +16,8 @@ const NAV: [href: string, label: string, permission: string, icon: string, group
     ['/sessions', 'Sessions', 'clients.view', 'activity', 'Operations'],
     ['/services', 'Services', 'services.view', 'services', 'Operations'],
     ['/devices', 'Devices', 'nas.view', 'server', 'Network'],
-    ['/nas', 'NAS devices', 'nas.view', 'server', 'Network'],
     ['/onus', 'ONUs', 'nas.view', 'onu', 'Network', 'weakOnus'],
-    ['/ports', 'PON ports', 'nas.view', 'signal', 'Network'],
-    ['/olts', 'OLTs', 'nas.view', 'fiber', 'Network'],
+    ['/ports', 'PON ports', 'nas.view', 'fiber', 'Network'],
     ['/monitoring', 'Monitoring', 'nas.view', 'activity', 'Network'],
     ['/operations', 'Network operations', 'operations.view', 'signal', 'Network'],
     ['/billing', 'Billing', 'billing.view', 'billing', 'Finance'],
@@ -33,9 +31,19 @@ const NAV: [href: string, label: string, permission: string, icon: string, group
 // Menu items that are RadiusOne Pro features: marked "Pro" while this server has no licence for them.
 const PRO_NAV: Record<string, ProFeature> = { '/billing': 'billing', '/contracts': 'contracts', '/payments': 'contracts' };
 
+/**
+ * The menu item a page belongs to. Routers (/nas) and OLTs (/olts) are tabs of Devices, so their pages count as
+ * Devices; one ONU's page (/olts/1/onus/2) counts as ONUs.
+ */
+function menuPath(path: string): string {
+    if (/^\/olts\/\d+\/onus(\/|$)/.test(path)) return '/onus';
+    if (/^\/(nas|olts)(\/|$)/.test(path)) return '/devices';
+    return path;
+}
+
 /** Where a page sits in the menu, for the breadcrumb: its group and its menu item. */
 function placeOf(path: string): { group: string; label: string; href: string } | null {
-    const section = path.replace(/^\/+/, '').split('/')[0];
+    const section = menuPath(path).replace(/^\/+/, '').split('/')[0];
     if (section === '' || section === 'dashboard') return { group: 'Operations', label: 'Overview', href: '/' };
     if (section === 'profile') return { group: 'Workspace', label: 'My account', href: '/profile' };
     const item = NAV.find(([href]) => href === `/${section}`);
@@ -315,7 +323,8 @@ export default function AppLayout({ title, heading = true, subtitle, actions, ch
                 </div>
                 <nav aria-label="Primary">
                     {NAV.filter(([, , permission]) => can(permission)).map(([href, label, , icon, navGroup, count]) => {
-                        const active = path === href || (href !== '/' && path.startsWith(`${href}/`)) || (href === '/' && path === '/dashboard');
+                        const at = menuPath(path);
+                        const active = at === href || (href !== '/' && at.startsWith(`${href}/`)) || (href === '/' && at === '/dashboard');
                         const heading = navGroup !== group ? <span className="nav-group-label">{navGroup}</span> : null;
                         group = navGroup;
                         const n = count ? nav?.[count] ?? null : null;

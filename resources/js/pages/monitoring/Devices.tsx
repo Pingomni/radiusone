@@ -1,5 +1,6 @@
 import { Link } from '@inertiajs/react';
 import Icon from '@/components/Icon';
+import { DeviceTabs } from '@/components/monitoring';
 import { DataTable } from '@/components/table';
 import { Status, type StatusTone } from '@/components/ui';
 import AppLayout from '@/layouts/AppLayout';
@@ -9,8 +10,6 @@ type Device = {
     tone: StatusTone; state: string; count: string; countHref: string; detail: string; problems: string[];
 };
 type Counts = { all: number; router: number; olt: number; problems: number };
-
-const VIEWS: [view: string, label: string, key: keyof Counts][] = [['', 'All', 'all'], ['router', 'Routers', 'router'], ['olt', 'OLTs', 'olt'], ['problems', 'Needs a look', 'problems']];
 
 /** Routers and OLTs in one list, with their state. */
 export default function Devices({ counts, view, devices, canAdd }: { counts: Counts; view: string; devices: Device[]; canAdd: boolean }) {
@@ -25,14 +24,8 @@ export default function Devices({ counts, view, devices, canAdd }: { counts: Cou
                 </>
             ) : undefined}
         >
+            <DeviceTabs current={view === 'problems' ? 'problems' : 'all'} counts={counts} />
             <section className="panel clients-page" aria-label="Devices">
-                <nav className="view-tabs" aria-label="Device views">
-                    {VIEWS.map(([key, label, count]) => (
-                        <Link key={count} href="/devices" data={key ? { view: key } : {}} aria-current={view === key ? 'page' : undefined} preserveScroll>
-                            {label} <span className="view-count">{counts[count]}</span>
-                        </Link>
-                    ))}
-                </nav>
                 <DataTable
                     rows={devices}
                     rowKey={(d) => d.key}

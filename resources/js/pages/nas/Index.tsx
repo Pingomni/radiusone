@@ -1,6 +1,7 @@
 import { Link } from '@inertiajs/react';
 import { DeleteButton } from '@/components/confirm';
 import Icon from '@/components/Icon';
+import { DeviceTabs } from '@/components/monitoring';
 import { UnknownRouters } from '@/components/NasDiagnostics';
 import { DataTable } from '@/components/table';
 import { Panel, Tag, type TagData, State } from '@/components/ui';
@@ -13,14 +14,15 @@ export default function NasIndex({ devices }: { devices: Device[] }) {
     const can = useCan();
     return (
         <AppLayout
-            title="NAS devices"
+            title="Devices"
             actions={(
                 <>
                     <Link className="button" href="/monitoring"><Icon name="activity" />Monitoring</Link>
-                    {can('nas.manage') && <Link className="button primary" href="/nas/create"><Icon name="plus" />New NAS device</Link>}
+                    {can('nas.manage') && <Link className="button primary" href="/nas/create"><Icon name="plus" />New router</Link>}
                 </>
             )}
         >
+            <DeviceTabs current="routers" />
             <UnknownRouters canAdd={can('nas.manage')} />
             <Panel title="Routers">
                 <DataTable

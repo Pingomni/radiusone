@@ -93,3 +93,22 @@ export function HistorySection({ history, pageUrl }: { history: History; pageUrl
 export function ToneValue({ value, tone }: { value: string; tone: string | null }) {
     return tone === null ? <strong>{value}</strong> : <State tone={tone}>{value}</State>;
 }
+
+/**
+ * Devices is one menu item with three lists behind it: every device with its state, the routers (with their RADIUS
+ * settings) and the OLTs. The same tabs on all three pages, so they read as one place.
+ */
+export function DeviceTabs({ current, counts }: { current: 'all' | 'routers' | 'olts' | 'problems'; counts?: { all: number; router: number; olt: number; problems: number } }) {
+    const tabs: [key: typeof current, label: string, href: string, n?: number][] = [
+        ['all', 'All', '/devices', counts?.all], ['routers', 'Routers', '/nas', counts?.router], ['olts', 'OLTs', '/olts', counts?.olt], ['problems', 'Needs a look', '/devices?view=problems', counts?.problems],
+    ];
+    return (
+        <nav className="view-tabs device-tabs" aria-label="Devices">
+            {tabs.map(([key, label, href, n]) => (
+                <Link key={key} href={href} aria-current={current === key ? 'page' : undefined}>
+                    {label}{n !== undefined && <> <span className="view-count">{n}</span></>}
+                </Link>
+            ))}
+        </nav>
+    );
+}

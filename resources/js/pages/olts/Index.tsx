@@ -2,6 +2,7 @@ import Icon from '@/components/Icon';
 import { Link } from '@inertiajs/react';
 import { DataTable } from '@/components/table';
 import { Empty, Panel, Time, State } from '@/components/ui';
+import { DeviceTabs } from '@/components/monitoring';
 import AppLayout from '@/layouts/AppLayout';
 import { useCan } from '@/lib/auth';
 
@@ -17,7 +18,7 @@ export default function OltIndex({ olts }: { olts: Olt[] }) {
     const can = useCan();
     return (
         <AppLayout
-            title="OLTs"
+            title="Devices"
             actions={(
                 <>
                     <Link className="button" href="/olts/changelog">Changelog</Link>
@@ -26,6 +27,7 @@ export default function OltIndex({ olts }: { olts: Olt[] }) {
                 </>
             )}
         >
+            <DeviceTabs current="olts" />
             <Panel title="OLTs">
                 {olts.length ? (
                     <DataTable
