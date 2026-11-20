@@ -1,6 +1,6 @@
 import { Link, useForm } from '@inertiajs/react';
 import { useState, type ReactNode } from 'react';
-import { InvoiceTable, StatCards, type InvoiceRow, type Stat } from '@/components/billing';
+import { InvoiceTable, ReceiptActions, StatCards, type InvoiceRow, type Stat } from '@/components/billing';
 import { PostButton, useConfirm } from '@/components/confirm';
 import Icon from '@/components/Icon';
 import { LivePanel } from '@/components/LivePanel';
@@ -369,6 +369,7 @@ export default function ClientForm({ values, draftRestored, draftTab, canEdit, c
                                 { header: 'Amount', cell: (p) => p.amount },
                                 { header: 'Method', cell: (p) => p.method },
                                 { header: 'Reference', cell: (p) => p.reference },
+                                { header: 'Receipt', noExport: true, cell: (p) => <ReceiptActions invoiceId={p.invoiceId} /> },
                             ]}
                         />
                     </Panel>

@@ -1,6 +1,6 @@
 import { Link, router, useForm } from '@inertiajs/react';
 import { useEffect } from 'react';
-import { PaymentProgress, type InvoiceStatusData, type Receipt } from '@/components/billing';
+import { PaymentProgress, ReceiptActions, type InvoiceStatusData, type Receipt } from '@/components/billing';
 import { PostButton } from '@/components/confirm';
 import { ErrorSummary, Field, Panel, RowActions, Select, TextArea } from '@/components/ui';
 import AppLayout from '@/layouts/AppLayout';
@@ -71,7 +71,7 @@ export default function InvoiceView({ invoice, items, payments, payment, methods
         if (download) window.location.assign(download);
     }, [download]);
 
-    const receiptButton = invoice.receipt && <a className="button" href={invoice.receipt.href}>{invoice.receipt.label}</a>;
+    const receiptButton = invoice.receipt && <ReceiptActions invoiceId={invoice.id} buttons />;
     const banner = invoice.banner;
     const client = `/clients/${encodeURIComponent(invoice.username)}/edit`;
 

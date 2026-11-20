@@ -124,6 +124,9 @@ final class BillingTest extends TestCase
             ->where('canVoid', false)
             ->has('payments', 1));
         $this->get('/billing/invoices/' . $id . '/payment-pdf')->assertOk()->assertHeader('Content-Type', 'application/pdf');
+        // Save downloads the receipt; Print shows it in the browser, which prints it.
+        $this->assertStringStartsWith('attachment;', (string) $this->get('/billing/invoices/' . $id . '/payment-pdf')->headers->get('Content-Disposition'));
+        $this->assertStringStartsWith('inline;', (string) $this->get('/billing/invoices/' . $id . '/payment-pdf?print=1')->headers->get('Content-Disposition'));
 
         $this->post('/billing/invoices/' . $id . '/payment', ['request_key' => 'stale-key-0000000000'] + $payment)
             ->assertSessionHas('flash.message', 'Payment form changed. Review recorded payments and reload before continuing.');

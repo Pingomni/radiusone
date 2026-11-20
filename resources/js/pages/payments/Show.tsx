@@ -1,5 +1,6 @@
 import { Link, useForm } from '@inertiajs/react';
 import { PostButton } from '@/components/confirm';
+import { ReceiptActions } from '@/components/billing';
 import { SettingsRows } from '@/components/settings';
 import { Panel, TextArea } from '@/components/ui';
 import AppLayout from '@/layouts/AppLayout';
@@ -13,7 +14,7 @@ export default function Show({ payment: p, canManage }: { payment: Payment; canM
         <AppLayout title={`Online payment ${p.id}`}>
             <Panel
                 title={`${p.amount} ${p.currency}`}
-                actions={canManage && p.status === 'pending' ? <PostButton action={`/payments/${p.id}/check`} label="Check now" className="button" /> : undefined}
+                actions={canManage && p.status === 'pending' ? <PostButton action={`/payments/${p.id}/check`} label="Check now" className="button" /> : p.status === 'paid' && p.invoiceId ? <ReceiptActions invoiceId={p.invoiceId} buttons /> : undefined}
             >
                 <SettingsRows rows={[
                     ['Status', <PaymentStatus status={p.status} />],

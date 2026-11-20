@@ -1769,6 +1769,11 @@ tr.is-clickable { cursor: pointer; }
 .billing-payments li { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); padding: var(--sp-2) 0; border-top: 1px solid var(--line); }
 .billing-payments li:first-child { border-top: 0; }
 .billing-payments strong { color: var(--success); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.billing-payment-end { display: grid; justify-items: end; gap: 2px; }
+/* Print and Save for a payment receipt: two links, or two buttons in a page head. */
+.receipt-actions { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
+.receipt-actions .receipt-link { font-size: var(--fs-sm); font-weight: 500; white-space: nowrap; }
+.page-actions .receipt-actions, .panel-actions .receipt-actions { gap: var(--sp-2); }
 @media (max-width: 640px) { .billing-search { max-width: none; } }
 /* Invoice page: the invoice itself on the left, payments on the right. */
 .invoice-toolbar { justify-content: space-between; }

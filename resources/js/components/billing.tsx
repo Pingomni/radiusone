@@ -1,4 +1,5 @@
 import { Link } from '@inertiajs/react';
+import Icon from './Icon';
 import { DataTable } from './table';
 
 export type InvoiceStatusData = { status: string; label: string; tone: string; payable: boolean; note: string; total: number; paid: number };
@@ -8,6 +9,18 @@ export type InvoiceRow = {
     status: InvoiceStatusData; draftPdf: boolean; receipt: Receipt;
 };
 export type Stat = { label: string; value: string; note: string; tone: string };
+
+/** The payment receipt of an invoice: Print opens it in a new tab, where the browser prints it; Save downloads it. */
+export function ReceiptActions({ invoiceId, buttons = false }: { invoiceId: number; buttons?: boolean }) {
+    const href = `/billing/invoices/${invoiceId}/payment-pdf`;
+    const className = buttons ? 'button' : 'receipt-link';
+    return (
+        <span className="receipt-actions">
+            <a className={className} href={`${href}?print=1`} target="_blank" rel="noopener">{buttons && <Icon name="printer" />}Print{buttons ? ' receipt' : ''}</a>
+            <a className={className} href={href} download>{buttons && <Icon name="download" />}Save{buttons ? ' PDF' : ''}</a>
+        </span>
+    );
+}
 
 /** Paid amount against the total; drafts and cancelled invoices are not payable. */
 export function PaymentProgress({ status }: { status: InvoiceStatusData }) {
@@ -51,7 +64,7 @@ export function InvoiceDocuments({ invoice }: { invoice: Pick<InvoiceRow, 'id' |
     return (
         <>
             {invoice.draftPdf && <><a href={`/billing/invoices/${invoice.id}/draft-pdf`}>Payment request</a>{' '}</>}
-            {invoice.receipt && <a href={invoice.receipt.href}>{invoice.receipt.label}</a>}
+            {invoice.receipt && <span>{invoice.receipt.label}: <ReceiptActions invoiceId={invoice.id} /></span>}
         </>
     );
 }

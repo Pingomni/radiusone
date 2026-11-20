@@ -459,14 +459,15 @@ final class BillingController extends Controller
         $invoice['balance_due'] = $receipt['balance_due'];
         $invoice['status'] = $receipt['state'];
         $pdf = Invoices::pdf($invoice, BillingRepository::invoiceItems((int) $id), $payments, $receipt['state']);
-        return $this->pdfDownload('payment-' . $invoice['invoice_number'] . '.pdf', $pdf);
+        return $this->pdfDownload('payment-' . $invoice['invoice_number'] . '.pdf', $pdf, request()->boolean('print'));
     }
 
-    private function pdfDownload(string $filename, string $pdf): HttpResponse
+    /** As a file to save, or (print) shown in the browser, whose PDF viewer prints it. */
+    private function pdfDownload(string $filename, string $pdf, bool $print = false): HttpResponse
     {
         return response($pdf, 200, [
             'Content-Type' => 'application/pdf',
-            'Content-Disposition' => 'attachment; filename="' . str_replace(['"', '\\', "\r", "\n"], '', $filename) . '"',
+            'Content-Disposition' => ($print ? 'inline' : 'attachment') . '; filename="' . str_replace(['"', '\\', "\r", "\n"], '', $filename) . '"',
             'Cache-Control' => 'no-store, max-age=0',
         ]);
     }

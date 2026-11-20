@@ -1,6 +1,6 @@
 import { Link, router } from '@inertiajs/react';
 import { useState } from 'react';
-import { InvoiceDocuments, InvoiceStatus, type InvoiceRow } from '@/components/billing';
+import { InvoiceDocuments, InvoiceStatus, ReceiptActions, type InvoiceRow } from '@/components/billing';
 import { PostButton } from '@/components/confirm';
 import Icon from '@/components/Icon';
 import { MetricCards, type Metric } from '@/components/metrics';
@@ -122,7 +122,7 @@ export default function Billing({ filters, lastRun, metrics, statuses, result, p
                                         <Link href={client(p.username)}>{p.customer}</Link>
                                         <span className="list-subline">{p.date} · {p.method} · <Link href={`/billing/invoices/${p.invoiceId}`}>{p.invoice}</Link></span>
                                     </div>
-                                    <strong>{p.amount}</strong>
+                                    <span className="billing-payment-end"><strong>{p.amount}</strong><ReceiptActions invoiceId={p.invoiceId} /></span>
                                 </li>
                             ))}
                         </ul>
