@@ -4,6 +4,12 @@ RadiusOne follows [semantic versioning](https://semver.org): **major** for chang
 upgrading, **minor** for new features, **patch** for fixes. The version is in the `VERSION` file and shows in
 the portal's sidebar and under Settings → System information.
 
+## 2.34.2 (2026-11-20)
+
+Update with **Settings → Overview → Software update** or `sudo radiusone-update`.
+
+- **Fixed:** the installed phone app showed the old "R" icon.
+
 ## 2.34.1 (2026-11-20)
 
 Update with **Settings → Overview → Software update** or `sudo radiusone-update`.
