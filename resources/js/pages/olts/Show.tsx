@@ -650,6 +650,12 @@ export default function OltShow({ olt, counts, filters, hardware, details, backu
     const [q, setQ] = useState(filters.q);
     const [status, setStatus] = useState(filters.status);
     const path = `/olts/${olt.id}`;
+    // With a filter (from the Overview's figures, the figures above, or a search): go to the list, not the page top.
+    useEffect(() => {
+        if (!filters.status && !filters.q) return;
+        const timer = window.setTimeout(() => document.querySelector('.olt-onu-filter')?.closest('.list-panel')?.scrollIntoView({ block: 'start' }), 60);
+        return () => window.clearTimeout(timer);
+    }, [filters.status, filters.q]);
     return (
         <AppLayout title={olt.name} heading={false}>
             {olt.error && <p className="flash danger" role="alert">SNMP read failed: {olt.error}</p>}
@@ -667,10 +673,10 @@ export default function OltShow({ olt, counts, filters, hardware, details, backu
                 title="ONUs"
                 description={`${result.total} ${filters.q || filters.status ? 'matching' : 'on this OLT'}`}
                 tools={(
-                    <form className="toolbar olt-onu-filter" onSubmit={(e) => { e.preventDefault(); router.get(path, { q, status }, { preserveState: true }); }}>
+                    <form className="toolbar olt-onu-filter" onSubmit={(e) => { e.preventDefault(); router.get(path, { q, status }, { preserveState: true, preserveScroll: true }); }}>
                         <nav className="segmented" aria-label="Status">
-                            {([['', 'All', counts.total], ['online', 'Online', counts.online], ['offline', 'Offline', counts.offline]] as const).map(([key, label, n]) => (
-                                <Link key={key} href={path} data={{ q: filters.q, status: key }} preserveState aria-current={filters.status === key ? 'page' : undefined} onClick={() => setStatus(key)}>{label} <span className="tab-count">{n}</span></Link>
+                            {([['', 'All', counts.total], ['online', 'Online', counts.online], ['offline', 'Offline', counts.offline], ['weak', 'Weak signal', counts.weak]] as const).map(([key, label, n]) => (
+                                <Link key={key} href={path} data={{ q: filters.q, status: key }} preserveState preserveScroll aria-current={filters.status === key ? 'page' : undefined} onClick={() => setStatus(key)}>{label} <span className="tab-count">{n}</span></Link>
                             ))}
                         </nav>
                         <Field label="Search" name="q" placeholder="Name, serial or client" value={q} onChange={(e) => setQ(e.target.value)} />

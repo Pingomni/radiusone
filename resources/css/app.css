@@ -1451,6 +1451,8 @@ th.num, td.num { text-align: right; }
 .overview-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 420px); gap: var(--sp-4); align-items: start; }
 .overview-grid.thirds { grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
 .overview-grid.halves { grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); }
+/* Room for the top bar when the page jumps to a list. */
+.list-panel { scroll-margin-top: 76px; }
 .row-links { display: inline-flex; gap: 12px; white-space: nowrap; }
 .attention-list { display: grid; margin: 0; padding: 0; list-style: none; }
 .attention-list > li { display: flex; align-items: center; gap: var(--sp-3); padding: 11px var(--sp-3); border-bottom: 1px solid var(--line); }
