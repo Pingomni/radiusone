@@ -7,6 +7,8 @@ export type Change = {
     id: number; at: string; actor: string; source: 'portal' | 'olt' | 'console' | string; action: string;
     sn: string | null; position: string | null; onuId: number | null; onuName: string;
     commands: string[]; detail: Record<string, unknown>;
+    /** Set in the list of every OLT's changes. */
+    oltId?: number; olt?: string;
 };
 
 type Kind = 'onu' | 'ports' | 'network' | 'settings' | 'config' | 'terminal';
@@ -81,17 +83,19 @@ function More({ c }: { c: Change }) {
 }
 
 /** An OLT's changelog, or one ONU's history: what was done, by whom, when, and what was found changed on the OLT. */
-export function Changelog({ rows, oltId, forOnu = false, title }: { rows: Change[]; oltId: number; forOnu?: boolean; title: string }) {
+export function Changelog({ rows, oltId, forOnu = false, multi = false, title }: { rows: Change[]; oltId: number; forOnu?: boolean; multi?: boolean; title: string }) {
     const [q, setQ] = useState('');
     const [kind, setKind] = useState('');
     const [source, setSource] = useState('');
     const [who, setWho] = useState('');
+    const [olt, setOlt] = useState('');
+    const olts = useMemo(() => [...new Set(rows.map((r) => r.olt ?? '').filter(Boolean))].sort(), [rows]);
     const people = useMemo(() => [...new Set(rows.map((r) => r.actor).filter((a) => a !== ''))].sort(), [rows]);
     const shown = useMemo(() => {
         const needle = q.trim().toLowerCase();
-        return rows.filter((r) => (!kind || kindOf(r) === kind) && (!source || r.source === source) && (!who || r.actor === who)
+        return rows.filter((r) => (!kind || kindOf(r) === kind) && (!source || r.source === source) && (!who || r.actor === who) && (!olt || r.olt === olt)
             && (!needle || [label(r), summary(r), r.sn, r.onuName, r.position, r.actor, ...r.commands].some((v) => (v ?? '').toLowerCase().includes(needle))));
-    }, [rows, q, kind, source, who]);
+    }, [rows, q, kind, source, who, olt]);
     return (
         <Panel title={title}>
             <p className="hint">
@@ -100,6 +104,7 @@ export function Changelog({ rows, oltId, forOnu = false, title }: { rows: Change
             </p>
             <div className="toolbar changelog-filters">
                 <Field label="Search" name="changelog_q" placeholder={forOnu ? 'Action, user or command' : 'Serial, name, user or command'} value={q} onChange={(e) => setQ(e.target.value)} />
+                {multi && olts.length > 1 && <Select label="OLT" name="changelog_olt" options={{ '': 'Every OLT', ...Object.fromEntries(olts.map((o) => [o, o])) }} value={olt} onChange={(e) => setOlt(e.target.value)} />}
                 {!forOnu && <Select label="What" name="changelog_kind" options={KINDS} value={kind} onChange={(e) => setKind(e.target.value)} />}
                 <Select label="Where from" name="changelog_source" options={SOURCES} value={source} onChange={(e) => setSource(e.target.value)} />
                 {people.length > 1 && <Select label="Who" name="changelog_who" options={{ '': 'Everyone', ...Object.fromEntries(people.map((p) => [p, p])) }} value={who} onChange={(e) => setWho(e.target.value)} />}
@@ -112,11 +117,12 @@ export function Changelog({ rows, oltId, forOnu = false, title }: { rows: Change
                 emptyText={rows.length ? 'Nothing matches.' : forOnu ? 'Nothing has been done to this ONU since the portal has kept its history.' : 'Nothing yet.'}
                 columns={[
                     { header: 'When', cell: (r) => <Time value={r.at} /> },
+                    ...(multi ? [{ header: 'OLT', cell: (r: Change) => <Link href={`/olts/${r.oltId}?tab=history`}>{r.olt}</Link> }] : []),
                     { header: 'Who', cell: (r) => (r.source === 'olt' ? <State tone="warning">On the OLT</State> : r.source === 'console' ? <>{r.actor} <State>terminal</State></> : r.actor || '-') },
                     { header: 'What', className: 'wrap', cell: (r) => <><strong>{label(r)}</strong>{summary(r) && <div className="hint">{summary(r)}</div>}</> },
                     ...(forOnu ? [] : [{
                         header: 'ONU or port', className: 'wrap', cell: (r: Change) => (r.sn
-                            ? <>{r.onuId !== null ? <Link href={`/olts/${oltId}/onus/${r.onuId}`} className="mono">{r.sn}</Link> : <span className="mono">{r.sn}</span>}{(r.onuName || text(r.detail.description)) && <div className="hint">{r.onuName || text(r.detail.description)}</div>}{r.position && <div className="hint mono">{r.position}</div>}</>
+                            ? <>{r.onuId !== null ? <Link href={`/olts/${r.oltId ?? oltId}/onus/${r.onuId}`} className="mono">{r.sn}</Link> : <span className="mono">{r.sn}</span>}{(r.onuName || text(r.detail.description)) && <div className="hint">{r.onuName || text(r.detail.description)}</div>}{r.position && <div className="hint mono">{r.position}</div>}</>
                             : r.position ? <span className="mono">{r.position}</span> : '-'),
                     }]),
                     { header: 'Details', className: 'wrap', cell: (r) => <More c={r} /> },

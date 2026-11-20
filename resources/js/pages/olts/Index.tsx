@@ -20,6 +20,7 @@ export default function OltIndex({ olts }: { olts: Olt[] }) {
             title="OLTs"
             actions={(
                 <>
+                    <Link className="button" href="/olts/changelog">Changelog</Link>
                     <Link className="button" href="/olts/mapping">Client mapping</Link>
                     {can('nas.manage') && <Link className="button primary" href="/olts/create"><Icon name="plus" />New OLT</Link>}
                 </>

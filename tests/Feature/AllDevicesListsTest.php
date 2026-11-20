@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Support\Olt\OltChangelog;
 use Inertia\Testing\AssertableInertia;
 use Tests\TestCase;
 
@@ -57,5 +58,26 @@ final class AllDevicesListsTest extends TestCase
         $this->get('/ports?view=used&olt=' . $olts[1])->assertOk()->assertInertia(fn (AssertableInertia $page) => $page->has('ports', 1)->where('counts.all', 2));
         // A port's ONUs, in the list of all ONUs.
         $this->get('/onus?olt=' . $olts[0] . '&port=0/1/0')->assertOk()->assertInertia(fn (AssertableInertia $page) => $page->where('result.total', 2)->where('filters.port', '0/1/0'));
+    }
+    public function test_routers_and_olts_are_one_list_of_devices_and_olt_changes_one_changelog(): void
+    {
+        $this->actingAsOperator();
+        $nas = $this->insertRow('nas', ['nasname' => '192.0.2.10', 'shortname' => 'r-centre', 'secret' => 'x']);
+        $good = $this->insertRow('olts', ['name' => 'OLT-Centre', 'model' => 'huawei_ma5800_x7', 'host' => '10.0.9.2', 'enabled' => 1, 'last_sync_ok' => 1, 'last_sync_at' => date('Y-m-d H:i:s')]);
+        $bad = $this->insertRow('olts', ['name' => 'OLT-North', 'model' => 'huawei_ma5800_x7', 'host' => '10.0.9.3', 'enabled' => 1, 'last_sync_ok' => 0, 'last_sync_at' => date('Y-m-d H:i:s'), 'last_error' => 'No SNMP response']);
+        $this->insertRow('olt_onus', ['olt_id' => $good, 'frame' => 0, 'slot' => 1, 'port' => 0, 'ont_id' => 0, 'sn' => 'HWTC00000001', 'description' => 'Shop', 'status' => 'online']);
+
+        $this->get('/devices')->assertOk()->assertInertia(fn (AssertableInertia $page) => $page->component('monitoring/Devices')
+            ->where('counts.all', 3)->where('counts.router', 1)->where('counts.olt', 2)
+            ->where('devices.0.name', 'r-centre')->where('devices.0.kind', 'router')->where('devices.0.countHref', '/sessions?nas=' . $nas)
+            ->where('devices.1.name', 'OLT-Centre')->where('devices.1.state', 'Working')->where('devices.1.count', '1 of 1 ONUs')->where('devices.1.countHref', '/onus?olt=' . $good)
+            ->where('devices.2.name', 'OLT-North')->where('devices.2.state', 'Problem')->where('devices.2.tone', 'danger'));
+        $this->get('/devices?view=olt')->assertOk()->assertInertia(fn (AssertableInertia $page) => $page->has('devices', 2));
+        $this->get('/devices?view=problems')->assertOk()->assertInertia(fn (AssertableInertia $page) => $page->where('devices', fn ($d) => in_array('OLT-North', array_column(is_array($d) ? $d : $d->all(), 'name'), true)));
+
+        OltChangelog::add($good, 'onu_reboot', 'HWTC00000001', '0/1/0:0');
+        OltChangelog::add($bad, 'port_off', null, '0/1/3');
+        $this->get('/olts/changelog')->assertOk()->assertInertia(fn (AssertableInertia $page) => $page->component('olts/Changelog')->has('changes', 2)
+            ->where('changes', fn ($c) => array_column(is_array($c) ? $c : $c->all(), 'olt', 'action') == ['port_off' => 'OLT-North', 'onu_reboot' => 'OLT-Centre']));
     }
 }

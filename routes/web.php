@@ -212,6 +212,7 @@ Route::middleware('frweb.auth')->group(function () {
         Route::get('/ports', [OltController::class, 'ports']);
         Route::get('/olts', [OltController::class, 'index']);
         Route::get('/olts/mapping', [OltController::class, 'mapping']);
+        Route::get('/olts/changelog', [OltController::class, 'changelog']);
         Route::post('/clients/{username}/onu', [OltController::class, 'link']);
         Route::post('/clients/{username}/onu/unlink', [OltController::class, 'unlink']);
         Route::middleware('permission:nas.manage')->group(function () {
@@ -263,6 +264,7 @@ Route::middleware('frweb.auth')->group(function () {
             Route::post('/nas/{id}/delete', [NasController::class, 'delete'])->whereNumber('id');
         });
 
+        Route::get('/devices', [MonitoringController::class, 'devices']);
         Route::get('/monitoring', [MonitoringController::class, 'index']);
         Route::get('/monitoring/live', [MonitoringController::class, 'live']);
         Route::get('/monitoring/server', [MonitoringController::class, 'server']);

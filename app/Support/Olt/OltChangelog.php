@@ -156,6 +156,21 @@ final class OltChangelog
     }
 
     /**
+     * Every OLT's changes in one list, newest first, each with its OLT.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public static function forAll(int $limit = 2000): array
+    {
+        $onus = [];
+        foreach (Db::select('SELECT id,olt_id,sn,description FROM olt_onus') as $o) {
+            $onus[(int) $o['olt_id']][(string) $o['sn']] = $o;
+        }
+        return array_values(array_map(static fn (array $r) => self::row($r, $onus[(int) $r['olt_id']] ?? []) + ['oltId' => (int) $r['olt_id'], 'olt' => (string) $r['olt_name']],
+            Db::select('SELECT c.*, t.name AS olt_name FROM olt_changes c JOIN olts t ON t.id=c.olt_id ORDER BY c.created_at DESC,c.id DESC LIMIT ' . max(1, $limit))));
+    }
+
+    /**
      * One ONU's history, newest first.
      *
      * @return list<array<string, mixed>>

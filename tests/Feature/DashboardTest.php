@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Support\Db;
 use App\Support\MicroCache;
 use App\Support\NavCounts;
 use Inertia\Testing\AssertableInertia;
@@ -74,7 +75,7 @@ final class DashboardTest extends TestCase
         $this->get('/onus?q=north')->assertOk()->assertInertia(fn (AssertableInertia $page) => $page->where('result.total', 1)->where('result.rows.0.sn', 'HWTCNORTH001'));
         $this->get('/onus?status=waiting')->assertOk()->assertInertia(fn (AssertableInertia $page) => $page->where('waiting.0.sn', 'HWTCAAAA0001')->where('waiting.0.olt', 'OLT-Center'));
         // From one ONU to the next without the list: the last ONU of an OLT leads on to the first of the next OLT.
-        $last = (int) \App\Support\Db::value('SELECT id FROM olt_onus WHERE olt_id=? ORDER BY ont_id DESC LIMIT 1', [$olt]);
+        $last = (int) Db::value('SELECT id FROM olt_onus WHERE olt_id=? ORDER BY ont_id DESC LIMIT 1', [$olt]);
         $this->get('/olts/' . $olt . '/onus/' . $last)->assertOk()->assertInertia(fn (AssertableInertia $page) => $page
             ->where('neighbours.next.href', '/olts/' . $other . '/onus/' . $far)->where('neighbours.next.name', 'North shop')
             ->where('neighbours.previous.position', '0/1/3:4'));

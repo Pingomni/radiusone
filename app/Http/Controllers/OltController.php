@@ -551,6 +551,12 @@ final class OltController extends Controller
         ];
     }
 
+    /** What changed on every OLT, in one list. */
+    public function changelog(): Response
+    {
+        return Inertia::render('olts/Changelog', ['changes' => OltChangelog::forAll()]);
+    }
+
     /**
      * The PON ports of every OLT in one list: how full each is, its signal and optics, and anything wrong with it.
      */

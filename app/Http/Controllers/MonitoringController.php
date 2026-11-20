@@ -34,6 +34,58 @@ final class MonitoringController extends Controller
         ]);
     }
 
+    /**
+     * Routers and OLTs in one list with their state: where something is wrong shows without opening each device.
+     */
+    public function devices(Request $request): Response
+    {
+        $overview = MonitoringData::overview();
+        $value = static function (array $items, string $label): string {
+            foreach ($items as $item) {
+                if ($item['label'] === $label) {
+                    return (string) $item['value'];
+                }
+            }
+            return '-';
+        };
+        $readings = static fn (array $list) => implode(' · ', array_map(static fn (array $r) => $r['label'] . ' ' . $r['value'], array_slice($list, 0, 3)));
+        // What is wrong with each device, from the same checks as the Monitoring page.
+        $problems = static function (string $href) use ($overview): array {
+            $texts = [];
+            foreach ($overview['problems'] as $problem) {
+                $link = (string) $problem['href'];
+                if ($link === $href || str_starts_with($link, $href . '/') || str_starts_with($link, $href . '?')) {
+                    $texts[] = (string) preg_replace('/^[^:]{1,80}: /', '', (string) $problem['text']);
+                }
+            }
+            return $texts;
+        };
+        $rows = [];
+        foreach ($overview['nas'] as $n) {
+            $href = '/nas/' . $n['id'];
+            $rows[] = ['key' => 'nas-' . $n['id'], 'kind' => 'router', 'name' => $n['name'], 'address' => $n['ip'], 'model' => $n['vendor'], 'href' => $href . '/edit', 'monitor' => $href . '/monitor',
+                'tone' => $n['radiusDisabled'] ? 'neutral' : ($n['danger'] ? 'danger' : 'good'), 'state' => $n['radiusDisabled'] ? 'RADIUS off' : ($n['danger'] ? 'Problem' : 'Working'),
+                'count' => $value($n['items'], 'Online now') . ' online', 'countHref' => '/sessions?nas=' . $n['id'],
+                'detail' => $readings($n['readings']) ?: 'Last accounting ' . $value($n['items'], 'Last accounting'), 'problems' => $problems($href)];
+        }
+        foreach ($overview['olts'] as $o) {
+            $href = '/olts/' . $o['id'];
+            $rows[] = ['key' => 'olt-' . $o['id'], 'kind' => 'olt', 'name' => $o['name'], 'address' => $o['host'], 'model' => $o['model'], 'href' => $href, 'monitor' => $href . '?tab=graphs',
+                'tone' => !$o['enabled'] ? 'neutral' : ($o['danger'] ? 'danger' : 'good'), 'state' => !$o['enabled'] ? 'Not read' : ($o['danger'] ? 'Problem' : 'Working'),
+                'count' => $value($o['items'], 'ONUs online') . ' ONUs', 'countHref' => '/onus?olt=' . $o['id'],
+                'detail' => $readings($o['readings']), 'problems' => $problems($href)];
+        }
+        $view = (string) $request->query('view', '');
+        $view = in_array($view, ['router', 'olt', 'problems'], true) ? $view : '';
+        $bad = array_values(array_filter($rows, static fn (array $r) => $r['tone'] === 'danger' || (bool) $r['problems']));
+        return Inertia::render('monitoring/Devices', [
+            'counts' => ['all' => count($rows), 'router' => count($overview['nas']), 'olt' => count($overview['olts']), 'problems' => count($bad)],
+            'view' => $view,
+            'devices' => $view === 'problems' ? $bad : array_values(array_filter($rows, static fn (array $r) => $view === '' || $r['kind'] === $view)),
+            'canAdd' => Auth::can('nas.manage'),
+        ]);
+    }
+
     public function live(): JsonResponse
     {
         return self::json(MonitoringData::overview());
