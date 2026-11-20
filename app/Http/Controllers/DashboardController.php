@@ -89,7 +89,11 @@ final class DashboardController extends Controller
         return array_map(static fn ($count): int => (int) $count, $counts ?? []);
     }
 
-    /** Key figures for the strip. Expired needs follow-up (amber); figures that match a client filter link to the list. */
+    /**
+     * Key figures for the strip. Expired needs follow-up (amber); figures that match a client filter link to the list.
+     *
+     * @param  array<string, mixed>|null  $fibre
+     */
     private static function kpis(?int $online = null, ?array $fibre = null): array
     {
         $counts = self::clientCounts();
