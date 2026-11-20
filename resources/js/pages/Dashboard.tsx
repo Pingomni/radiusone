@@ -97,72 +97,71 @@ export default function Dashboard({ state, kpis, fibre, routers, routerTotal, at
                 {can('clients.manage') && <Link className="button primary" href="/clients/create"><Icon name="plus" />New client</Link>}
             </div>
             <LivePanel title="Key figures" url="/fragments/dashboard-kpis" interval={60} initial={kpis} className="live-bare overview-figures" render={(m) => <MetricCards metrics={m} icons />} />
-            <div className="overview-grid">
-                <LivePanel
-                    title="Routers"
-                    url="/fragments/dashboard-nas"
-                    interval={30}
-                    initial={routers}
-                    headerLink={can('nas.view') && routerTotal > routers.length ? <Link href="/nas">All {routerTotal}</Link> : undefined}
-                    render={(rows) => <Routers rows={rows} />}
-                />
-                <Panel title="Needs attention">
-                    <NeedsAttention items={attention} />
-                </Panel>
-            </div>
-            {fibre && (
-                <div className="overview-grid halves">
-                    <LivePanel title="OLTs" url="/fragments/dashboard-fibre" interval={60} initial={{ olts: fibre.olts }} headerLink={can('nas.view') ? <Link href="/olts">All</Link> : undefined} render={(f) => <Olts rows={f.olts} />} />
-                    {fibre.chart && <LivePanel title="ONUs, last 24 hours" url={fibre.chart.url} interval={300} initial={fibre.chart.data} className="traffic-panel" render={(d) => <ChartOrMessage payload={d} />} />}
+            {/* Two columns that stack on their own, so a short panel never leaves a hole beside a tall one. */}
+            <div className="overview-columns">
+                <div className="overview-main">
+                    <LivePanel
+                        title="Routers"
+                        url="/fragments/dashboard-nas"
+                        interval={30}
+                        initial={routers}
+                        headerLink={can('nas.view') && routerTotal > routers.length ? <Link href="/nas">All {routerTotal}</Link> : undefined}
+                        render={(rows) => <Routers rows={rows} />}
+                    />
+                    {fibre && <LivePanel title="OLTs" url="/fragments/dashboard-fibre" interval={60} initial={{ olts: fibre.olts }} headerLink={can('nas.view') ? <Link href="/olts">All</Link> : undefined} render={(f) => <Olts rows={f.olts} />} />}
+                    {fibre?.chart && <LivePanel title="ONUs, last 24 hours" url={fibre.chart.url} interval={300} initial={fibre.chart.data} className="traffic-panel" render={(d) => <ChartOrMessage payload={d} />} />}
                 </div>
-            )}
-            <div className="overview-grid thirds">
-                {expiring && (
-                    <Panel title="Expiring this week" actions={expiring.total > expiring.rows.length ? <span className="list-subline">{expiring.total} in all</span> : undefined}>
+                <div className="overview-side">
+                    <Panel title="Needs attention" className="overview-attention">
+                        <NeedsAttention items={attention} />
+                    </Panel>
+                    {expiring && (
+                        <Panel title="Expiring this week" actions={expiring.total > expiring.rows.length ? <span className="list-subline">{expiring.total} in all</span> : undefined}>
+                            <DataTable
+                                rows={expiring.rows}
+                                rowKey={(r) => r.username}
+                                emptyText="No client expires in the next 7 days."
+                                columns={[
+                                    { header: 'Client', cell: (r) => <span className="list-cell-stack">{clientLink(r.username, r.name || r.username)}<span className="list-subline">{r.service}</span></span> },
+                                    { header: 'Expires', cell: (r) => <span className={r.soon ? 'field-warning' : undefined} title={r.expires}>{r.when}</span> },
+                                    ...(showBalance ? [{ header: 'Balance', className: 'num', cell: (r: ExpiringRow) => <span className={r.balance !== null && r.balance < 0 ? 'danger-text' : 'is-empty-text'}>{r.balanceText}</span> }] : []),
+                                ]}
+                            />
+                        </Panel>
+                    )}
+                    {rejects !== null && (
+                        <LivePanel
+                            title="Failed logins"
+                            url="/fragments/dashboard-rejects"
+                            interval={30}
+                            initial={rejects}
+                            headerLink={<Link href="/logs?reply=reject">All</Link>}
+                            render={(rows) => (
+                                <DataTable
+                                    rows={rows}
+                                    emptyText="No failed logins."
+                                    columns={[
+                                        { header: 'Time', cell: (r) => <Time value={r.authdate} timezone={clock.timezone} /> },
+                                        { header: 'Username', cell: (r) => (can('clients.view') ? <Link href={`/clients?q=${encodeURIComponent(r.username)}`}>{r.username}</Link> : r.username) },
+                                    ]}
+                                />
+                            )}
+                        />
+                    )}
+                    <Panel title="Top users this month">
                         <DataTable
-                            rows={expiring.rows}
+                            rows={topUsers}
                             rowKey={(r) => r.username}
-                            emptyText="No client expires in the next 7 days."
+                            emptyText="No sessions this month yet."
                             columns={[
-                                { header: 'Client', cell: (r) => <span className="list-cell-stack">{clientLink(r.username, r.name || r.username)}<span className="list-subline">{r.service}</span></span> },
-                                { header: 'Expires', cell: (r) => <span className={r.soon ? 'field-warning' : undefined} title={r.expires}>{r.when}</span> },
-                                ...(showBalance ? [{ header: 'Balance', className: 'num', cell: (r: ExpiringRow) => <span className={r.balance !== null && r.balance < 0 ? 'danger-text' : 'is-empty-text'}>{r.balanceText}</span> }] : []),
+                                { header: 'Client', cell: (r) => clientLink(r.username, r.username) },
+                                { header: 'Down', className: 'num', cell: (r) => r.down },
+                                { header: 'Up', className: 'num', cell: (r) => <span className="list-subline">{r.up}</span> },
+                                { header: 'Total', className: 'num', cell: (r) => <strong>{r.total}</strong> },
                             ]}
                         />
                     </Panel>
-                )}
-                <Panel title="Top users this month">
-                    <DataTable
-                        rows={topUsers}
-                        rowKey={(r) => r.username}
-                        emptyText="No sessions this month yet."
-                        columns={[
-                            { header: 'Client', cell: (r) => clientLink(r.username, r.username) },
-                            { header: 'Down', className: 'num', cell: (r) => r.down },
-                            { header: 'Up', className: 'num', cell: (r) => <span className="list-subline">{r.up}</span> },
-                            { header: 'Total', className: 'num', cell: (r) => <strong>{r.total}</strong> },
-                        ]}
-                    />
-                </Panel>
-                {rejects !== null && (
-                    <LivePanel
-                        title="Failed logins"
-                        url="/fragments/dashboard-rejects"
-                        interval={30}
-                        initial={rejects}
-                        headerLink={<Link href="/logs?reply=reject">All</Link>}
-                        render={(rows) => (
-                            <DataTable
-                                rows={rows}
-                                emptyText="No failed logins."
-                                columns={[
-                                    { header: 'Time', cell: (r) => <Time value={r.authdate} timezone={clock.timezone} /> },
-                                    { header: 'Username', cell: (r) => (can('clients.view') ? <Link href={`/clients?q=${encodeURIComponent(r.username)}`}>{r.username}</Link> : r.username) },
-                                ]}
-                            />
-                        )}
-                    />
-                )}
+                </div>
             </div>
         </AppLayout>
     );

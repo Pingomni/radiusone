@@ -1452,9 +1452,12 @@ th.num, td.num { text-align: right; }
 .overview-figures.panel.live-bare > .live-head { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 /* A live panel that holds only a table runs it edge to edge, like other panels. */
 .panel > .live-body:has(> .table-wrap:only-child) { margin: 0; }
-.overview-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 420px); gap: var(--sp-4); align-items: start; }
-.overview-grid.thirds { grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
-.overview-grid.halves { grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); }
+/* Overview: wide panels on the left, lists on the right. Each column stacks on its own, so a short panel never
+   leaves a hole beside a tall one. */
+.overview-columns { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 400px); gap: var(--sp-4); align-items: start; }
+.overview-main, .overview-side { display: grid; gap: var(--sp-4); min-width: 0; }
+/* Six figures: one row, then three by two, then two by three. Never five and one. */
+.overview-figures .stat-strip { grid-template-columns: repeat(6, minmax(0, 1fr)); }
 /* Room for the top bar when the page jumps to a list. */
 .list-panel { scroll-margin-top: 76px; }
 .row-links { display: inline-flex; gap: 12px; white-space: nowrap; }
@@ -1470,11 +1473,18 @@ th.num, td.num { text-align: right; }
 .cpu-bar { display: block; width: 72px; height: 5px; overflow: hidden; border-radius: 3px; background: var(--line); }
 .cpu-bar > i { display: block; height: 100%; border-radius: 3px; background: var(--accent); }
 .cpu-bar > i.is-high { background: var(--warning-solid); }
+@media (max-width: 1360px) {
+  .overview-figures .stat-strip { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
 @media (max-width: 1100px) {
-  .overview-grid { grid-template-columns: minmax(0, 1fr); }
-  /* One column: what needs attention comes before the routers. */
-  .overview-grid > :last-child:not(:only-child) { order: -1; }
-  .overview-grid.halves > :last-child:not(:only-child) { order: 0; }
+  /* One column: what needs attention first, then the wide panels, then the lists. */
+  .overview-columns { grid-template-columns: minmax(0, 1fr); }
+  .overview-main, .overview-side { display: contents; }
+  .overview-attention { order: -1; }
+}
+@media (max-width: 520px) {
+  .overview-figures .stat-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 }
 
 /* --------------------------------------------------------------------------
