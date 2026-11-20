@@ -1,7 +1,7 @@
 import { useForm } from '@inertiajs/react';
 import { useConfirm } from '@/components/confirm';
 import { Sheet } from '@/components/settings';
-import { Badge, Select } from '@/components/ui';
+import { Select, State } from '@/components/ui';
 import type { Retention } from '@/settings/types';
 
 /** Days of history a period keeps; "Keep forever" (0) keeps everything. */
@@ -19,7 +19,7 @@ export function RetentionTab({ r }: { r: Retention }) {
             title="Data retention"
             description="How long RADIUS connection history is kept. Records older than the chosen period are deleted in a nightly cleanup."
             icon="logs"
-            meta={<Badge tone={r.periods.sessions === 0 && r.periods.logins === 0 ? '' : 'warning'}>{r.periods.sessions === 0 && r.periods.logins === 0 ? 'Keeping everything' : 'Cleanup active'}</Badge>}
+            meta={<State tone={r.periods.sessions === 0 && r.periods.logins === 0 ? '' : 'warning'}>{r.periods.sessions === 0 && r.periods.logins === 0 ? 'Keeping everything' : 'Cleanup active'}</State>}
         >
             <form
                 className="form-grid"

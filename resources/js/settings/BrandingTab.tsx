@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { PostButton } from '@/components/confirm';
 import Icon from '@/components/Icon';
 import { Sheet } from '@/components/settings';
-import { Badge, Field } from '@/components/ui';
+import { Field, State } from '@/components/ui';
 import { BrandLogo } from '@/layouts/AppLayout';
 import type { Branding } from '@/settings/types';
 
@@ -34,7 +34,7 @@ export function BrandingTab({ branding }: { branding: Branding }) {
             description="Your company name and logo, as your team and customers see them."
             icon="image"
             className="branding-card"
-            meta={<Badge tone={branding.custom ? 'success' : ''}>{branding.custom ? (branding.remote ? 'HTTPS logo' : 'Uploaded logo') : 'Default logo'}</Badge>}
+            meta={<State tone={branding.custom ? 'success' : ''}>{branding.custom ? (branding.remote ? 'HTTPS logo' : 'Uploaded logo') : 'Default logo'}</State>}
         >
             <div className="branding-layout">
                 <div className="branding-preview-panel">

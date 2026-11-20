@@ -1,7 +1,7 @@
 import { router, useForm } from '@inertiajs/react';
 import { type CSSProperties, type ReactNode } from 'react';
 import { Sheet } from '@/components/settings';
-import { Badge, Check, ErrorSummary, Field, FormActions, Select, TextArea } from '@/components/ui';
+import { Check, ErrorSummary, Field, FormActions, Select, TextArea, State } from '@/components/ui';
 import { PayRows } from '@/pages/contracts/Show';
 import { SecretField } from '@/settings/fields';
 import type { PaySettings } from '@/settings/types';
@@ -16,7 +16,7 @@ function Service({ name, title, mode, saved, onMode, enabled, onEnabled, license
     enabled: boolean; onEnabled: (on: boolean) => void; licensed: boolean; children: (m: Mode) => ReactNode; note?: ReactNode;
 }) {
     return (
-        <Sheet title={title} icon="lock" meta={<Badge tone={mode === 'live' ? 'success' : 'warning'}>{mode === 'live' ? 'Live' : 'Test mode'}</Badge>}>
+        <Sheet title={title} icon="lock" meta={<State tone={mode === 'live' ? 'success' : 'warning'}>{mode === 'live' ? 'Live' : 'Test mode'}</State>}>
             <div className="form-grid">
                 <Check className="check span2" label={`Offer ${title}`} checked={enabled} disabled={!licensed} onChange={(e) => onEnabled(e.target.checked)} />
                 <Select label="The pay page uses" name={`${name}_mode`} options={MODES} value={mode} onChange={(e) => onMode(e.target.value as Mode)}

@@ -4,7 +4,7 @@ import { DeleteButton, useConfirm } from '@/components/confirm';
 import Icon from '@/components/Icon';
 import { SignalReading } from '@/components/olt';
 import { DataTable, ExportMenu, Pagination } from '@/components/table';
-import { Badge, ListMenu, RowActions, Status, type StatusTone, type TagData, State } from '@/components/ui';
+import { ListMenu, RowActions, Status, type StatusTone, type TagData, State } from '@/components/ui';
 import AppLayout from '@/layouts/AppLayout';
 import { useCan } from '@/lib/auth';
 import { query } from '@/lib/format';
@@ -179,7 +179,7 @@ export default function Clients({ filters, counts, plans, nasOptions, result }: 
             cell: (r: Row) => (
                 <div className="list-cell-stack">
                     <Link href={profile(r.username)}>{r.name}</Link>
-                    <span className="list-subline"><span className="mono">{r.username}</span>{r.auth.text !== 'PPPoE' && <> <Badge>{r.auth.text}</Badge></>}</span>
+                    <span className="list-subline"><span className="mono">{r.username}</span>{r.auth.text !== 'PPPoE' && <> <State>{r.auth.text}</State></>}</span>
                 </div>
             ),
         },

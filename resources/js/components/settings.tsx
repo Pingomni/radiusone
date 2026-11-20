@@ -2,13 +2,15 @@ import { Link } from '@inertiajs/react';
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import Icon from './Icon';
 import { revealCurrent } from './tabs';
+import { roleLabel } from './ui';
 
 // Settings-style building blocks (legacy settingsSheet, settingsRows, settingsDestination, profile fields).
 
-export function Sheet({ title, icon = 'settings', meta, className = '', children }: {
+export function Sheet({ title, meta, className = '', children }: {
     title: string;
     /** Not shown: headers are kept to the title (details live in Documentation). */
     description?: string;
+    /** Kept for callers; panel titles carry no icon. */
     icon?: string;
     meta?: ReactNode;
     className?: string;
@@ -18,7 +20,6 @@ export function Sheet({ title, icon = 'settings', meta, className = '', children
         <section className={`settings-sheet ${className}`.trim()}>
             <div className="settings-sheet-head">
                 <div className="settings-sheet-title">
-                    <span className="account-section-icon"><Icon name={icon} /></span>
                     <div>
                         <h2>{title}</h2>
                     </div>
@@ -44,7 +45,7 @@ export function RoleGrid({ roles, compact = false }: { roles: { role: string; de
     return (
         <div className={`role-access-grid${compact ? ' compact-role-grid' : ''}`}>
             {roles.map((r) => (
-                <div className="role-access-card" key={r.role}><span>{r.role}</span><p>{r.description}</p></div>
+                <div className="role-access-card" key={r.role}><span>{roleLabel(r.role)}</span><p>{r.description}</p></div>
             ))}
         </div>
     );

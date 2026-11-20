@@ -71,7 +71,7 @@ export default function Logs({ filters, metrics, audit, auditMatches, attempts }
                         <Empty>radpostauth table not found. Enable FreeRADIUS post-auth SQL logging to populate this panel.</Empty>
                     ) : (
                         <>
-                            <nav className="segmented" aria-label="Filter by reply">
+                            <nav className="segmented as-tabs" aria-label="Filter by reply">
                                 {replies.map(([value, label]) => (
                                     <Link key={value} href={`/logs${query({ ...filters, reply: value })}`} aria-current={filters.reply === value ? 'page' : undefined} preserveScroll>{label}</Link>
                                 ))}

@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { DeleteButton, PostButton } from '@/components/confirm';
 import { Sheet, SettingsRows } from '@/components/settings';
 import { DataTable } from '@/components/table';
-import { Badge, Check, Empty, Field, Select, State } from '@/components/ui';
+import { Check, Empty, Field, Select, State } from '@/components/ui';
 import { bind } from '@/lib/form';
 import { bytes } from '@/lib/format';
 import { SecretField } from '@/settings/fields';
@@ -23,7 +23,7 @@ function BackupStatus({ b }: { b: Backups }) {
             title="Last backup"
             description="Every night at 02:15 (server time) the database and customer documents are backed up, encrypted and uploaded to each enabled destination."
             icon="server"
-            meta={b.running ? <Badge tone="warning">running…</Badge> : run ? <Badge tone={run.ok ? 'success' : 'danger'}>{run.ok ? 'completed' : 'needs attention'}</Badge> : <Badge>not run yet</Badge>}
+            meta={b.running ? <State tone="warning">running…</State> : run ? <State tone={run.ok ? 'success' : 'danger'}>{run.ok ? 'completed' : 'needs attention'}</State> : <State>not run yet</State>}
         >
             <div className="form-actions">
                 <PostButton
@@ -63,7 +63,7 @@ function BackupPassphrase({ set }: { set: boolean }) {
             title="Encryption"
             description="Backups are encrypted on this server before they are uploaded. Only someone with the passphrase can open them."
             icon="lock"
-            meta={<Badge tone={set ? 'success' : 'warning'}>{set ? 'passphrase set' : 'no passphrase'}</Badge>}
+            meta={<State tone={set ? 'success' : 'warning'}>{set ? 'passphrase set' : 'no passphrase'}</State>}
         >
             <form className="form-grid" onSubmit={(e) => { e.preventDefault(); form.post('/settings/backups/passphrase', { preserveScroll: true, onFinish: () => form.reset() }); }}>
                 <p className="span2 hint">
@@ -175,7 +175,7 @@ function BackupDestinationsSheet({ b }: { b: Backups }) {
     const initial = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('destination') : null;
     const [open, setOpen] = useState<string | null>(initial);
     return (
-        <Sheet title="Remote destinations" description="Where encrypted copies are sent. Use more than one for extra safety." icon="server" meta={<Badge>{b.destinations.length} configured</Badge>}>
+        <Sheet title="Remote destinations" description="Where encrypted copies are sent. Use more than one for extra safety." icon="server" meta={<State>{b.destinations.length} configured</State>}>
             {!b.passphraseSet && b.destinations.length > 0 && <p className="field-error">Set a passphrase first: nothing is uploaded unencrypted.</p>}
             {b.destinations.map((d) => <DestinationRow key={d.id} d={d} b={b} open={open === d.id} onToggle={() => setOpen(open === d.id ? null : d.id)} />)}
             {b.destinations.length === 0 && open !== 'new' && <Empty>No remote destination yet. Backups exist only on this server.</Empty>}

@@ -1,5 +1,4 @@
 import { Link, useForm } from '@inertiajs/react';
-import Icon from '@/components/Icon';
 import TwoFactorSetup from '@/components/TwoFactorSetup';
 import { Field } from '@/components/ui';
 import AppLayout from '@/layouts/AppLayout';
@@ -12,7 +11,6 @@ export default function ProfileTwoFactorSetup({ secret, uri }: { secret: string;
                 <Link className="account-back" href="/profile">← Back to profile settings</Link>
                 <section className="account-section" id="account-setup" aria-labelledby="account-setup-heading" tabIndex={-1}>
                     <header className="account-section-header">
-                        <span className="account-section-icon"><Icon name="shield" /></span>
                         <div>
                             <h2 id="account-setup-heading">Connect your authenticator</h2>
                             <p>Scan the QR code, then enter a code to confirm your setup.</p>

@@ -1,7 +1,7 @@
 import { useForm } from '@inertiajs/react';
 import { useConfirm } from '@/components/confirm';
 import { Sheet } from '@/components/settings';
-import { Badge, Select } from '@/components/ui';
+import { Select, State } from '@/components/ui';
 import type { Regional } from '@/settings/types';
 
 export function RegionalTab({ r }: { r: Regional }) {
@@ -17,7 +17,7 @@ export function RegionalTab({ r }: { r: Regional }) {
                 title="Time zone"
                 description="The server's clock and time zone: RADIUS, accounting, invoices, reports and scheduled jobs all use it."
                 icon="calendar"
-                meta={<Badge tone={running ? 'warning' : ''}>{running ? 'change in progress' : r.timezone}</Badge>}
+                meta={<State tone={running ? 'warning' : ''}>{running ? 'change in progress' : r.timezone}</State>}
             >
                 <form
                     className="form-grid"
@@ -45,7 +45,7 @@ export function RegionalTab({ r }: { r: Regional }) {
                     )}
                 </form>
             </Sheet>
-            <Sheet title="Currency" description="The currency the whole system bills in: service plans, static IP pools, invoices and payments." icon="billing" meta={<Badge>{r.currency}</Badge>}>
+            <Sheet title="Currency" description="The currency the whole system bills in: service plans, static IP pools, invoices and payments." icon="billing" meta={<State>{r.currency}</State>}>
                 <form
                     className="form-grid"
                     onSubmit={async (event) => {

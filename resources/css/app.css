@@ -1041,6 +1041,11 @@ form.list-filterbar { padding: var(--sp-2) var(--sp-3); }
 .segmented a:hover, .notice-nav a:hover { color: var(--text-strong); text-decoration: none; }
 .segmented a[aria-current="page"], .notice-nav a[aria-current="page"] { background: var(--surface); color: var(--text-strong); box-shadow: 0 0 0 1px var(--line-strong); }
 .panel > .segmented { margin: var(--sp-2) var(--sp-3) 0; }
+/* Views of one list or settings section are underlined tabs, like everywhere else; the boxed control stays for time ranges. */
+.segmented.as-tabs, .notice-nav { display: flex; align-self: stretch; justify-self: stretch; width: 100%; flex-wrap: nowrap; gap: 20px; overflow-x: auto; padding: 0; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: none; scrollbar-width: thin; }
+.segmented.as-tabs > a, .segmented.as-tabs > button, .notice-nav a { flex: none; min-height: 0; margin-bottom: -1px; padding: 9px 0 7px; border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: none; box-shadow: none; color: var(--text-muted); font-size: var(--fs-md); font-weight: 500; white-space: nowrap; }
+.segmented.as-tabs > a[aria-current="page"], .segmented.as-tabs > button.active, .notice-nav a[aria-current="page"] { border-bottom-color: var(--text-strong); background: none; box-shadow: none; color: var(--text-strong); }
+.panel > .segmented.as-tabs { margin: 0; padding: 0 var(--sp-3); }
 
 /* --------------------------------------------------------------------------
    Menus (details popovers)
@@ -1647,7 +1652,8 @@ tr.is-clickable { cursor: pointer; }
 
 .client-layout .tab-buttons svg.icon { width: 15px; height: 15px; }
 /* Eight tabs beside the account panel fit a 1440px screen only without their icons. */
-@media (max-width: 1679px) { .client-layout .tab-buttons svg.icon, .settings-nav svg.icon { display: none; } }
+/* Tab strips carry icons only on wide screens; below that the words alone fit. */
+@media (max-width: 1679px) { .tab-buttons svg.icon, .settings-nav svg.icon { display: none; } }
 .tab-count {
   display: inline-grid;
   place-items: center;
@@ -1888,7 +1894,7 @@ tr.is-clickable { cursor: pointer; }
 
 .role-access-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: var(--sp-2); }
 .role-access-card { display: grid; gap: 2px; padding: var(--sp-2) var(--sp-3); box-shadow: none; background: var(--surface-2); }
-.role-access-card > span { color: var(--text-strong); font-weight: 600; text-transform: capitalize; }
+.role-access-card > span { color: var(--text-strong); font-weight: 600; }
 .role-access-card > p { color: var(--text-muted); font-size: var(--fs-sm); }
 .compact-role-grid { grid-template-columns: minmax(0, 1fr); }
 
@@ -2208,6 +2214,8 @@ tr.is-clickable { cursor: pointer; }
   /* Status tabs fill whole rows instead of leaving ragged gaps. */
   .segmented, .notice-nav { display: flex; flex-wrap: wrap; width: 100%; }
   .segmented a, .segmented button, .notice-nav a { flex: 1 1 auto; justify-content: center; white-space: nowrap; }
+  .segmented.as-tabs, .notice-nav { flex-wrap: nowrap; }
+  .segmented.as-tabs > a, .segmented.as-tabs > button, .notice-nav a { flex: none; }
   .cards, .dashboard-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-2); }
 }
 .monitor-running { color: var(--text-muted); font-size: var(--fs-sm); }
@@ -2689,9 +2697,12 @@ tr.is-clickable { cursor: pointer; }
 .onu-hero.is-success { --state: var(--success-solid); }
 .onu-hero.is-warning { --state: var(--warning-solid); }
 .onu-hero.is-danger { --state: var(--danger-solid); }
-.olt-reasons { display: flex; flex-wrap: wrap; gap: 4px 6px; margin: 2px 0 0; padding: 0; list-style: none; }
-.olt-reasons li { padding: 2px 8px; border: 1px solid var(--warning-line); border-radius: 999px; background: var(--warning-bg); color: var(--warning); font-size: var(--fs-xs); font-weight: 600; }
-.is-danger .olt-reasons li:first-child { border-color: var(--danger-line); background: var(--danger-bg); color: var(--danger); }
+.olt-reasons { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 2px 0 0; padding: 0; list-style: none; }
+/* Each reason as dot + words, like every other status. */
+.olt-reasons li { display: inline-flex; align-items: center; gap: 7px; color: var(--warning); font-size: var(--fs-sm); font-weight: 500; }
+.olt-reasons li::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--warning-solid); }
+.is-danger .olt-reasons li:first-child { color: var(--danger); }
+.is-danger .olt-reasons li:first-child::before { background: var(--danger-solid); }
 .olt-hero-body { display: grid; grid-template-columns: minmax(0, 7fr) minmax(280px, 4fr); gap: var(--sp-4); align-items: start; }
 .olt-kpis { display: grid; }
 .olt-kpis > .stat-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }

@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { DeleteButton, PostButton } from '@/components/confirm';
 import { Sheet } from '@/components/settings';
 import { DataTable } from '@/components/table';
-import { Badge, Field, FormActions, Select, TextArea, State } from '@/components/ui';
+import { Field, FormActions, Select, TextArea, State } from '@/components/ui';
 import type { Firewall, FirewallRule, FirewallStatus } from '@/settings/types';
 
 const PAGE = { preserveScroll: true };
@@ -105,10 +105,10 @@ export function FirewallTab({ f }: { f: Firewall }) {
     const applying = useApplying(f);
     const blocked = f.busy || !f.ready;
     const failed = f.status.state === 'rolled_back' || f.status.state === 'failed';
-    const state = applying ? <Badge tone="info">applying…</Badge> : f.on ? <Badge tone="success">on</Badge> : <Badge>off</Badge>;
+    const state = applying ? <State tone="info">applying…</State> : f.on ? <State tone="success">on</State> : <State>off</State>;
     return (
         <>
-            <Sheet title="Firewall" icon="shield" meta={<>{state} {f.pending && <Badge tone="warning">changes not applied</Badge>}</>}>
+            <Sheet title="Firewall" icon="shield" meta={<>{state} {f.pending && <State tone="warning">changes not applied</State>}</>}>
                 {!f.ready && <div className="flash warning panel-text">Not set up on this server yet. Run <code>sudo radiusone-update</code> once.</div>}
                 {f.warnings.map((warning) => <div key={warning} className="flash warning panel-text">{warning}</div>)}
                 {(applying?.message || f.status.message) && (

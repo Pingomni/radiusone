@@ -34,6 +34,11 @@ export function Badge({ children, tone = '' }: { children: ReactNode; tone?: str
     return <span className={`badge ${tone}`.trim()}>{children}</span>;
 }
 
+/** A portal role as people read it: "Superadmin", "NOC", "View". */
+export function roleLabel(role: string): string {
+    return role === 'noc' ? 'NOC' : role.charAt(0).toUpperCase() + role.slice(1);
+}
+
 export type StatusTone = 'good' | 'warning' | 'danger' | 'neutral';
 
 /** A status: a dot and a word ("Online", "Weak signal", "Paid"). The word says what the colour says. */

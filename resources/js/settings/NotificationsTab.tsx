@@ -5,7 +5,7 @@ import { PostButton } from '@/components/confirm';
 import Icon from '@/components/Icon';
 import { Sheet } from '@/components/settings';
 import { DataTable } from '@/components/table';
-import { Badge, Check, Field, Select, Tag, TextArea } from '@/components/ui';
+import { Check, Field, Select, Tag, TextArea, State } from '@/components/ui';
 import { useShared } from '@/lib/auth';
 import { bind } from '@/lib/form';
 import { useServerTimezone } from '@/lib/clock';
@@ -52,7 +52,7 @@ function SmsGatewayForm({ g, providers, ready }: { g: SmsGateway; providers: Rec
     });
     const provider = form.data.sms_gateway_provider;
     return (
-        <Sheet title="SMS gateway" description="Choose your SMS provider and enter the details from its dashboard." icon="message" meta={g.enabled === '1' ? <Badge tone="success">gateway enabled</Badge> : <Badge tone="warning">gateway disabled</Badge>}>
+        <Sheet title="SMS gateway" description="Choose your SMS provider and enter the details from its dashboard." icon="message" meta={g.enabled === '1' ? <State tone="success">gateway enabled</State> : <State tone="warning">gateway disabled</State>}>
             <form className="form-grid" onSubmit={(event) => { event.preventDefault(); form.post('/settings/notifications/sms-gateway', { preserveScroll: true, onFinish: () => form.setData((d) => ({ ...d, sms_gateway_twilio_token: '', sms_gateway_infobip_api_key: '' })) }); }}>
                 <Check className="check span2" label="Enable SMS gateway" name="sms_gateway_enabled" checked={form.data.sms_gateway_enabled} onChange={(e) => form.setData('sms_gateway_enabled', e.target.checked)} />
                 <Select label="Provider" options={providers} {...bind(form, 'sms_gateway_provider')} />
@@ -110,7 +110,7 @@ function EmailGatewayForm({ g, providers, ready }: { g: EmailGateway; providers:
         <SecretField label={label} name={key} saved={saved} value={form.data[key]} error={form.errors[key]} onChange={(v) => form.setData(key, v)} hint={hint} />
     );
     return (
-        <Sheet title="Email gateway" description="Choose your email provider and the sender customers will recognize." icon="mail" meta={g.enabled === '1' ? <Badge tone="success">gateway enabled</Badge> : <Badge tone="warning">gateway disabled</Badge>}>
+        <Sheet title="Email gateway" description="Choose your email provider and the sender customers will recognize." icon="mail" meta={g.enabled === '1' ? <State tone="success">gateway enabled</State> : <State tone="warning">gateway disabled</State>}>
             <form className="form-grid" onSubmit={(event) => { event.preventDefault(); form.post('/settings/notifications/email-gateway', { preserveScroll: true, onFinish: clearSecrets }); }}>
                 <Check className="check span2" label="Enable email gateway" name="email_gateway_enabled" checked={form.data.email_gateway_enabled} onChange={(e) => form.setData('email_gateway_enabled', e.target.checked)} />
                 <Select label="Provider" options={providers} {...bind(form, 'email_gateway_provider')} />
@@ -163,7 +163,7 @@ function Gateways({ n }: { n: Notifications }) {
                     <article className="notice-gateway" key={key}>
                         <span className="account-section-icon"><Icon name={icon} /></span>
                         <div><h3>{label}</h3><p>{copy}</p></div>
-                        <Badge tone={n.ready[key] ? 'success' : ''}>{n.ready[key] ? 'Enabled' : 'Not enabled'}</Badge>
+                        <State tone={n.ready[key] ? 'success' : ''}>{n.ready[key] ? 'Enabled' : 'Not enabled'}</State>
                         <Link className="button" href={`${NOTICES}&view=gateways&gateway=${key}`} preserveScroll>{n.ready[key] ? 'Manage' : 'Configure'} {label}</Link>
                     </article>
                 ))}
@@ -198,7 +198,7 @@ function TemplateEditor({ name, label, template, tokens, ready }: { name: string
             title={label}
             description={custom ? 'Save a reusable message. You can edit it for each bulk send.' : 'Choose a channel and customize the message.'}
             icon="mail"
-            meta={<Badge>{custom ? 'Manual bulk' : 'Automatic'}</Badge>}
+            meta={<State>{custom ? 'Manual bulk' : 'Automatic'}</State>}
         >
             <form className="form-grid notice-editor" onSubmit={(event) => { event.preventDefault(); form.post('/settings/notifications/templates', { preserveScroll: true }); }}>
                 {!custom && (
@@ -216,7 +216,7 @@ function TemplateEditor({ name, label, template, tokens, ready }: { name: string
                         <div className="span2 form-grid" key={channel}>
                             <div className="span2 notice-editor-channel">
                                 <h3>{title}</h3>
-                                {ready[channel] ? <Badge tone="success">Gateway enabled</Badge> : <Link href={`${NOTICES}&view=gateways&gateway=${channel}`}>Configure gateway</Link>}
+                                {ready[channel] ? <State tone="success">Gateway enabled</State> : <Link href={`${NOTICES}&view=gateways&gateway=${channel}`}>Configure gateway</Link>}
                             </div>
                             {!custom && (
                                 <Check className="span2 checkbox" label={`Send ${title} automatically`} name={enabledKey} checked={form.data[enabledKey]} disabled={!ready[channel]} onChange={(e) => form.setData(enabledKey, e.target.checked)} />
@@ -253,7 +253,7 @@ function Templates({ n }: { n: Notifications }) {
                         <article className="notice-template" key={key}>
                             <span className="account-section-icon"><Icon name={key === 'custom' ? 'message' : key === 'welcome' ? 'clients' : 'calendar'} /></span>
                             <div className="notice-template-copy">
-                                <div className="notice-template-title"><h3>{label}</h3><Badge>{key === 'custom' ? 'Manual bulk' : 'Automatic'}</Badge></div>
+                                <div className="notice-template-title"><h3>{label}</h3><State>{key === 'custom' ? 'Manual bulk' : 'Automatic'}</State></div>
                                 <p>{TEMPLATE_DESCRIPTIONS[key]}</p>
                                 <span className="notice-template-status">
                                     {key === 'custom' ? 'Review recipients and content before every send.' : channels.length ? <><span className="notice-dot" /> On · {channels.join(' + ')}</> : 'Off · Choose a channel to enable'}
@@ -279,7 +279,7 @@ function BulkComposer({ bulk, ready }: { bulk: Bulk; ready: Notifications['ready
     const [q, setQ] = useState(bulk.q);
     const toggle = (id: string, on: boolean) => form.setData('recipients', on ? [...form.data.recipients, id] : form.data.recipients.filter((r) => r !== id));
     return (
-        <Sheet title="Send bulk message" description="Choose your recipients, write your message, then review before sending." icon="message" meta={<Badge>Custom</Badge>}>
+        <Sheet title="Send bulk message" description="Choose your recipients, write your message, then review before sending." icon="message" meta={<State>Custom</State>}>
             <div className="notice-channel-switch">
                 <span>Send by</span>
                 {(['email', 'sms'] as const).filter((ch) => ready[ch]).map((ch) => (
@@ -333,7 +333,7 @@ function BulkPreview({ preview }: { preview: Preview | null | undefined }) {
         return <div className="notice-callout">Your preview expired. <Link href={`${NOTICES}&view=bulk`}>Compose a message</Link>.</div>;
     }
     return (
-        <Sheet title="Review your message" description="Check the message and recipients before confirming." icon="mail" meta={<Badge>Nothing sent yet</Badge>}>
+        <Sheet title="Review your message" description="Check the message and recipients before confirming." icon="mail" meta={<State>Nothing sent yet</State>}>
             <div className="notice-review-summary">
                 <strong>{preview.eligible} recipients ready</strong>
                 <span>{preview.items.length - preview.eligible} excluded · {preview.channel.toUpperCase()}</span>
@@ -406,7 +406,7 @@ function AdminAlerts({ admin, ready }: { admin: NonNullable<Notifications['admin
     const gateway = (channel: 'email' | 'sms') => (ready[channel] ? null : <> · <Link href={`${NOTICES}&view=gateways&gateway=${channel}`}>set up the {channel === 'email' ? 'Email' : 'SMS'} gateway</Link></>);
     return (
         <>
-            <Sheet title="Admin alerts" description="Tell the team when something on the server or network needs attention, and send a daily report. Uses the same Email and SMS gateways as customer messages." icon="shield" meta={<Badge tone={admin.settings.enabled ? 'success' : undefined}>{admin.settings.enabled ? 'On' : 'Off'}</Badge>}>
+            <Sheet title="Admin alerts" description="Tell the team when something on the server or network needs attention, and send a daily report. Uses the same Email and SMS gateways as customer messages." icon="shield" meta={<State tone={admin.settings.enabled ? 'success' : undefined}>{admin.settings.enabled ? 'On' : 'Off'}</State>}>
                 <form className="form-grid" onSubmit={(event) => { event.preventDefault(); form.post('/settings/notifications/admin', { preserveScroll: true }); }}>
                     <Check className="span2 checkbox" label={<strong>Send admin alerts and reports</strong>} name="enabled" checked={form.data.enabled} onChange={(e) => form.setData('enabled', e.target.checked)} />
                     <TextArea className="" label="Email recipients" name="emails" rows={2} hint="Separate addresses with commas." value={form.data.emails} onChange={(e) => form.setData('emails', e.target.value)} />
@@ -426,7 +426,7 @@ function AdminAlerts({ admin, ready }: { admin: NonNullable<Notifications['admin
                         <Check className="checkbox" label="Telegram (set up below)" name="alert_telegram" checked={form.data.alert_telegram} onChange={(e) => form.setData('alert_telegram', e.target.checked)} />
                     </fieldset>
 
-                    <div className="span2 notice-editor-channel"><h3>Telegram</h3>{tokenSaved ? <Badge tone="success">Bot token saved</Badge> : <Badge>Not set up</Badge>}<a href={docsUrl('telegram')} target="_blank" rel="noopener noreferrer">Setup guide</a></div>
+                    <div className="span2 notice-editor-channel"><h3>Telegram</h3>{tokenSaved ? <State tone="success">Bot token saved</State> : <State>Not set up</State>}<a href={docsUrl('telegram')} target="_blank" rel="noopener noreferrer">Setup guide</a></div>
                     <Field
                         label="Bot token"
                         name="telegram_token"

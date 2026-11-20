@@ -2,7 +2,7 @@ import { router } from '@inertiajs/react';
 import { useEffect, useState } from 'react';
 import { PostButton } from '@/components/confirm';
 import { Sheet } from '@/components/settings';
-import { Badge } from '@/components/ui';
+import { State } from '@/components/ui';
 import type { SoftwareUpdate, UpdateStatus } from '@/settings/types';
 
 type Live = { current: string; running: boolean; status: UpdateStatus | null; log: string[] };
@@ -39,8 +39,8 @@ export function UpdateSheet({ u }: { u: SoftwareUpdate }) {
     const finished = !live.running && last?.state === 'ok' && last.to === live.current && last.from !== live.current;
     const showLog = live.log.length > 0 && (live.running || failed || finished);
     const badge = live.running
-        ? <Badge tone="warning">updating</Badge>
-        : available ? <Badge tone="warning">update available</Badge> : check ? <Badge tone="success">up to date</Badge> : undefined;
+        ? <State tone="warning">updating</State>
+        : available ? <State tone="warning">update available</State> : check ? <State tone="success">up to date</State> : undefined;
 
     return (
         <Sheet title="Software update" icon="refresh" meta={badge}>

@@ -38,7 +38,7 @@ function DeviceForm({ device, vendors, canManage }: { device: Device; vendors: R
                     {Object.entries(vendors).map(([key, v]) => (
                         <label className="nas-vendor-option" key={key}>
                             <input type="radio" name="vendor" value={key} checked={form.data.vendor === key} disabled={!canManage} onChange={() => form.setData('vendor', key)} />
-                            <span><strong>{v.label}{v.beta && <> <span className="badge warning">Beta</span></>}</strong><small>{v.summary}</small></span>
+                            <span><strong>{v.label}{v.beta && <> <span className="status is-warning">Beta</span></>}</strong><small>{v.summary}</small></span>
                         </label>
                     ))}
                 </fieldset>
@@ -181,7 +181,7 @@ export default function NasForm({ device, vendors, setupSteps, canManage, nas, a
                 </Panel>
                 <Panel title="Router checklist">
                     {Object.entries(setupSteps).map(([vendor, steps]) => (
-                        <div key={vendor}><h3>{vendors[vendor]?.label ?? vendor}{vendors[vendor]?.beta && <> <span className="badge warning">Beta</span></>}</h3><SetupGuide steps={steps} /></div>
+                        <div key={vendor}><h3>{vendors[vendor]?.label ?? vendor}{vendors[vendor]?.beta && <> <span className="status is-warning">Beta</span></>}</h3><SetupGuide steps={steps} /></div>
                     ))}
                 </Panel>
             </AppLayout>

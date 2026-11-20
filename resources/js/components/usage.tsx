@@ -34,7 +34,7 @@ function CapMeter({ cycle }: { cycle: NonNullable<UsageHistory['cycle']> }) {
             </div>
             <p className="usage-cap-note">
                 {cycle.capped
-                    ? <span className="badge warning">Slowed down{cycle.slowPlan ? ` to ${cycle.slowPlan}` : ''}</span>
+                    ? <span className="status is-warning">Slowed down{cycle.slowPlan ? ` to ${cycle.slowPlan}` : ''}</span>
                     : cycle.action === 'throttle' ? 'Slows down at 100%.' : 'Notify only at 100%.'}
                 {' '}<span className="usage-cap-renews">Renews {renews.toISOString().slice(0, 10)}.</span>
             </p>

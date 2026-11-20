@@ -110,7 +110,7 @@ function NetworkTables({ nasId, tables }: { nasId: number; tables: Record<string
     return (
         <Panel title="Network tables">
             <div className="nas-tables-bar">
-                <div className="segmented" role="tablist" aria-label="Network tables">
+                <div className="segmented as-tabs" role="tablist" aria-label="Network tables">
                     {Object.entries(tables).map(([key, label]) => (
                         <button key={key} type="button" role="tab" aria-selected={table === key} className={table === key ? 'active' : undefined} onClick={() => setTable(key)}>{label}</button>
                     ))}

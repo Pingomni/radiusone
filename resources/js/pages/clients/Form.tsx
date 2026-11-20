@@ -42,11 +42,10 @@ type Client = {
     onu: ClientOnuData | null;
 };
 
-function Section({ title, icon, children }: { title: string; description?: string; icon: string; children: ReactNode }) {
+function Section({ title, children }: { title: string; description?: string; icon?: string; children: ReactNode }) {
     return (
         <section className="client-section">
             <header className="client-section-head">
-                <span className="account-section-icon"><Icon name={icon} /></span>
                 <h3>{title}</h3>
             </header>
             <div className="form-grid">{children}</div>

@@ -2,7 +2,7 @@ import { Link, useForm } from '@inertiajs/react';
 import { PostButton } from '@/components/confirm';
 import Icon from '@/components/Icon';
 import { PasswordField, Sheet, SettingsRows } from '@/components/settings';
-import { Field, Tag, type TagData, State } from '@/components/ui';
+import { Field, Tag, type TagData, State, roleLabel } from '@/components/ui';
 import AppLayout from '@/layouts/AppLayout';
 
 type Profile = { name: string; email: string; username: string; role: string; enabled: boolean; lastLogin: string };
@@ -110,7 +110,7 @@ export default function ProfilePage({ profile, twoFactor }: { profile: Profile; 
                         <SettingsRows
                             rows={[
                                 ['User', profile.username],
-                                ['Role', profile.role.charAt(0).toUpperCase() + profile.role.slice(1)],
+                                ['Role', roleLabel(profile.role)],
                                 ['Status', profile.enabled ? <State tone="success">enabled</State> : <State tone="danger">disabled</State>],
                                 ['Two-factor', <Tag tag={twoFactor.tag} />],
                                 ['Last login', profile.lastLogin],

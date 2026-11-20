@@ -7,7 +7,7 @@ import { Changelog, type Change } from '@/components/OltChangelog';
 import { SignalScale, type OnuRow } from '@/components/olt';
 import { DataTable } from '@/components/table';
 import { Tabs, type TabDef } from '@/components/tabs';
-import { Badge, Check, Field, Panel, Select, Status, Time } from '@/components/ui';
+import { Check, Field, Panel, Select, Status, Time, State } from '@/components/ui';
 import AppLayout from '@/layouts/AppLayout';
 import { useCan } from '@/lib/auth';
 
@@ -317,7 +317,7 @@ function Ports({ live, base, mayChange, onDone }: { live: Live; base: string; ma
                     emptyText="The ONU did not report its LAN ports. It may be offline."
                     columns={[
                         { header: 'Port', cell: (p) => `LAN ${p.port}` },
-                        { header: 'Admin state', cell: (p) => (p.on === null ? '-' : p.on ? 'Enabled' : <Badge tone="warning">Turned off</Badge>) },
+                        { header: 'Admin state', cell: (p) => (p.on === null ? '-' : p.on ? 'Enabled' : <State tone="warning">Turned off</State>) },
                         { header: 'Link', cell: (p) => <Status tone={p.up ? 'good' : 'neutral'}>{p.up ? 'Up' : 'Down'}</Status> },
                         { header: 'Speed', cell: (p) => (p.speed ? `${p.speed} Mbit/s${p.duplex ? `, ${p.duplex} duplex` : ''}` : '-') },
                         { header: 'Native VLAN', cell: (p) => p.native ?? '-' },
@@ -571,7 +571,7 @@ function EthPorts({ base, live, options, onDone }: { base: string; live: Live | 
                 emptyText="Neither the ONU nor the OLT lists LAN ports for this ONU. It may be offline."
                 columns={[
                     { header: 'Port', cell: (eth) => `LAN ${eth}` },
-                    { header: 'Link', cell: (eth) => { const l = live?.lan.find((x) => x.port === eth); return !l ? '-' : l.on === false ? <Badge tone="warning">Turned off</Badge> : l.up ? <Status tone="good">Up{l.speed ? ` ${l.speed}M` : ''}</Status> : <Status tone="neutral">Down</Status>; } },
+                    { header: 'Link', cell: (eth) => { const l = live?.lan.find((x) => x.port === eth); return !l ? '-' : l.on === false ? <State tone="warning">Turned off</State> : l.up ? <Status tone="good">Up{l.speed ? ` ${l.speed}M` : ''}</Status> : <Status tone="neutral">Down</Status>; } },
                     { header: 'Mode', className: 'wrap', cell: (eth) => portWords(options.state.ports[String(eth)]) },
                     { header: '', cell: (eth) => <button type="button" className="button" aria-expanded={edit?.eth === eth} onClick={() => (edit?.eth === eth ? setEdit(null) : open(eth))}>{edit?.eth === eth ? 'Close' : 'Configure'}</button> },
                 ]}
@@ -643,7 +643,7 @@ function Configure({ base, live, choices, clients, onDone }: { base: string; liv
     const lanCount = Math.max(data?.lan.length ?? 0, ...Object.keys(state.ports).map(Number), 1);
     return (
         <div className="onu-tab-body">
-            <Panel title="ONU mode" actions={<Badge tone={state.mode === 'none' ? 'warning' : 'info'}>Now: {state.mode === 'routing' ? 'Routing' : state.mode === 'bridging' ? 'Bridging' : 'Not set'}</Badge>}>
+            <Panel title="ONU mode" actions={<State tone={state.mode === 'none' ? 'warning' : 'info'}>Now: {state.mode === 'routing' ? 'Routing' : state.mode === 'bridging' ? 'Bridging' : 'Not set'}</State>}>
                 <fieldset className="onu-choice onu-choice-2">
                     <legend>How the ONU works</legend>
                     {(['routing', 'bridging'] as const).map((m) => (
@@ -793,7 +793,7 @@ export default function OnuPage({ olt, onu, clients, disconnections, timeline, s
                     <Fact label="Added to the OLT">{addedAt ? <Time value={addedAt} /> : <span className="onu-pending">Before the portal kept a history</span>}</Fact>
                     <Fact label="Read from the OLT"><Time value={onu.seen} /></Fact>
                 </Facts>
-                <Facts title="Customer" icon="user" aside={clients.length > 1 ? <Badge>{clients.length} clients</Badge> : undefined}>
+                <Facts title="Customer" icon="user" aside={clients.length > 1 ? <span className="muted">{clients.length} clients</span> : undefined}>
                     {clients.length ? clients.map((c) => (
                         <div key={c.username} className="onu-client">
                             <dt>Client</dt>

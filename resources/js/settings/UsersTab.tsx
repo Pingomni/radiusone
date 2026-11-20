@@ -3,7 +3,7 @@ import { DeleteButton } from '@/components/confirm';
 import Icon from '@/components/Icon';
 import { RoleGrid, Sheet } from '@/components/settings';
 import { DataTable } from '@/components/table';
-import { Badge, Empty, Tag, State } from '@/components/ui';
+import { Empty, Tag, State, roleLabel } from '@/components/ui';
 import { useCan } from '@/lib/auth';
 import type { Operator } from '@/settings/types';
 
@@ -24,19 +24,18 @@ export function UsersTab({ users, usersSummary, roleDescriptions }: { users: Ope
                 icon="clients"
                 className="settings-users-card"
                 meta={<>
-                    <Badge tone={usersSummary.enabled > 0 ? 'success' : 'warning'}>{usersSummary.enabled}/{usersSummary.total} enabled</Badge>
+                    <State tone={usersSummary.enabled > 0 ? 'success' : 'warning'}>{usersSummary.enabled}/{usersSummary.total} enabled</State>
                     <Link className="button primary" href="/settings/users/create"><Icon name="plus" />New user</Link>
                 </>}
             >
                 <DataTable
                     rows={users}
                     rowKey={(r) => r.id}
-                    exportRows
                     columns={[
                         { header: 'Name', cell: (r) => r.name },
                         { header: 'Email', cell: (r) => r.email },
                         { header: 'Username', cell: (r) => r.username },
-                        { header: 'Role', cell: (r) => r.role.charAt(0).toUpperCase() + r.role.slice(1) },
+                        { header: 'Role', cell: (r) => roleLabel(r.role) },
                         { header: 'Status', cell: (r) => (r.enabled ? <State tone="success">enabled</State> : <State tone="danger">disabled</State>) },
                         { header: '2FA', cell: (r) => <Tag tag={r.twoFactor} /> },
                         { header: 'Last login', cell: (r) => r.lastLogin },

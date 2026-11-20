@@ -1,7 +1,7 @@
 import { Link } from '@inertiajs/react';
 import { useMemo, useState } from 'react';
 import { DataTable } from '@/components/table';
-import { Badge, Field, Panel, Select, Time } from '@/components/ui';
+import { Field, Panel, Select, Time, State } from '@/components/ui';
 
 export type Change = {
     id: number; at: string; actor: string; source: 'portal' | 'olt' | 'console' | string; action: string;
@@ -112,7 +112,7 @@ export function Changelog({ rows, oltId, forOnu = false, title }: { rows: Change
                 emptyText={rows.length ? 'Nothing matches.' : forOnu ? 'Nothing has been done to this ONU since the portal has kept its history.' : 'Nothing yet.'}
                 columns={[
                     { header: 'When', cell: (r) => <Time value={r.at} /> },
-                    { header: 'Who', cell: (r) => (r.source === 'olt' ? <Badge tone="warning">On the OLT</Badge> : r.source === 'console' ? <>{r.actor} <Badge>terminal</Badge></> : r.actor || '-') },
+                    { header: 'Who', cell: (r) => (r.source === 'olt' ? <State tone="warning">On the OLT</State> : r.source === 'console' ? <>{r.actor} <State>terminal</State></> : r.actor || '-') },
                     { header: 'What', className: 'wrap', cell: (r) => <><strong>{label(r)}</strong>{summary(r) && <div className="hint">{summary(r)}</div>}</> },
                     ...(forOnu ? [] : [{
                         header: 'ONU or port', className: 'wrap', cell: (r: Change) => (r.sn

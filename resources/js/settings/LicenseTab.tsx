@@ -1,7 +1,7 @@
 import { router, useForm } from '@inertiajs/react';
 import { useConfirm } from '@/components/confirm';
 import { SettingsRows, Sheet } from '@/components/settings';
-import { Badge, TextArea, State } from '@/components/ui';
+import { TextArea, State } from '@/components/ui';
 import type { License } from '@/settings/types';
 
 const STATE: Record<License['state'], [string, string]> = {
@@ -36,7 +36,7 @@ export function LicenseTab({ l }: { l: License }) {
 
     return (
         <>
-            <Sheet title="License" icon="lock" meta={<Badge tone={tone}>{label}</Badge>}>
+            <Sheet title="License" icon="lock" meta={<State tone={tone}>{label}</State>}>
                 {licensed ? (
                     <SettingsRows rows={[
                         ['Licensed to', l.customer || '-'],

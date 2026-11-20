@@ -10,7 +10,7 @@ import { OnuPower, OnuStatus, SignalReading, type OnuRow } from '@/components/ol
 import { DataTable, Pagination } from '@/components/table';
 import { Tabs } from '@/components/tabs';
 import { MetricCards } from '@/components/metrics';
-import { Badge, Check, Field, ListPanel, Panel, RowActions, Select, State, Status, Time } from '@/components/ui';
+import { Check, Field, ListPanel, Panel, RowActions, Select, State, Status, Time } from '@/components/ui';
 import AppLayout from '@/layouts/AppLayout';
 import { useCan } from '@/lib/auth';
 import type { Paginated } from '@/lib/types';
@@ -42,10 +42,10 @@ type Hardware = { lastRead: string | null; error: string; boards: Board[]; fans:
 const speedText = (mbps: number | null) => (mbps === null || mbps === 0 ? '-' : mbps >= 1000 ? `${mbps / 1000} Gbit/s` : `${mbps} Mbit/s`);
 
 function PortState({ port }: { port: Port }) {
-    if (port.admin === false) return <Badge>Turned off</Badge>;
-    if (port.oper === true) return <Badge tone="success">Up</Badge>;
-    if (port.oper === false) return <Badge tone={port.kind === 'uplink' ? 'danger' : 'warning'}>Down</Badge>;
-    return <Badge>Unknown</Badge>;
+    if (port.admin === false) return <State>Turned off</State>;
+    if (port.oper === true) return <State tone="success">Up</State>;
+    if (port.oper === false) return <State tone={port.kind === 'uplink' ? 'danger' : 'warning'}>Down</State>;
+    return <State>Unknown</State>;
 }
 
 function HardwareNote({ hardware }: { hardware: Hardware }) {
@@ -105,9 +105,8 @@ function Ports({ hardware, olt, path, range }: { hardware: Hardware; olt: Olt; p
                     { header: 'Port', cell: (p) => <span className="mono">{p.name}</span> },
                     { header: 'State', cell: (p) => <PortState port={p} /> },
                     ...(pon ? [
-                        { header: 'ONUs online', cell: (p: Port) => (p.onus ? `${p.onus.online} / ${p.onus.total}` : '-') },
-                        { header: 'Free', cell: (p: Port) => { const free = olt.maxOnus - (p.onus?.total ?? 0); return free > 0 ? `${free} of ${olt.maxOnus}` : <State tone="warning">Full</State>; } },
-                        { header: 'Autofind', cell: (p: Port) => (p.pon?.autofind == null ? '-' : p.pon.autofind ? 'On' : <Badge tone="warning">Off</Badge>) },
+                        { header: 'ONUs online', cell: (p: Port) => { const free = olt.maxOnus - (p.onus?.total ?? 0); return <>{p.onus ? `${p.onus.online} / ${p.onus.total}` : '-'}<span className="list-subline">{free > 0 ? `${free} free` : <State tone="warning">Full</State>}</span></>; } },
+                        { header: 'Autofind', cell: (p: Port) => (p.pon?.autofind == null ? '-' : p.pon.autofind ? 'On' : <State tone="warning">Off</State>) },
                         { header: 'Average signal', cell: (p: Port) => <OnuPower dbm={p.signal} weak={olt.rxWarning} veryWeak={olt.rxCritical} /> },
                         { header: 'Transmit power', cell: (p: Port) => (p.pon?.tx == null ? '-' : `${p.pon.tx.toFixed(2)} dBm`) },
                         { header: 'Module', cell: (p: Port) => (p.pon?.temperature == null ? '-' : `${p.pon.temperature} °C`) },
@@ -117,11 +116,10 @@ function Ports({ hardware, olt, path, range }: { hardware: Hardware; olt: Olt; p
                         { header: 'VLANs', className: 'wrap', cell: (p: Port) => (p.uplink ? <>{p.uplink.vlans.join(', ') || '-'}{p.uplink.native !== null && <span className="hint"> (native {p.uplink.native})</span>}</> : '-') },
                     ]),
                     { header: 'Speed', cell: (p) => speedText(p.speed) },
-                    { header: 'In', cell: (p) => p.in ?? '-' },
-                    { header: 'Out', cell: (p) => p.out ?? '-' },
-                    { header: 'Errors in total', cell: (p) => p.errors ?? '-' },
+                    { header: 'In / out', cell: (p) => (p.in == null && p.out == null ? '-' : `${p.in ?? '-'} / ${p.out ?? '-'}`) },
+                    { header: 'Errors', cell: (p) => p.errors ?? '-' },
                     { header: '', cell: (p) => actions(p) },
-                    { header: 'Description', className: 'wrap', cell: (p) => (p.pon?.rogue && p.pon.rogue.toLowerCase() !== 'inexistent' ? <><Badge tone="danger">Rogue ONU: {p.pon.rogue}</Badge> {p.alias}</> : p.alias || '-') },
+                    { header: 'Description', className: 'wrap', cell: (p) => (p.pon?.rogue && p.pon.rogue.toLowerCase() !== 'inexistent' ? <><State tone="danger">Rogue ONU: {p.pon.rogue}</State> {p.alias}</> : p.alias || '-') },
                 ]}
             />
         </Panel>
@@ -152,13 +150,13 @@ function Cards({ hardware, olt, path }: { hardware: Hardware; olt: Olt; path: st
                     columns={[
                         { header: 'Slot', cell: (b) => <span className="mono">{b.position}</span> },
                         { header: 'Card', cell: (b) => b.name },
-                        { header: 'Status', cell: (b) => <Badge tone={b.tone}>{b.status}</Badge> },
+                        { header: 'Status', cell: (b) => <State tone={b.tone}>{b.status}</State> },
                         { header: 'Role', cell: (b) => b.role || '-' },
                         { header: 'CPU', cell: (b) => value(b.cpu, '%') },
                         { header: 'Memory', cell: (b) => value(b.memory, '%') },
                         { header: 'Temperature', cell: (b) => value(b.temperature, '°C') },
                         { header: 'Power use', cell: (b) => value(b.watts, 'W') },
-                        { header: 'Power input', cell: (b) => (b.power === 'Fault' ? <Badge tone="danger">Fault</Badge> : b.power || '-') },
+                        { header: 'Power input', cell: (b) => (b.power === 'Fault' ? <State tone="danger">Fault</State> : b.power || '-') },
                         { header: 'Serial', cell: (b) => (b.serial ? <span className="mono">{b.serial}</span> : '-') },
                         ...(mayRestart ? [{ header: '', cell: (b: Board) => (
                             <PostButton action={`${path}/cards/${b.position}/restart`} label="Restart card"
@@ -174,7 +172,7 @@ function Cards({ hardware, olt, path }: { hardware: Hardware; olt: Olt; path: st
                         rowKey={(f) => f.label}
                         columns={[
                             { header: 'Fan', cell: (f) => f.label },
-                            { header: 'State', cell: (f) => <Badge tone={f.ok ? 'success' : 'danger'}>{f.state}</Badge> },
+                            { header: 'State', cell: (f) => <State tone={f.ok ? 'success' : 'danger'}>{f.state}</State> },
                             { header: 'Speed', cell: (f) => (f.rpm !== null ? `${f.rpm} RPM` : value(f.speed, '%')) },
                         ]}
                     />
@@ -213,8 +211,8 @@ function DetailsTab({ olt, details, hardware, path }: { olt: Olt; details: Detai
                 {row('Power use', details.power === null ? '-' : `${details.power} W`)}
                 {row('Hottest card', details.temperature === null ? '-' : `${details.temperature} °C`)}
                 {row('Fans', hardware.fans.length ? hardware.fans.map((f) => (f.rpm !== null ? `${f.rpm}` : f.state)).join(', ') + (hardware.fans.some((f) => f.rpm !== null) ? ' RPM' : '') : '-')}
-                {row('Saves its configuration by itself', details.autosave?.on == null ? '-' : details.autosave.on ? `Yes, ${details.autosave.minutes ?? '?'} minutes after a change` : <Badge tone="warning">No: changes are lost at a restart unless saved on the OLT</Badge>)}
-                {row('Time servers (NTP)', details.ntp.length ? <>{details.ntp.map((n) => n.server).join(', ')} {synced ? <Badge tone="success">In sync</Badge> : <Badge tone="warning">Not in sync: the OLT cannot reach them</Badge>}</> : '-')}
+                {row('Saves its configuration by itself', details.autosave?.on == null ? '-' : details.autosave.on ? `Yes, ${details.autosave.minutes ?? '?'} minutes after a change` : <State tone="warning">No: changes are lost at a restart unless saved on the OLT</State>)}
+                {row('Time servers (NTP)', details.ntp.length ? <>{details.ntp.map((n) => n.server).join(', ')} {synced ? <State tone="success">In sync</State> : <State tone="warning">Not in sync: the OLT cannot reach them</State>}</> : '-')}
             </Panel>
             {mayChange && (
                 <Panel title="Time servers">
@@ -253,7 +251,7 @@ function UplinkChoice({ uplinks, chosen, onChange, locked, legend }: { uplinks: 
                 return (
                     <label key={p.id} className={on ? 'on' : undefined} title={why ?? (p.oper ? 'Link up' : 'No link')}>
                         <input type="checkbox" checked={on} disabled={why !== null} onChange={() => onChange(on ? chosen.filter((x) => x !== p.id) : [...chosen, p.id])} />
-                        {portLabel(p)} {p.oper ? <Badge tone="success">up</Badge> : <Badge>down</Badge>}
+                        {portLabel(p)} {p.oper ? <State tone="success">up</State> : <State>down</State>}
                     </label>
                 );
             })}
@@ -371,9 +369,9 @@ function VlansTab({ details, olt, hardware, path }: { details: Details; olt: Olt
                     { header: 'Name', cell: (v) => v.name || <span className="hint mono">VLAN_{String(v.id).padStart(4, '0')}</span> },
                     { header: 'Description', className: 'wrap', cell: (v) => v.desc || '-' },
                     { header: 'Type', cell: (v) => v.type },
-                    { header: 'Uplink ports', className: 'wrap', cell: (v) => { const on = carriedOn(v); return on.length ? on.map((p) => <span key={p.id} className="mono" style={{ marginRight: '0.6rem' }} title={p.alias || undefined}>{shortPort(p)}{p.uplink?.native === v.id ? ' (native)' : ''}</span>) : v.ports > 0 ? <Badge tone="warning">None: its ONUs have no way out</Badge> : <span className="hint">None</span>; } },
+                    { header: 'Uplink ports', className: 'wrap', cell: (v) => { const on = carriedOn(v); return on.length ? on.map((p) => <span key={p.id} className="mono" style={{ marginRight: '0.6rem' }} title={p.alias || undefined}>{shortPort(p)}{p.uplink?.native === v.id ? ' (native)' : ''}</span>) : v.ports > 0 ? <State tone="warning">None: its ONUs have no way out</State> : <span className="hint">None</span>; } },
                     { header: 'ONUs', cell: (v) => v.ports },
-                    { header: '', cell: (v) => (v.own ? <Badge tone="info">OLT management</Badge> : '') },
+                    { header: '', cell: (v) => (v.own ? <State tone="info">OLT management</State> : '') },
                     ...(mayChange ? [{ header: '', cell: (v: Vlan) => (
                         <div className="toolbar">
                             {v.id > 1 && <button type="button" className="button" onClick={() => { setAdding(false); setEditing(v.id); }}>Edit</button>}
@@ -580,8 +578,8 @@ function PonGrid({ hardware, olt, path }: { hardware: Hardware; olt: Olt; path: 
                             <span className="olt-pon-count"><strong>{n.online}</strong>/{n.total}<span className="sr-only"> online, {share}%</span></span>
                             <span className="olt-pon-foot">
                                 <span className={`olt-pon-signal ${tone}`}>{p.signal === null ? 'No reading' : `${p.signal.toFixed(1).replace('-', '\u2212')} dBm average`}</span>
-                                {p.pon?.autofind === false && <Badge tone="warning">Autofind off</Badge>}
-                                {p.pon?.rogue && p.pon.rogue.toLowerCase() !== 'inexistent' && <Badge tone="danger">Rogue ONU</Badge>}
+                                {p.pon?.autofind === false && <State tone="warning">Autofind off</State>}
+                                {p.pon?.rogue && p.pon.rogue.toLowerCase() !== 'inexistent' && <State tone="danger">Rogue ONU</State>}
                             </span>
                         </Link>
                     );
@@ -603,7 +601,7 @@ function OltHero({ olt, counts, hardware, details, path }: { olt: Olt; counts: C
         <section className={`onu-hero olt-hero is-${h.tone}`} aria-label="OLT at a glance">
             <div className="onu-hero-top">
                 <div className="onu-identity">
-                    <div className="onu-title"><h1>{olt.name}</h1>{!olt.enabled && <Badge>Not read</Badge>}</div>
+                    <div className="onu-title"><h1>{olt.name}</h1>{!olt.enabled && <State>Not read</State>}</div>
                     <p>
                         <span>{details.version?.product || olt.model}</span>
                         <span aria-hidden="true">·</span><span className="mono">{olt.host}</span>
@@ -688,7 +686,7 @@ export default function OltShow({ olt, counts, filters, hardware, details, backu
                     emptyText={counts.total ? 'No ONU matches.' : 'No ONUs read yet.'}
                     columns={[
                         { header: 'ONU', className: 'wrap', cell: (o) => <Link className="olt-onu-cell" href={`${path}/onus/${o.id}`}><strong>{o.description || o.sn}</strong><small className="mono">{o.sn}</small></Link> },
-                        { header: 'Status', cell: (o) => (o.active === false ? <Badge tone="warning">Turned off</Badge> : <OnuStatus status={o.status} />) },
+                        { header: 'Status', cell: (o) => (o.active === false ? <State tone="warning">Turned off</State> : <OnuStatus status={o.status} />) },
                         { header: 'Port', cell: (o) => <span className="mono">{o.position}</span> },
                         { header: 'Client', cell: (o) => (o.clients.length ? o.clients.map((u) => <div key={u}><Link href={`/clients/${encodeURIComponent(u)}/edit?tab=onu`}>{u}</Link></div>) : <span className="onu-pending">Not linked</span>) },
                         { header: 'Signal at the ONU, dBm', cell: (o) => <SignalReading dbm={o.rx} weak={olt.rxWarning} veryWeak={olt.rxCritical} second={o.oltRx === null ? undefined : `OLT ${o.oltRx.toFixed(1).replace('-', '\u2212')}`} /> },

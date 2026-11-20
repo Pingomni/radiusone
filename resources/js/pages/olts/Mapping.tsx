@@ -4,7 +4,7 @@ import { StatCards } from '@/components/billing';
 import { PostButton } from '@/components/confirm';
 import { OnuPower, OnuStatus } from '@/components/olt';
 import { DataTable, Pagination } from '@/components/table';
-import { Badge, Field, ListPanel, Select } from '@/components/ui';
+import { Field, ListPanel, Select, State } from '@/components/ui';
 import AppLayout from '@/layouts/AppLayout';
 import type { Paginated } from '@/lib/types';
 
@@ -57,7 +57,7 @@ export default function OltMapping({ filters, counts, canLink, result }: { filte
                                 </div>
                             ) : '-'),
                         },
-                        { header: 'Status', cell: (r) => (r.link ? (r.link.status === 'missing' ? <Badge tone="warning">Not on the OLT</Badge> : <OnuStatus status={r.link.status} />) : '-') },
+                        { header: 'Status', cell: (r) => (r.link ? (r.link.status === 'missing' ? <State tone="warning">Not on the OLT</State> : <OnuStatus status={r.link.status} />) : '-') },
                         { header: 'Signal', cell: (r) => (r.link ? <OnuPower dbm={r.link.rx} /> : '-') },
                         {
                             header: 'Found from the session',

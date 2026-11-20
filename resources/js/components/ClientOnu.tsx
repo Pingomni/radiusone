@@ -1,7 +1,7 @@
 import { Link, router } from '@inertiajs/react';
 import { useState } from 'react';
 import { PostButton } from '@/components/confirm';
-import { Badge, Empty, Panel, Time } from '@/components/ui';
+import { Empty, Panel, Time, State } from '@/components/ui';
 import { useCan } from '@/lib/auth';
 import { OnuStatus, SignalReading, type OnuRow } from '@/components/olt';
 
@@ -35,7 +35,7 @@ export default function ClientOnu({ username, data, canLink }: { username: strin
                     <>
                         {onu ? (
                             <>
-                                <Row label="Status">{onu.active === false ? <Badge tone="warning">Turned off</Badge> : <OnuStatus status={onu.status} />}</Row>
+                                <Row label="Status">{onu.active === false ? <State tone="warning">Turned off</State> : <OnuStatus status={onu.status} />}</Row>
                                 <Row label="Signal at the ONU, dBm"><SignalReading dbm={onu.rx} second={onu.oltRx === null ? undefined : `OLT ${onu.oltRx.toFixed(1).replace('-', '\u2212')}`} /></Row>
                                 <Row label="OLT and port"><Link href={`/olts/${current.oltId}?q=${encodeURIComponent(current.sn)}`}>{current.olt}</Link> <span className="mono">{onu.position}</span></Row>
                                 <Row label="Serial number"><span className="mono">{onu.sn}</span></Row>
