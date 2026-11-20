@@ -51,9 +51,64 @@ final class OnuController extends Controller
         $oltId = (int) $request->query('olt', 0);
         $oltId = in_array($oltId, array_map(static fn (array $o) => (int) $o['id'], $olts), true) ? $oltId : 0;
 
-        // The OLT filter narrows the counts too, so the tabs always add up to what the list shows.
-        $scope = $oltId ? ' AND o.olt_id=?' : '';
-        $scopeParams = $oltId ? [$oltId] : [];
+        // Every filter but the state narrows the counts too, so the tabs always add up to what the list shows.
+        $scope = '';
+        $scopeParams = [];
+        if ($oltId) {
+            $scope .= ' AND o.olt_id=?';
+            $scopeParams[] = $oltId;
+        }
+        // A card ("0/1") and a PON port ("0/1/15").
+        $board = trim((string) $request->query('board', ''));
+        if (preg_match('~^(\d{1,2})/(\d{1,2})$~D', $board, $at)) {
+            $scope .= ' AND o.frame=? AND o.slot=?';
+            array_push($scopeParams, (int) $at[1], (int) $at[2]);
+        } else {
+            $board = '';
+        }
+        $port = trim((string) $request->query('port', ''));
+        if (preg_match('~^(\d{1,2})/(\d{1,2})/(\d{1,3})$~D', $port, $at) && ($board === '' || str_starts_with($port, $board . '/'))) {
+            $scope .= ' AND o.frame=? AND o.slot=? AND o.port=?';
+            array_push($scopeParams, (int) $at[1], (int) $at[2], (int) $at[3]);
+        } else {
+            $port = '';
+        }
+        $onMac = 'm.olt_id=o.olt_id AND m.frame=o.frame AND m.slot=o.slot AND m.port=o.port AND m.ont_id=o.ont_id';
+        // The VLANs the ONU's devices were last seen on, from the OLT's MAC table.
+        $vlan = (int) $request->query('vlan', 0);
+        if ($vlan > 0) {
+            $scope .= ' AND EXISTS (SELECT 1 FROM olt_macs m WHERE ' . $onMac . ' AND m.vlan=?)';
+            $scopeParams[] = $vlan;
+        }
+        $type = trim((string) $request->query('type', ''));
+        if ($type !== '') {
+            $scope .= ' AND o.onu_model=?';
+            $scopeParams[] = $type;
+        }
+        $profile = trim((string) $request->query('profile', ''));
+        if ($profile !== '') {
+            $scope .= ' AND o.service_profile=?';
+            $scopeParams[] = $profile;
+        }
+        $linked = (string) $request->query('linked', '');
+        $linked = in_array($linked, ['yes', 'no'], true) ? $linked : '';
+        if ($linked !== '') {
+            $scope .= ' AND ' . ($linked === 'no' ? 'NOT ' : '') . 'EXISTS (SELECT 1 FROM customer_onus l WHERE l.olt_id=o.olt_id AND l.sn=o.sn AND l.source<>"none")';
+        }
+        if ($q !== '') {
+            // Serial, name on the OLT, a MAC behind the ONU, or its client: username, name, address, phone or session IP.
+            $like = '%' . addcslashes($q, '%_\\') . '%';
+            $mac = strtolower((string) preg_replace('/[^0-9a-fA-F]/', '', $q));
+            $client = 'SELECT 1 FROM customer_onus l JOIN customer_profiles c ON c.id=l.customer_id WHERE l.olt_id=o.olt_id AND l.sn=o.sn AND ';
+            $scope .= ' AND (o.sn LIKE ? OR o.description LIKE ?'
+                . ' OR EXISTS (' . $client . '(c.username LIKE ? OR CONCAT(c.first_name, " ", c.last_name) LIKE ? OR c.company_name LIKE ? OR c.address LIKE ? OR c.phone LIKE ? OR c.cell_phone LIKE ? OR c.framed_ip_address LIKE ?'
+                . ' OR EXISTS (SELECT 1 FROM radacct r WHERE r.username=c.username AND r.acctstoptime IS NULL AND r.framedipaddress LIKE ?)))'
+                . (strlen($mac) >= 4 && strlen($mac) === strlen((string) preg_replace('/[\s:.\-]/', '', $q)) ? ' OR EXISTS (SELECT 1 FROM olt_macs m WHERE ' . $onMac . ' AND m.mac LIKE ?)' : '') . ')';
+            array_push($scopeParams, $like, $like, $like, $like, $like, $like, $like, $like, $like, $like);
+            if (str_contains($scope, 'm.mac LIKE ?')) {
+                $scopeParams[] = '%' . $mac . '%';
+            }
+        }
         $counts = Db::row('SELECT COUNT(*) AS total, COALESCE(SUM(o.status="online"),0) AS online, COALESCE(SUM(o.status="offline"),0) AS offline,
             COALESCE(SUM(' . Olts::weakSql('o', 't.rx_warning') . '),0) AS weak FROM olt_onus o JOIN olts t ON t.id=o.olt_id WHERE 1=1' . $scope, $scopeParams) ?? [];
         $waiting = [];
@@ -62,6 +117,9 @@ final class OnuController extends Controller
                 continue;
             }
             foreach ((OltInventory::saved($o)['waiting'] ?? []) as $w) {
+                if (($port !== '' && ($w['position'] ?? '') !== $port) || ($board !== '' && !str_starts_with((string) ($w['position'] ?? ''), $board . '/'))) {
+                    continue;
+                }
                 $waiting[] = ['sn' => (string) ($w['sn'] ?? ''), 'position' => (string) ($w['position'] ?? ''), 'model' => (string) ($w['model'] ?? ''),
                     'oltId' => (int) $o['id'], 'olt' => (string) $o['name'], 'canAdd' => Auth::can('nas.manage') && OltManager::canChange($o)];
             }
@@ -69,25 +127,22 @@ final class OnuController extends Controller
 
         $where = ' WHERE 1=1' . $scope;
         $params = $scopeParams;
-        // One PON port ("0/1/15"), from the list of all ports.
-        $port = trim((string) $request->query('port', ''));
-        if (preg_match('~^(\d{1,2})/(\d{1,2})/(\d{1,3})$~D', $port, $at)) {
-            $where .= ' AND o.frame=? AND o.slot=? AND o.port=?';
-            array_push($params, (int) $at[1], (int) $at[2], (int) $at[3]);
-        } else {
-            $port = '';
-        }
         if ($status === 'online' || $status === 'offline') {
             $where .= ' AND o.status=?';
             $params[] = $status;
         } elseif ($status === 'weak') {
             $where .= ' AND ' . Olts::weakSql('o', 't.rx_warning');
         }
-        if ($q !== '') {
-            $like = '%' . addcslashes($q, '%_\\') . '%';
-            $where .= ' AND (o.sn LIKE ? OR o.description LIKE ? OR EXISTS (SELECT 1 FROM customer_onus l JOIN customer_profiles c ON c.id=l.customer_id WHERE l.olt_id=o.olt_id AND l.sn=o.sn AND (c.username LIKE ? OR CONCAT(c.first_name, " ", c.last_name) LIKE ?)))';
-            array_push($params, $like, $like, $like, $like);
-        }
+        // What each filter offers: only values that exist, cards and ports narrowed by the OLT and card chosen.
+        $in = $oltId ? ' WHERE olt_id=' . $oltId : '';
+        $column = static fn (string $sql): array => array_values(array_filter(array_map(static fn (array $r) => (string) reset($r), Db::select($sql)), static fn (string $v) => $v !== ''));
+        $choices = [
+            'boards' => $column('SELECT DISTINCT CONCAT(frame, "/", slot) FROM olt_onus' . $in . ' ORDER BY frame, slot'),
+            'ports' => $board === '' ? [] : array_values(array_filter($column('SELECT DISTINCT CONCAT(frame, "/", slot, "/", port) FROM olt_onus' . $in . ' ORDER BY frame, slot, port'), static fn (string $p) => str_starts_with($p, $board . '/'))),
+            'vlans' => array_map('intval', $column('SELECT DISTINCT vlan FROM olt_macs' . $in . ' ORDER BY vlan')),
+            'types' => $column('SELECT DISTINCT onu_model FROM olt_onus' . $in . ' ORDER BY onu_model'),
+            'profiles' => $column('SELECT DISTINCT service_profile FROM olt_onus' . $in . ' ORDER BY service_profile'),
+        ];
         $total = $status === 'waiting' ? 0 : (int) Db::value('SELECT COUNT(*) FROM olt_onus o JOIN olts t ON t.id=o.olt_id' . $where, $params);
         $pages = max(1, (int) ceil($total / self::PAGE_SIZE));
         $page = max(1, min($pages, (int) $request->query('page', 1)));
@@ -98,7 +153,8 @@ final class OnuController extends Controller
         return Inertia::render('olts/Onus', [
             'olts' => array_map(static fn (array $o) => ['id' => (int) $o['id'], 'name' => (string) $o['name']], $olts),
             'counts' => array_map('intval', $counts) + ['waiting' => count($waiting)],
-            'filters' => ['q' => $q, 'status' => $status, 'olt' => $oltId, 'port' => $port],
+            'filters' => ['q' => $q, 'status' => $status, 'olt' => $oltId, 'board' => $board, 'port' => $port, 'vlan' => $vlan > 0 ? $vlan : 0, 'type' => $type, 'profile' => $profile, 'linked' => $linked],
+            'choices' => $choices,
             'waiting' => $waiting,
             'result' => ['rows' => array_map(static fn (array $r) => OltController::onuRow($r) + [
                 'oltId' => (int) $r['olt_id'], 'olt' => (string) $r['olt_name'], 'weak' => (float) $r['rx_warning'], 'veryWeak' => (float) $r['rx_critical'],

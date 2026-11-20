@@ -1467,6 +1467,11 @@ th.num, td.num { text-align: right; }
 .onu-switch > span { display: inline-flex; gap: 16px; }
 .clients-toolbar > input[type="search"] { flex: 1 1 260px; max-width: 380px; }
 .clients-toolbar > select { flex: 0 1 200px; }
+/* The ONU list's filters: a label over each choice, as many per row as fit. */
+.onu-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: var(--sp-2) var(--sp-3); padding: var(--sp-2) var(--sp-3) var(--sp-3) 18px; border-bottom: 1px solid var(--line); }
+.onu-filter { display: grid; gap: 3px; min-width: 0; }
+.onu-filter > span { color: var(--text-muted); font-size: var(--fs-sm); font-weight: 500; }
+.onu-filter > select { width: 100%; min-width: 0; }
 .filter-chip { display: inline-flex; align-items: center; gap: 6px; min-height: var(--control-h-sm); padding: 0 10px; border: 1px solid var(--line-strong); border-radius: var(--radius); color: var(--text-strong); font-size: var(--fs-sm); font-weight: 500; }
 .filter-chip:hover { text-decoration: none; border-color: var(--accent); }
 .filter-chip svg.icon { width: 12px; height: 12px; }

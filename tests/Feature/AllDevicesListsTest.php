@@ -80,4 +80,35 @@ final class AllDevicesListsTest extends TestCase
         $this->get('/olts/changelog')->assertOk()->assertInertia(fn (AssertableInertia $page) => $page->component('olts/Changelog')->has('changes', 2)
             ->where('changes', fn ($c) => array_column(is_array($c) ? $c : $c->all(), 'olt', 'action') == ['port_off' => 'OLT-North', 'onu_reboot' => 'OLT-Centre']));
     }
+    public function test_the_onu_list_filters_by_board_port_vlan_type_profile_client_and_a_wide_search(): void
+    {
+        $this->actingAsOperator();
+        $olt = $this->insertRow('olts', ['name' => 'OLT-Centre', 'model' => 'MA5800', 'host' => '10.0.9.2', 'enabled' => 1, 'rx_warning' => -27, 'rx_critical' => -30]);
+        foreach ([[1, 0, 0, 'HG8245', 'bridge', 'online'], [1, 0, 1, 'EG8145V5', 'router', 'offline'], [2, 3, 0, 'EG8145V5', 'router', 'online']] as $i => [$slot, $port, $n, $model, $profile, $status]) {
+            $this->insertRow('olt_onus', ['olt_id' => $olt, 'frame' => 0, 'slot' => $slot, 'port' => $port, 'ont_id' => $n, 'sn' => 'HWTC0000000' . $i, 'description' => 'onu-' . $i, 'onu_model' => $model, 'service_profile' => $profile, 'status' => $status]);
+        }
+        $this->insertRow('olt_macs', ['olt_id' => $olt, 'mac' => '2c9d1ed1b59d', 'vlan' => 100, 'frame' => 0, 'slot' => 2, 'port' => 3, 'ont_id' => 0, 'seen_at' => date('Y-m-d H:i:s')]);
+        $customer = $this->insertRow('customer_profiles', ['username' => 'alice', 'first_name' => 'Alice', 'last_name' => 'Kola', 'address' => 'Rruga e Durresit 12', 'cell_phone' => '0691234567', 'enabled' => 1, 'account_status' => 'active']);
+        $this->insertRow('customer_onus', ['customer_id' => $customer, 'olt_id' => $olt, 'sn' => 'HWTC00000001', 'source' => 'manual', 'linked_at' => date('Y-m-d H:i:s')]);
+        $total = fn (string $query, int $n, ?string $sn = null) => $this->get('/onus?' . $query)->assertOk()->assertInertia(fn (AssertableInertia $page) => $sn === null
+            ? $page->where('result.total', $n) : $page->where('result.total', $n)->where('result.rows.0.sn', $sn));
+
+        $this->get('/onus')->assertOk()->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('choices.boards', ['0/1', '0/2'])->where('choices.ports', [])->where('choices.vlans', [100])->where('choices.types', ['EG8145V5', 'HG8245'])->where('choices.profiles', ['bridge', 'router']));
+        $this->get('/onus?board=0/1')->assertOk()->assertInertia(fn (AssertableInertia $page) => $page->where('result.total', 2)->where('choices.ports', ['0/1/0'])
+            // The tabs count what the other filters leave.
+            ->where('counts.total', 2)->where('counts.online', 1)->where('counts.offline', 1));
+        $total('board=0/2&port=0/2/3', 1, 'HWTC00000002');
+        $total('vlan=100', 1, 'HWTC00000002');
+        $total('type=EG8145V5', 2);
+        $total('type=EG8145V5&status=offline', 1, 'HWTC00000001');
+        $total('profile=bridge', 1, 'HWTC00000000');
+        $total('linked=yes', 1, 'HWTC00000001');
+        $total('linked=no', 2);
+        // The search reaches the MAC behind the ONU and the linked client's address and phone.
+        $total('q=2C:9D:1E:D1', 1, 'HWTC00000002');
+        $total('q=Durresit', 1, 'HWTC00000001');
+        $total('q=0691234', 1, 'HWTC00000001');
+        $total('q=nothing-like-this', 0);
+    }
 }
