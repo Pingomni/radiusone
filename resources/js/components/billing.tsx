@@ -64,11 +64,9 @@ export function InvoiceTable({ invoices }: { invoices: InvoiceRow[] }) {
             rowKey={(i) => i.id}
             exportRows
             columns={[
-                { header: 'Invoice', cell: (i) => <><Link href={`/billing/invoices/${i.id}`}>{i.number}</Link><span className="list-subline">{i.period}</span></> },
-                { header: 'Issued', cell: (i) => i.issued },
+                { header: 'Invoice', cell: (i) => <><Link href={`/billing/invoices/${i.id}`}>{i.number}</Link><span className="list-subline">Issued {i.issued} · {i.period}</span></> },
                 { header: 'Due', cell: (i) => i.due },
                 { header: 'Total', cell: (i) => i.total },
-                { header: 'Paid', cell: (i) => i.paid },
                 { header: 'Balance due', cell: (i) => i.balance },
                 { header: 'Status', cell: (i) => <InvoiceStatus status={i.status} /> },
                 { header: 'Documents', noExport: true, cell: (i) => <div className="list-cell-stack"><InvoiceDocuments invoice={i} /></div> },

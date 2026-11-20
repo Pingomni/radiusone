@@ -3,7 +3,7 @@ import { DeleteButton } from '@/components/confirm';
 import Icon from '@/components/Icon';
 import { RoleGrid, Sheet } from '@/components/settings';
 import { DataTable } from '@/components/table';
-import { Badge, Empty, Tag } from '@/components/ui';
+import { Badge, Empty, Tag, State } from '@/components/ui';
 import { useCan } from '@/lib/auth';
 import type { Operator } from '@/settings/types';
 
@@ -36,8 +36,8 @@ export function UsersTab({ users, usersSummary, roleDescriptions }: { users: Ope
                         { header: 'Name', cell: (r) => r.name },
                         { header: 'Email', cell: (r) => r.email },
                         { header: 'Username', cell: (r) => r.username },
-                        { header: 'Role', cell: (r) => <Badge>{r.role}</Badge> },
-                        { header: 'Status', cell: (r) => (r.enabled ? <Badge tone="success">enabled</Badge> : <Badge tone="danger">disabled</Badge>) },
+                        { header: 'Role', cell: (r) => r.role.charAt(0).toUpperCase() + r.role.slice(1) },
+                        { header: 'Status', cell: (r) => (r.enabled ? <State tone="success">enabled</State> : <State tone="danger">disabled</State>) },
                         { header: '2FA', cell: (r) => <Tag tag={r.twoFactor} /> },
                         { header: 'Last login', cell: (r) => r.lastLogin },
                         {

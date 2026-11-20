@@ -2,7 +2,7 @@ import { LivePanel } from '@/components/LivePanel';
 import { PostButton } from '@/components/confirm';
 import Icon from '@/components/Icon';
 import { Gauges, HistorySection, Kv, PollButton, ToneValue, type Gauge, type History } from '@/components/monitoring';
-import { Badge } from '@/components/ui';
+import { State } from '@/components/ui';
 import AppLayout from '@/layouts/AppLayout';
 
 type Status = {
@@ -47,7 +47,7 @@ function StatusBody({ status, restartable }: { status: Status; restartable: Reco
                     {status.services.map((s) => (
                         <Kv key={s.unit} label={<>{s.label} <small className="mono hint">{s.unit}</small></>}>
                             <span className="service-state">
-                                {s.running ? <strong>running{s.uptime && <small className="service-uptime" title="Time since the service last started"> · up {s.uptime}</small>}</strong> : <Badge tone="danger">{s.state}</Badge>}
+                                {s.running ? <strong>running{s.uptime && <small className="service-uptime" title="Time since the service last started"> · up {s.uptime}</small>}</strong> : <State tone="danger">{s.state}</State>}
                                 {restartable[s.unit] && <RestartButton unit={s.unit} label={s.label} />}
                             </span>
                         </Kv>
@@ -56,9 +56,7 @@ function StatusBody({ status, restartable }: { status: Status; restartable: Reco
                 <section>
                     <h3>System</h3>
                     {status.system.map(([label, value]) => <Kv key={label} label={label}><strong>{value}</strong></Kv>)}
-                    {status.temperatures.length
-                        ? status.temperatures.map((t) => <Kv key={t.label} label={t.label}><ToneValue value={t.value} tone={t.tone} /></Kv>)
-                        : <p className="hint">No temperature sensors (usual for a virtual machine).</p>}
+                    {status.temperatures.map((t) => <Kv key={t.label} label={t.label}><ToneValue value={t.value} tone={t.tone} /></Kv>)}
                 </section>
             </div>
         </>

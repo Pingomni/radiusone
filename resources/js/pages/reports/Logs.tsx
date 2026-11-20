@@ -2,7 +2,7 @@ import { Link, router } from '@inertiajs/react';
 import { useState } from 'react';
 import { MetricCards, type Metric } from '@/components/metrics';
 import { DataTable } from '@/components/table';
-import { Badge, Empty, Panel, Time } from '@/components/ui';
+import { Empty, Panel, Time, State } from '@/components/ui';
 import AppLayout from '@/layouts/AppLayout';
 import { useCan, useShared } from '@/lib/auth';
 import { query } from '@/lib/format';
@@ -84,7 +84,7 @@ export default function Logs({ filters, metrics, audit, auditMatches, attempts }
                                 columns={[
                                     { header: 'Time', cell: (r) => <Time value={r.time} timezone={tz} /> },
                                     { header: 'Username', cell: (r) => (can('clients.view') ? <Link href={`/clients?q=${encodeURIComponent(r.username)}`}>{r.username}</Link> : r.username) },
-                                    { header: 'Reply', cell: (r) => (/reject/i.test(r.reply) ? <Badge tone="danger">{r.reply}</Badge> : r.reply) },
+                                    { header: 'Reply', cell: (r) => (/reject/i.test(r.reply) ? <State tone="danger">{r.reply}</State> : r.reply) },
                                 ]}
                             />
                         </>

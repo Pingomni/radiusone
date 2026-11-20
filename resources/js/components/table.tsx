@@ -69,7 +69,7 @@ export function DataTable<T>({ columns, rows, rowKey, exportRows = false, server
             {exportRows && (
                 <div className={`table-tools${serverPaginated ? ' list-export-tools' : ''}`}>
                     <button type="button" onClick={exportCsv} disabled={!rows.length}>
-                        Export {serverPaginated ? 'current page' : 'loaded rows'} CSV
+                        Export CSV
                     </button>
                 </div>
             )}

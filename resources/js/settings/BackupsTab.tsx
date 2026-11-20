@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { DeleteButton, PostButton } from '@/components/confirm';
 import { Sheet, SettingsRows } from '@/components/settings';
 import { DataTable } from '@/components/table';
-import { Badge, Check, Empty, Field, Select } from '@/components/ui';
+import { Badge, Check, Empty, Field, Select, State } from '@/components/ui';
 import { bind } from '@/lib/form';
 import { bytes } from '@/lib/format';
 import { SecretField } from '@/settings/fields';
@@ -150,7 +150,7 @@ function DestinationRow({ d, b, open, onToggle }: { d: BackupDestination; b: Bac
                     <p className="hint">{d.type === 's3' ? '' : b.types[d.type] + ' · '}{detail} · keeps {d.keep} {d.keep === 1 ? 'copy' : 'copies'}</p>
                 </div>
                 <span className="toolbar-actions">
-                    <Badge tone={d.enabled && d.connected ? 'success' : 'warning'}>{!d.connected ? 'not connected' : d.enabled ? 'enabled' : 'disabled'}</Badge>
+                    <State tone={d.enabled && d.connected ? 'success' : 'warning'}>{!d.connected ? 'not connected' : d.enabled ? 'enabled' : 'disabled'}</State>
                     {d.connected && <PostButton action={`/settings/backups/destinations/${d.id}/test`} label="Test" className="button" />}
                     <button type="button" onClick={onToggle}>{open ? 'Close' : 'Edit'}</button>
                     <DeleteButton action={`/settings/backups/destinations/${d.id}/delete`} label="Remove" message={`Stop sending backups to ${d.name}? Backups already stored there are kept.`} />

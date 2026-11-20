@@ -1,7 +1,7 @@
 import { Link, router } from '@inertiajs/react';
 import { useCallback, useEffect, useState } from 'react';
 import { DataTable } from '@/components/table';
-import { Badge, Empty } from '@/components/ui';
+import { Empty, State } from '@/components/ui';
 
 type Check = { key: string; label: string; state: 'ok' | 'warn' | 'fail' | 'info'; detail: string };
 type RecentError = { title: string; fix: string; count: number; at: string };
@@ -104,7 +104,7 @@ export default function NasDiagnostics({ nasId }: { nasId: number }) {
                 rowKey={(c) => c.key}
                 columns={[
                     { header: 'Check', className: 'wrap', cell: (c) => c.label },
-                    { header: 'Result', cell: (c) => <Badge tone={STATES[c.state].tone}>{STATES[c.state].text}</Badge> },
+                    { header: 'Result', cell: (c) => <State tone={STATES[c.state].tone}>{STATES[c.state].text}</State> },
                     { header: 'Details', className: 'wrap', cell: (c) => c.detail },
                 ]}
             />

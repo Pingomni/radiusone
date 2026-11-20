@@ -2,7 +2,7 @@ import Icon from '@/components/Icon';
 import { Link } from '@inertiajs/react';
 import { DeleteButton } from '@/components/confirm';
 import { DataTable } from '@/components/table';
-import { Badge, Panel } from '@/components/ui';
+import { Panel, State } from '@/components/ui';
 import AppLayout from '@/layouts/AppLayout';
 import { useCan } from '@/lib/auth';
 
@@ -47,7 +47,7 @@ export default function Services({ services }: { services: Service[] }) {
                         { header: 'Expired service', cell: (s) => s.expired },
                         { header: 'Price', cell: (s) => s.price },
                         { header: 'Data cap', cell: (s) => s.cap },
-                        { header: 'Status', cell: (s) => (s.enabled ? <Badge tone="success">enabled</Badge> : <Badge tone="danger">disabled</Badge>) },
+                        { header: 'Status', cell: (s) => (s.enabled ? <State tone="success">enabled</State> : <State tone="danger">disabled</State>) },
                         { header: 'Clients', cell: (s) => s.clients },
                         {
                             header: 'Actions',

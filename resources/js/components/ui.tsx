@@ -41,9 +41,22 @@ export function Status({ tone, children }: { tone: StatusTone; children: ReactNo
     return <span className={`status is-${tone}`}>{children}</span>;
 }
 
+/** Maps the older badge tones (success, warning, danger, info) to a status tone. */
+export function statusTone(tone?: string | null): StatusTone {
+    if (tone === 'success' || tone === 'good' || tone === 'online') return 'good';
+    if (tone === 'warning' || tone === 'danger') return tone;
+    return 'neutral';
+}
+
+/** A state word from the server ("enabled", "stale accounting") as dot + text, first letter capital. */
+export function State({ tone, children }: { tone?: string | null; children: ReactNode }) {
+    const text = typeof children === 'string' && children ? children.charAt(0).toUpperCase() + children.slice(1) : children;
+    return <Status tone={statusTone(tone)}>{text}</Status>;
+}
+
 /** Online is the normal case: plain text. Anything else is worth a look. */
 export function ConnectionState({ state }: { state: string }) {
-    return state === 'fresh accounting' ? <>{connectionLabel(state)}</> : <Badge tone="warning">{connectionLabel(state)}</Badge>;
+    return state === 'fresh accounting' ? <>{connectionLabel(state)}</> : <State tone="warning">{connectionLabel(state)}</State>;
 }
 
 /** Database timestamp, with the display timezone in a tooltip. */
@@ -78,7 +91,7 @@ export function HealthItem({ label, value, tone = '' }: { label: string; value: 
     return (
         <div className="health-item">
             <span>{label}</span>
-            <strong>{tone ? <Badge tone={tone}>{value}</Badge> : value}</strong>
+            <strong>{tone ? <State tone={tone}>{value}</State> : value}</strong>
         </div>
     );
 }
@@ -221,11 +234,11 @@ export interface TagData {
     href?: string;
 }
 
-/** Server-built status tag (App\Http\Support\Present::tag): plain text when tone is null, else a badge. */
+/** Server-built status tag (App\Http\Support\Present::tag): plain text when tone is null, else dot + text. */
 export function Tag({ tag }: { tag: TagData }) {
     if (tag.tone === null || tag.tone === undefined) return <span title={tag.title}>{tag.text}</span>;
-    const badge = <span className={`badge ${tag.tone}`.trim()} title={tag.title}>{tag.text}</span>;
-    return tag.href ? <a className="badge-link" href={tag.href} aria-label={`${tag.text}, open`}>{badge}</a> : badge;
+    const state = <span title={tag.title}><State tone={tag.tone}>{tag.text}</State></span>;
+    return tag.href ? <a className="state-link" href={tag.href} aria-label={`${tag.text}, open`}>{state}</a> : state;
 }
 
 export function Tags({ tags }: { tags: TagData[] }) {

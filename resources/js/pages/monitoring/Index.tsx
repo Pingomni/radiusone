@@ -3,7 +3,7 @@ import Icon from '@/components/Icon';
 import { LivePanel } from '@/components/LivePanel';
 import { MetricCards, type Metric } from '@/components/metrics';
 import { PollButton } from '@/components/monitoring';
-import { Badge, Empty, HealthItem, type TagData } from '@/components/ui';
+import { Empty, HealthItem, type TagData, State } from '@/components/ui';
 import AppLayout from '@/layouts/AppLayout';
 import { useCan } from '@/lib/auth';
 
@@ -48,7 +48,7 @@ function OverviewBody({ data, canManage }: { data: Overview; canManage: boolean 
                 <article className={`health-card monitor-card monitor-server${server.down.length ? ' tone-danger' : ''}`}>
                     <div className="health-card-head">
                         <div><h2><Link href="/monitoring/server">RADIUS server</Link></h2><p>{server.host}</p></div>
-                        {server.down.length > 0 && <Badge tone="danger">{server.down.length} service{server.down.length === 1 ? '' : 's'} down</Badge>}
+                        {server.down.length > 0 && <State tone="danger">{server.down.length} service{server.down.length === 1 ? '' : 's'} down</State>}
                     </div>
                     <p className="monitor-services">
                         {server.running.map((r) => <span key={r} className="monitor-service">{r}</span>)}
@@ -62,7 +62,7 @@ function OverviewBody({ data, canManage }: { data: Overview; canManage: boolean 
                     <article key={nas.id} className={`health-card monitor-card${nas.danger ? ' tone-danger' : ''}`}>
                         <div className="health-card-head">
                             <div><h2><Link href={`/nas/${nas.id}/monitor`}>{nas.name}</Link></h2><p>{nas.ip} · {nas.vendor}</p></div>
-                            {nas.radiusDisabled ? <Badge tone="warning">disabled</Badge> : nas.danger && <Badge tone="danger">problem</Badge>}
+                            {nas.radiusDisabled ? <State tone="warning">disabled</State> : nas.danger && <State tone="danger">problem</State>}
                         </div>
                         <div className="health-grid">{nas.items.map((i) => <HealthItem key={i.label} {...i} />)}</div>
                         <Readings items={nas.readings} />
@@ -77,7 +77,7 @@ function OverviewBody({ data, canManage }: { data: Overview; canManage: boolean 
                     <article key={olt.id} className={`health-card monitor-card${olt.danger ? ' tone-danger' : ''}`}>
                         <div className="health-card-head">
                             <div><h2><Link href={`/olts/${olt.id}`}>{olt.name}</Link></h2><p>{olt.host} · {olt.model}</p></div>
-                            {!olt.enabled ? <Badge tone="warning">off</Badge> : olt.danger && <Badge tone="danger">problem</Badge>}
+                            {!olt.enabled ? <State tone="warning">off</State> : olt.danger && <State tone="danger">problem</State>}
                         </div>
                         <div className="health-grid">{olt.items.map((i) => <HealthItem key={i.label} {...i} />)}</div>
                         <Readings items={olt.readings} />
@@ -95,7 +95,7 @@ function OverviewBody({ data, canManage }: { data: Overview; canManage: boolean 
                 {data.jobs.map((job) => (
                     <div className="monitor-job" key={job.label} title={job.does}>
                         <strong>{job.label}</strong>
-                        <span>{job.tone ? <Badge tone={job.tone}>{job.state}</Badge> : <span className="monitor-job-ok">{job.state}</span>}</span>
+                        <span>{job.tone ? <State tone={job.tone}>{job.state}</State> : <span className="monitor-job-ok">{job.state}</span>}</span>
                         <small>{job.detail}</small>
                     </div>
                 ))}

@@ -76,9 +76,10 @@ export default function InvoiceView({ invoice, items, payments, payment, methods
     const client = `/clients/${encodeURIComponent(invoice.username)}/edit`;
 
     return (
-        <AppLayout title={`Invoice ${invoice.number}`}>
-            <div className="toolbar invoice-toolbar">
-                <span className="toolbar-actions">
+        <AppLayout
+            title={`Invoice ${invoice.number}`}
+            actions={(
+                <>
                     {invoice.draftPdf && <a className="button" href={`/billing/invoices/${invoice.id}/draft-pdf`}>Payment request PDF</a>}
                     {receiptButton}
                     {canEdit && <Link className="button primary" href={`/billing/invoices/${invoice.id}/edit`}>Edit draft</Link>}
@@ -88,8 +89,9 @@ export default function InvoiceView({ invoice, items, payments, payment, methods
                             {canDelete && <PostButton action={`/billing/invoices/${invoice.id}/delete`} label="Delete draft" confirm={{ title: `Delete ${invoice.number}?`, message: 'Delete this unpaid draft permanently?', confirmLabel: 'Delete draft' }} />}
                         </RowActions>
                     )}
-                </span>
-            </div>
+                </>
+            )}
+        >
             <section className={`invoice-status-banner tone-${banner.tone}`} role="status">
                 <div><strong>{banner.title}</strong>{banner.text && <p>{banner.text}</p>}</div>
                 {invoice.status.payable && <div className="invoice-status-progress"><PaymentProgress status={invoice.status} /></div>}

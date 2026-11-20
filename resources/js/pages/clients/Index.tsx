@@ -4,7 +4,7 @@ import { DeleteButton, useConfirm } from '@/components/confirm';
 import Icon from '@/components/Icon';
 import { SignalReading } from '@/components/olt';
 import { DataTable, ExportMenu, Pagination } from '@/components/table';
-import { Badge, ListMenu, RowActions, Status, type StatusTone, type TagData } from '@/components/ui';
+import { Badge, ListMenu, RowActions, Status, type StatusTone, type TagData, State } from '@/components/ui';
 import AppLayout from '@/layouts/AppLayout';
 import { useCan } from '@/lib/auth';
 import { query } from '@/lib/format';
@@ -188,7 +188,7 @@ export default function Clients({ filters, counts, plans, nasOptions, result }: 
             cell: (r: Row) => (
                 <div className="list-cell-stack list-badges">
                     <Status tone={LIVE[r.live][0]}>{LIVE[r.live][1]}</Status>
-                    {r.account !== 'enabled' && <Badge tone={ACCOUNT_TONE[r.account] ?? ''}>{r.account.charAt(0).toUpperCase() + r.account.slice(1)}</Badge>}
+                    {r.account !== 'enabled' && <State tone={ACCOUNT_TONE[r.account] ?? ''}>{r.account.charAt(0).toUpperCase() + r.account.slice(1)}</State>}
                 </div>
             ),
         },

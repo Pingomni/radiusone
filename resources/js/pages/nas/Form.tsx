@@ -42,10 +42,10 @@ function DeviceForm({ device, vendors, canManage }: { device: Device; vendors: R
                         </label>
                     ))}
                 </fieldset>
-                <Field label="Name" required disabled={!canManage} autoComplete="off" hint="Short label shown in lists, e.g. bras-tirana-01." {...bind(form, 'shortname')} />
-                <Field label="NAS IP address" required disabled={!canManage} autoComplete="off" inputMode="decimal" hint="The address the router sends RADIUS from. The API and SNMP use it too." {...bind(form, 'nasname')} />
+                <Field label="Name" required disabled={!canManage} autoComplete="off" {...bind(form, 'shortname')} />
+                <Field label="NAS IP address" required disabled={!canManage} autoComplete="off" inputMode="decimal" hint="The address the router sends RADIUS from." {...bind(form, 'nasname')} />
                 <Field label="RADIUS shared secret" type="password" required={isNew} disabled={!canManage} autoComplete="new-password" hint={isNew ? 'Must match the secret configured on the router.' : 'Leave blank to keep the saved secret.'} {...bind(form, 'secret')} />
-                <Field label="Description" disabled={!canManage} autoComplete="off" hint="Optional, e.g. site or rack." {...bind(form, 'description')} />
+                <Field label="Description" disabled={!canManage} autoComplete="off" {...bind(form, 'description')} />
                 <div className="span2"><Check label="Accept RADIUS requests from this NAS" disabled={!canManage} {...bindCheck(form, 'enabled')} /></div>
                 <h3 className="span2 form-section-title">Disconnect (CoA)</h3>
                 <div className="span2"><Check label="Disconnect sessions with RADIUS (CoA)" disabled={!canManage} {...bindCheck(form, 'coa_enabled')} /></div>
@@ -55,9 +55,7 @@ function DeviceForm({ device, vendors, canManage }: { device: Device; vendors: R
                     min={1}
                     max={65535}
                     disabled={!canManage || !form.data.coa_enabled}
-                    hint={form.data.vendor === 'mikrotik'
-                        ? 'UDP port of /radius incoming on the router (3799). Signed with the shared secret above; no API login needed.'
-                        : 'UDP port of the dynamic-authorization server on the router (often 1700 or 3799). Signed with the shared secret above.'}
+                    hint={form.data.vendor === 'mikrotik' ? 'Usually 3799.' : 'Often 1700 or 3799.'}
                     {...bind(form, 'coa_port')}
                 />
                 <Actions show={canManage} label={isNew ? 'Add NAS' : 'Save device'} busy={form.processing} />
@@ -80,7 +78,7 @@ function ApiForm({ values, vendor, ip, canManage }: { values: Api; vendor: strin
                 ? 'Disconnects on this NAS use the RouterOS API instead of RADIUS CoA. The portal reads the session list and removes exactly the matching session.'
                 : 'Off: disconnects use RADIUS CoA from the Device tab, like most RADIUS managers. Turn the API on only if CoA cannot be used on this router.'}</p>
             <div className="span2 kv nas-endpoint"><span>RouterOS API</span><strong className="mono">tls://{ip}:8729</strong></div>
-            <Field label="API user" disabled={!canManage || !on} autoComplete="off" hint="Dedicated least-privilege RouterOS user (read, write, api)." {...bind(form, 'api_user')} />
+            <Field label="API user" disabled={!canManage || !on} autoComplete="off" {...bind(form, 'api_user')} />
             <Field label="API password" type="password" disabled={!canManage || !on} autoComplete="new-password" hint={values.apiPasswordSaved ? 'Saved. Leave blank to keep it.' : 'Required when the API is on.'} {...bind(form, 'api_password')} />
             {on && <p className="span2 hint">The portal connects to api-ssl on the NAS IP. The router certificate must be valid for that address and trusted by this server.</p>}
             <Actions show={canManage} label="Save API settings" busy={form.processing} />
@@ -104,19 +102,19 @@ function SnmpForm({ snmp, nasId, ip, canManage }: { snmp: Snmp | null; nasId: nu
         >
             <div className="span2"><Check label="Poll this NAS over SNMP" disabled={disabled} {...bindCheck(form, 'snmp_enabled')} /></div>
             <Field label="UDP port" type="number" min={1} max={65535} disabled={disabled} {...bind(form, 'snmp_port')} />
-            <Field label="Management host" disabled={disabled} autoComplete="off" placeholder={ip} hint="Optional. Blank polls the NAS IP." {...bind(form, 'snmp_host')} />
+            <Field label="Management host" disabled={disabled} autoComplete="off" placeholder={ip} {...bind(form, 'snmp_host')} />
             <Select label="Version" options={snmp.versions} disabled={disabled} hint={snmp.v3Ready ? undefined : 'Apply migration 021_nas_snmp_v3.sql to enable SNMP v3.'} {...bind(form, 'snmp_version')} />
             <Field label="Timeout (ms)" type="number" min={300} max={5000} step={100} disabled={disabled} {...bind(form, 'snmp_timeout_ms')} />
             {!v3 && (
                 <div className="span2 form-grid snmp-version-section">
-                    <Field label="Read-only community" disabled={disabled} autoComplete="off" spellCheck={false} hint="Must match the router. Only read requests are sent." {...bind(form, 'snmp_community')} />
+                    <Field label="Read-only community" disabled={disabled} autoComplete="off" spellCheck={false} hint="Must match the router." {...bind(form, 'snmp_community')} />
                     <p className="span2 hint">{snmp.routerHint}</p>
                 </div>
             )}
             {v3 && snmp.v3Ready && (
                 <div className="span2 form-grid snmp-version-section">
                     <Field label="Security name (user)" disabled={disabled} autoComplete="off" maxLength={32} {...bind(form, 'snmp_v3_user')} />
-                    <Field label="Context (optional)" disabled={disabled} autoComplete="off" maxLength={64} hint="Usually empty." {...bind(form, 'snmp_v3_context')} />
+                    <Field label="Context (optional)" disabled={disabled} autoComplete="off" maxLength={64} {...bind(form, 'snmp_v3_context')} />
                     <Select label="Authentication" options={snmp.authOptions} disabled={disabled} {...bind(form, 'snmp_v3_auth_protocol')} />
                     <Field label="Authentication password" type="password" disabled={disabled} autoComplete="new-password" hint={saved(snmp.authSaved)} {...bind(form, 'snmp_v3_auth_password')} />
                     <Select label="Privacy (encryption)" options={snmp.privOptions} disabled={disabled} hint="AES-128 is supported by MikroTik and Cisco; encryption requires authentication." {...bind(form, 'snmp_v3_priv_protocol')} />

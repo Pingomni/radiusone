@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { LivePanel } from '@/components/LivePanel';
 import { Gauges, HistorySection, Kv, PollButton, ToneValue, type Gauge, type History } from '@/components/monitoring';
 import { DataTable } from '@/components/table';
-import { Badge, Empty, HealthItem, Panel, Tag, type TagData } from '@/components/ui';
+import { Empty, HealthItem, Panel, Tag, type TagData, State } from '@/components/ui';
 import Icon from '@/components/Icon';
 import AppLayout from '@/layouts/AppLayout';
 
@@ -29,7 +29,7 @@ function SnapshotBody({ snap }: { snap: Snapshot }) {
     if (snap.status === 'down') {
         return (
             <div className="nas-monitor-down" role="alert">
-                <strong><Badge tone="danger">unreachable</Badge> No SNMP answer from {snap.target}</strong>
+                <strong><State tone="danger">unreachable</State> No SNMP answer from {snap.target}</strong>
                 <p>{snap.error}</p>
                 <p className="hint">Fresh RADIUS accounting sessions on this NAS: {snap.fresh}. Polling retries automatically.</p>
             </div>
@@ -70,7 +70,7 @@ function SnapshotBody({ snap }: { snap: Snapshot }) {
                         { header: 'In', cell: (i) => <span className="mono">{i.in}</span> },
                         { header: 'Out', cell: (i) => <span className="mono">{i.out}</span> },
                         { header: 'Total in / out', cell: (i) => <span className="mono">{i.totals}</span> },
-                        { header: 'Errors', cell: (i) => (i.errors > 0 ? <Badge tone="warning">{i.errors}</Badge> : '0') },
+                        { header: 'Errors', cell: (i) => (i.errors > 0 ? <State tone="warning">{i.errors}</State> : '0') },
                     ]}
                 />
             </section>
@@ -131,7 +131,7 @@ function NetworkTables({ nasId, tables }: { nasId: number; tables: Record<string
                                 header,
                                 cell: (r: Cell[]) => {
                                     const c = r[i];
-                                    if (typeof c !== 'string') return c.tone ? <Badge tone={c.tone}>{c.text}</Badge> : c.text;
+                                    if (typeof c !== 'string') return c.tone ? <State tone={c.tone}>{c.text}</State> : c.text;
                                     return MONO.test(header) ? <span className="mono">{c}</span> : c;
                                 },
                             }))}
@@ -156,11 +156,7 @@ function SetupSnmp({ nas, basics, setup, canManage }: { nas: { id: number; name:
                 <span className="snmp-setup-icon"><Icon name="signal" /></span>
                 <div>
                     <h3>Set up SNMP to monitor this NAS</h3>
-                    <p>
-                        SNMP adds CPU, memory and temperature, interface traffic, history graphs, and the network tables
-                        (IP addresses, ARP, MAC table, BGP and OSPF). It is read-only: give the router a v2c community or an SNMPv3 user
-                        that can only read, and allow this server to reach it on UDP 161.
-                    </p>
+                    <p>CPU, memory, traffic graphs and network tables. Read-only, UDP 161.</p>
                     {setup
                         ? <Link className="button primary" href={setup}><Icon name="settings" />Set up SNMP</Link>
                         : <p className="hint">{canManage ? 'Apply the SNMP migration first.' : 'Ask an administrator to set up SNMP for this NAS.'}</p>}

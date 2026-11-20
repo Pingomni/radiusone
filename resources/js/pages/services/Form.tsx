@@ -52,16 +52,15 @@ export default function ServiceForm({ service, clientCount, expiredOptions, capO
                     {field('Idle timeout', 'idle_timeout', { type: 'number' })}
                     {field('Simultaneous use default', 'simultaneous_use', { type: 'number' })}
                     {field('Expiration behavior', 'expiration_behavior')}
-                    <Select label="Billing mode" hint="Metadata only; renewal always needs full payment." disabled={disabled} options={{ prepaid: 'prepaid', postpaid: 'postpaid' }} {...bind(form, 'billing_mode')} />
+                    <Select label="Billing mode" disabled={disabled} options={{ prepaid: 'prepaid', postpaid: 'postpaid' }} {...bind(form, 'billing_mode')} />
                     <Select label="Expired service" disabled={disabled} options={expiredOptions} {...bind(form, 'expired_service_group')} />
-                    {field(`Price (${currency})`, 'price', { type: 'number', step: '0.01', hint: 'Currency is set in Settings → Regional.' })}
+                    {field(`Price (${currency})`, 'price', { type: 'number', step: '0.01' })}
                     <h3 className="form-section-title span2">Data cap</h3>
-                    {field('Data cap per cycle (GB)', 'total_quota', { type: 'number', step: 'any', min: '0', hint: 'Download plus upload, per customer, until their expiry date. Leave blank for no cap.' })}
+                    {field('Data cap per cycle (GB)', 'total_quota', { type: 'number', step: 'any', min: '0', hint: 'Download plus upload per cycle. Blank: no cap.' })}
                     <Select
                         label="When the cap is reached"
                         disabled={disabled || String(form.data.total_quota ?? '') === ''}
                         options={{ notify: 'Notify only', throttle: 'Slow down to another plan' }}
-                        hint="Customers are told at 80% and 100% (Settings → Notifications templates)."
                         {...bind(form, 'cap_action')}
                     />
                     {form.data.cap_action === 'throttle' && String(form.data.total_quota ?? '') !== '' && (

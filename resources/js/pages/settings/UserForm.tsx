@@ -1,6 +1,6 @@
 import { Link, useForm } from '@inertiajs/react';
 import { RoleGrid, Sheet, SettingsLinkNav, SettingsRows } from '@/components/settings';
-import { Badge, Check, ErrorSummary, Field, Select, Tag, type TagData } from '@/components/ui';
+import { Check, ErrorSummary, Field, Select, Tag, type TagData, State } from '@/components/ui';
 import AppLayout from '@/layouts/AppLayout';
 
 type Operator = {
@@ -95,9 +95,9 @@ export default function UserForm({ user, self, roles, roleDescriptions }: {
                         <SettingsRows
                             rows={[
                                 ['User', user?.username ?? 'new'],
-                                ['Role', <Badge>{form.data.role}</Badge>],
-                                ['Status', !user ? <Badge>new</Badge> : user.enabled ? <Badge tone="success">enabled</Badge> : <Badge tone="danger">disabled</Badge>],
-                                ['Two-factor', user ? <Tag tag={user.twoFactorTag} /> : <Badge>off</Badge>],
+                                ['Role', form.data.role.charAt(0).toUpperCase() + form.data.role.slice(1)],
+                                ['Status', !user ? <State>new</State> : user.enabled ? <State tone="success">enabled</State> : <State tone="danger">disabled</State>],
+                                ['Two-factor', user ? <Tag tag={user.twoFactorTag} /> : <State>off</State>],
                                 ['Last login', user?.lastLogin ?? '-'],
                             ]}
                         />

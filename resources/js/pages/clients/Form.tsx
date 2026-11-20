@@ -8,7 +8,7 @@ import { DataTable } from '@/components/table';
 import ClientOnu, { type ClientOnuData } from '@/components/ClientOnu';
 import { Tabs } from '@/components/tabs';
 import { UsageCard, type UsageHistory } from '@/components/usage';
-import { Badge, Check, ConnectionState, Empty, ErrorSummary, Field, Panel, Select, Tag, TextArea, type TagData } from '@/components/ui';
+import { Check, ConnectionState, Empty, ErrorSummary, Field, Panel, Select, Tag, TextArea, type TagData, State } from '@/components/ui';
 import AppLayout from '@/layouts/AppLayout';
 import { useCan } from '@/lib/auth';
 import { bind, bindCheck } from '@/lib/form';
@@ -87,7 +87,7 @@ function OverviewPanel({ username, initial }: { username: string; initial: Overv
             render={(o) => (
                 <>
                     {o.items.map((i) => (
-                        <div className="kv" key={i.label}><span>{i.label}</span>{i.tone ? <Badge tone={i.tone}>{i.value}</Badge> : <strong className={i.value.length <= 22 ? 'nowrap' : undefined}>{i.value}</strong>}</div>
+                        <div className="kv" key={i.label}><span>{i.label}</span>{i.tone ? <State tone={i.tone}>{i.value}</State> : <strong className={i.value.length <= 22 ? 'nowrap' : undefined}>{i.value}</strong>}</div>
                     ))}
                     <Link className="button wide" href={`/clients/${enc}/diagnostics`}>Connection diagnostics</Link>
                     {o.revealPassword && (
@@ -267,7 +267,7 @@ export default function ClientForm({ values, draftRestored, draftTab, canEdit, c
             <Section title="Access restrictions" description="Limit where and from which device the account can connect." icon="shield">
                 {binding ? (
                     <>
-                        {field('DHCP client identifier', 'dhcp_client_id', { hint: 'Optional. Empty allows any identifier.' })}
+                        {field('DHCP client identifier', 'dhcp_client_id')}
                         {field('Trusted NAS access circuit', 'circuit_id', { hint: 'Only on an isolated access port or VLAN.' })}
                     </>
                 ) : <p className="span2">Access profiles require migration 018 before provisioning.</p>}

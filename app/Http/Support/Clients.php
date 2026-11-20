@@ -152,27 +152,29 @@ final class Clients
         $state = $online ? Accounting::state($online) : ($last ? Accounting::state($last) : 'unknown');
         $status = self::statusLabel($row);
 
-        $items = [
+        $group = (string) ($row['service_group'] ?? '');
+        $plan = $group !== '' ? (string) (Db::value('SELECT name FROM service_metadata WHERE group_name = ?', [$group]) ?: $group) : '-';
+        $total = (int) ($traffic['down'] ?? 0) + (int) ($traffic['up'] ?? 0);
+        // Session rows only while a session is open; an offline client would show a column of dashes.
+        $items = array_values(array_filter([
             ['Username', $username],
             ['Authentication', $authMethod === 'dhcp' ? 'DHCP MAC' : 'PPPoE'],
-            ['Connection status', $state, $state === 'fresh accounting' ? 'online' : 'warning'],
-            ['Current IP', (string) ($online['framedipaddress'] ?? ($row['framed_ip_address'] ?? '-'))],
-            ['Connected NAS', $nasLabel],
-            ['Session ID', (string) ($online['acctsessionid'] ?? '-')],
-            ['Caller ID', (string) ($online['callingstationid'] ?? ($row['mac_address'] ?? '-'))],
-            ['Session started', (string) ($online['acctstarttime'] ?? '-')],
-            ['Last session update', (string) ($online['acctupdatetime'] ?? $online['acctstarttime'] ?? '-')],
-            [($authMethod === 'dhcp' ? 'DHCP lease' : 'PPPoE session') . ' time', $online ? Format::pppoeSessionTime($online) : '-'],
-            ['Session download', $online ? Format::bytes(Format::acctDownload($online)) : '-'],
-            ['Session upload', $online ? Format::bytes(Format::acctUpload($online)) : '-'],
-            ['Account status', $status, self::statusTone($status)],
-            ['Billing state', (string) ($row['payment_status'] ?? 'unknown')],
-            ['Service entitlement', $status],
-            ['Service plan', (string) ($row['service_group'] ?? '-')],
-            ['Cumulative session download', Format::bytes((int) ($traffic['down'] ?? 0))],
-            ['Cumulative session upload', Format::bytes((int) ($traffic['up'] ?? 0))],
-            ['Cumulative session total', Format::bytes((int) ($traffic['down'] ?? 0) + (int) ($traffic['up'] ?? 0))],
-        ];
+            ['Connection', Format::connectionLabel($state), $state === 'fresh accounting' ? 'online' : 'warning'],
+            ['IP address', (string) ($online['framedipaddress'] ?? ($row['framed_ip_address'] ?? '')) ?: null],
+            $online ? ['NAS', $nasLabel] : null,
+            $online ? ['Session ID', (string) ($online['acctsessionid'] ?? '-')] : null,
+            ['Caller ID', (string) ($online['callingstationid'] ?? ($row['mac_address'] ?? '')) ?: null],
+            $online ? ['Session started', (string) ($online['acctstarttime'] ?? '-')] : null,
+            $online ? ['Last update', (string) ($online['acctupdatetime'] ?? $online['acctstarttime'] ?? '-')] : null,
+            $online ? [($authMethod === 'dhcp' ? 'DHCP lease' : 'PPPoE session') . ' time', Format::pppoeSessionTime($online)] : null,
+            $online ? ['Session download', Format::bytes(Format::acctDownload($online))] : null,
+            $online ? ['Session upload', Format::bytes(Format::acctUpload($online))] : null,
+            ['Account', ucfirst($status), self::statusTone($status)],
+            ['Payment', ucfirst((string) ($row['payment_status'] ?? 'unknown'))],
+            ['Service plan', $plan],
+            ['Total traffic', Format::bytes($total)],
+            ['Down / up', Format::bytes((int) ($traffic['down'] ?? 0)) . ' / ' . Format::bytes((int) ($traffic['up'] ?? 0))],
+        ], static fn ($item) => $item !== null && $item[1] !== null));
         if (!$online && !empty($last['acctstoptime'])) {
             $items[] = ['Last disconnect', (string) $last['acctstoptime']];
         }

@@ -15,9 +15,9 @@ export default function PoolForm({ pool, isNew }: { pool: PoolValues; isNew: boo
                 <ErrorSummary errors={form.errors} />
                 <form className="form-grid" onSubmit={(event) => { event.preventDefault(); form.post('/services/ip-pools/save', { preserveScroll: true }); }}>
                     <Field label="Pool name" required {...bind(form, 'name')} />
-                    <Field label="Pool key" hint="Optional. Leave blank to generate from name." {...bind(form, 'pool_key')} />
+                    <Field label="Pool key" {...bind(form, 'pool_key')} />
                     <TextArea label="IP addresses / ranges" hint="One per line or comma separated. Ranges (10.0.0.10-20) and /24 to /32 work." {...bind(form, 'ip_ranges')} />
-                    <Field label={`Static IP price (${currency})`} type="number" step="0.01" min="0" hint="Currency is set in Settings → Regional." {...bind(form, 'price')} />
+                    <Field label={`Static IP price (${currency})`} type="number" step="0.01" min="0" {...bind(form, 'price')} />
                     <TextArea label="Description" {...bind(form, 'description')} />
                     <Check label="Enabled" {...bindCheck(form, 'enabled')} />
                     <div className="span2 form-actions">

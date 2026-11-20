@@ -3,7 +3,7 @@ import { PostButton } from '@/components/confirm';
 import Icon from '@/components/Icon';
 import { SettingsRows } from '@/components/settings';
 import { DataTable } from '@/components/table';
-import { Badge, Panel } from '@/components/ui';
+import { Panel, State } from '@/components/ui';
 import AppLayout from '@/layouts/AppLayout';
 import { statusTone, type ContractRow } from './Index';
 
@@ -20,7 +20,7 @@ export function PayRows({ rows, username }: { rows: (PayRow & { username?: strin
                 ...(username ? [{ header: 'Customer', cell: (r: PayRow & { username?: string }) => r.username }] : []),
                 { header: 'Amount', cell: (r) => `${r.amount} ${r.currency}${r.provider ? `, ${r.provider}` : ''}` },
                 { header: 'Covers until', cell: (r) => r.period_end },
-                { header: 'Status', cell: (r) => <><Badge tone={r.status === 'paid' ? 'success' : r.status === 'mismatch' || r.status === 'failed' ? 'danger' : ''}>{r.status === 'mismatch' ? 'needs review' : r.status}</Badge>{r.note && <><br /><small className="muted">{r.note}</small></>}</> },
+                { header: 'Status', cell: (r) => <><State tone={r.status === 'paid' ? 'success' : r.status === 'mismatch' || r.status === 'failed' ? 'danger' : ''}>{r.status === 'mismatch' ? 'needs review' : r.status}</State>{r.note && <><br /><small className="muted">{r.note}</small></>}</> },
                 { header: 'Invoice', cell: (r) => (r.invoice_id ? <Link href={`/billing/invoices/${r.invoice_id}`}>Open</Link> : '') },
             ]}
         />
@@ -44,7 +44,7 @@ export default function Show({ contract, payments, canManage }: {
                 </>}
             >
                 <SettingsRows rows={[
-                    ['Status', <Badge tone={statusTone(contract.status)}>{contract.status}</Badge>],
+                    ['Status', <State tone={statusTone(contract.status)}>{contract.status}</State>],
                     ['Customer', <Link href={`/clients/${encodeURIComponent(contract.username)}/edit`}>{contract.customer || contract.username}</Link>],
                     ['Plan', `${contract.service}, ${contract.monthlyPrice} ${contract.currency} a month`],
                     ['Billed', contract.period],

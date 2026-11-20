@@ -4,6 +4,14 @@ RadiusOne follows [semantic versioning](https://semver.org): **major** for chang
 upgrading, **minor** for new features, **patch** for fixes. The version is in the `VERSION` file and shows in
 the portal's sidebar and under Settings → System information.
 
+## 2.31.1 (2026-11-20)
+
+Update with **Settings → Overview → Software update** or `sudo radiusone-update`.
+
+- **Fixed:** cut-off tables and tabs on 1440 px screens (NAS list, client tabs and invoices, Settings tabs).
+- **One status style** (dot + word) on every page; the client account panel shows only rows with a value.
+- Smaller fixes: table edge shade, "Export CSV" everywhere, invoice buttons beside the title, fewer hint texts.
+
 ## 2.31.0 (2026-11-20)
 
 Update with **Settings → Overview → Software update** or `sudo radiusone-update`.

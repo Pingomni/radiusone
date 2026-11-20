@@ -4,7 +4,7 @@ import { PostButton } from './confirm';
 import Icon from './Icon';
 import { ChartOrMessage, type ChartPayload } from './LineChart';
 import { LivePanel } from './LivePanel';
-import { Badge, Panel } from './ui';
+import { Panel, State } from './ui';
 
 export type Gauge = { label: string; value: string; note: string; tone: string; meter: { value: number; low: number; high: number } | null };
 type ChartPanel = { url: string; data: ChartPayload } | null;
@@ -91,5 +91,5 @@ export function HistorySection({ history, pageUrl }: { history: History; pageUrl
 }
 
 export function ToneValue({ value, tone }: { value: string; tone: string | null }) {
-    return tone === null ? <strong>{value}</strong> : <Badge tone={tone}>{value}</Badge>;
+    return tone === null ? <strong>{value}</strong> : <State tone={tone}>{value}</State>;
 }

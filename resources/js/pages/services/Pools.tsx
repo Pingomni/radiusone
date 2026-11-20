@@ -1,7 +1,7 @@
 import { Link } from '@inertiajs/react';
 import { DeleteButton } from '@/components/confirm';
 import { DataTable } from '@/components/table';
-import { Badge, Panel } from '@/components/ui';
+import { Panel, State } from '@/components/ui';
 import AppLayout from '@/layouts/AppLayout';
 import { useCan } from '@/lib/auth';
 
@@ -21,7 +21,7 @@ export default function Pools({ pools }: { pools: Pool[] }) {
                         { header: 'Key', cell: (p) => p.key },
                         { header: 'IPs', cell: (p) => p.ips },
                         { header: 'Price', cell: (p) => p.price },
-                        { header: 'Status', cell: (p) => (p.enabled ? <Badge tone="success">enabled</Badge> : <Badge tone="danger">disabled</Badge>) },
+                        { header: 'Status', cell: (p) => (p.enabled ? <State tone="success">enabled</State> : <State tone="danger">disabled</State>) },
                         { header: 'Assigned', cell: (p) => p.assigned },
                         {
                             header: 'Actions',

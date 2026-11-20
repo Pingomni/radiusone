@@ -3,7 +3,7 @@ import { DeleteButton } from '@/components/confirm';
 import Icon from '@/components/Icon';
 import { UnknownRouters } from '@/components/NasDiagnostics';
 import { DataTable } from '@/components/table';
-import { Badge, Panel, Tag, type TagData } from '@/components/ui';
+import { Panel, Tag, type TagData, State } from '@/components/ui';
 import AppLayout from '@/layouts/AppLayout';
 import { useCan } from '@/lib/auth';
 
@@ -28,15 +28,13 @@ export default function NasIndex({ devices }: { devices: Device[] }) {
                     rowKey={(d) => d.id}
                     exportRows
                     columns={[
-                        { header: 'Name', cell: (d) => <Link href={`/nas/${d.id}/edit`}>{d.name}</Link> },
-                        { header: 'NAS IP', cell: (d) => <span className="mono">{d.ip}</span> },
-                        { header: 'Vendor', cell: (d) => d.vendor },
-                        { header: 'RADIUS', cell: (d) => (d.enabled ? 'Accepting' : <Badge tone="warning">Disabled</Badge>) },
+                        { header: 'Name', cell: (d) => <><Link href={`/nas/${d.id}/edit`}>{d.name}</Link>{d.description && <span className="list-subline cell-truncate" title={d.description}>{d.description}</span>}</> },
+                        { header: 'NAS IP', cell: (d) => <><span className="mono">{d.ip}</span><span className="list-subline">{d.vendor}</span></> },
+                        { header: 'RADIUS', cell: (d) => (d.enabled ? 'Accepting' : <State tone="warning">Disabled</State>) },
                         { header: 'RADIUS update', cell: (d) => <Tag tag={d.update} /> },
                         { header: 'Disconnect', cell: (d) => (d.disconnect ? <Tag tag={d.disconnect} /> : <span className="muted-action">after the update</span>) },
                         { header: 'Online now', cell: (d) => d.online },
                         { header: 'SNMP', cell: (d) => (d.snmp ? <Tag tag={d.snmp} /> : '') },
-                        { header: 'Description', cell: (d) => <span className="cell-truncate" title={d.description}>{d.description}</span> },
                         {
                             header: 'Actions',
                             noExport: true,

@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { DeleteButton, PostButton } from '@/components/confirm';
 import { Sheet } from '@/components/settings';
 import { DataTable } from '@/components/table';
-import { Badge, Field, FormActions, Select, TextArea } from '@/components/ui';
+import { Badge, Field, FormActions, Select, TextArea, State } from '@/components/ui';
 import type { Firewall, FirewallRule, FirewallStatus } from '@/settings/types';
 
 const PAGE = { preserveScroll: true };
@@ -196,12 +196,12 @@ export function FirewallTab({ f }: { f: Firewall }) {
                     emptyText="No rules: only the management networks get in."
                     columns={[
                         { header: '#', cell: (_, index) => index + 1 },
-                        { header: 'Action', cell: (rule) => <Badge tone={rule.action === 'accept' ? 'success' : 'danger'}>{rule.action}</Badge> },
+                        { header: 'Action', cell: (rule) => <State tone={rule.action === 'accept' ? 'success' : 'danger'}>{rule.action}</State> },
                         { header: 'Protocol', cell: (rule) => PROTOCOLS[rule.protocol] },
                         { header: 'Source', cell: (rule) => <span className="mono">{rule.source || 'anyone'}</span> },
                         { header: 'Ports', cell: (rule) => <span className="mono">{rule.ports || (rule.protocol === 'icmp' || rule.protocol === 'any' ? '-' : 'all')}</span> },
                         { header: 'Comment', cell: (rule) => rule.comment || '-' },
-                        { header: 'State', cell: (rule) => (rule.expired ? <Badge>expired</Badge> : rule.enabled ? <Badge tone="success">on</Badge> : <Badge>off</Badge>) },
+                        { header: 'State', cell: (rule) => (rule.expired ? <State>expired</State> : rule.enabled ? <State tone="success">on</State> : <State>off</State>) },
                         {
                             header: 'Actions',
                             noExport: true,

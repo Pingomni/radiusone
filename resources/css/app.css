@@ -790,8 +790,8 @@ body:has(.main) { background: var(--frame); }
 @media (min-width: 761px) {
   .table-wrap {
     background:
-      linear-gradient(to right, var(--surface) 30%, transparent) left / 24px 100% no-repeat local,
-      linear-gradient(to left, var(--surface) 30%, transparent) right / 24px 100% no-repeat local,
+      linear-gradient(to right, var(--surface) 75%, transparent) left / 24px 100% no-repeat local,
+      linear-gradient(to left, var(--surface) 75%, transparent) right / 24px 100% no-repeat local,
       radial-gradient(farthest-side at 0 50%, var(--scroll-shade), transparent) left / 16px 100% no-repeat scroll,
       radial-gradient(farthest-side at 100% 50%, var(--scroll-shade), transparent) right / 16px 100% no-repeat scroll;
   }
@@ -831,6 +831,8 @@ td > .link + .link, td > a + form, td > a + a, td > a + .link, td > form + form 
 .cell-truncate { display: inline-block; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
 .list-cell-stack { display: grid; gap: 1px; line-height: 1.3; }
 .list-cell-stack > a { font-weight: 500; }
+/* Document links ("Partial payment receipt") wrap instead of pushing the table past its panel. */
+.list-cell-stack > a { white-space: normal; }
 .list-subline, .list-cell-caption { display: block; color: var(--text-muted); font-size: var(--fs-sm); font-weight: 400; }
 /* The client list keeps the auth badge under the username (narrower column), and stacks account and connection badges. */
 .clients-page .list-cell-stack:has(> .list-subline > .badge:only-child) { display: grid; }
@@ -1531,6 +1533,8 @@ tr.is-clickable { cursor: pointer; }
 .nas-status-card .mono { color: var(--text-muted); }
 .badge-link { display: inline-flex; text-decoration: none; }
 .badge-link:hover .badge, .badge-link:focus-visible .badge { border-color: currentColor; }
+.state-link { text-decoration: none; }
+.state-link:hover .status, .state-link:focus-visible .status { text-decoration: underline; }
 .nas-badges { display: flex; flex-wrap: wrap; gap: var(--sp-1); margin-left: auto; }
 
 .health-card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: var(--sp-3); }
@@ -1642,6 +1646,8 @@ tr.is-clickable { cursor: pointer; }
 .client-stat.tone-danger > small, .client-stat.tone-danger > strong { color: var(--danger); }
 
 .client-layout .tab-buttons svg.icon { width: 15px; height: 15px; }
+/* Eight tabs beside the account panel fit a 1440px screen only without their icons. */
+@media (max-width: 1679px) { .client-layout .tab-buttons svg.icon, .settings-nav svg.icon { display: none; } }
 .tab-count {
   display: inline-grid;
   place-items: center;
@@ -1743,6 +1749,11 @@ tr.is-clickable { cursor: pointer; }
 .billing-filters .segmented { flex-wrap: wrap; gap: 20px; padding: 0; border: 0; border-radius: 0; background: none; align-self: stretch; }
 .billing-filters .segmented a { min-height: 0; padding: 9px 0 7px; border-bottom: 2px solid transparent; border-radius: 0; color: var(--text-muted); font-size: var(--fs-md); font-weight: 500; }
 .billing-filters .segmented a[aria-current="page"] { border-bottom-color: var(--text-strong); background: none; box-shadow: none; color: var(--text-strong); }
+/* Phones: one row that scrolls sideways, like the client views, instead of a wrapped second row. */
+@media (max-width: 760px) {
+  .billing-filters .segmented { flex-wrap: nowrap; width: 100%; overflow-x: auto; scrollbar-width: thin; }
+  .billing-filters .segmented a { flex: none; white-space: nowrap; }
+}
 .billing-count { margin-left: 6px; padding: 0; border-radius: 0; background: none; color: var(--text-muted); font-size: var(--fs-xs); font-variant-numeric: tabular-nums; }
 .billing-filters a[aria-current="page"] .billing-count { color: var(--text-muted); }
 .billing-search { position: relative; flex: 1 1 240px; max-width: 340px; }
@@ -1877,7 +1888,7 @@ tr.is-clickable { cursor: pointer; }
 
 .role-access-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: var(--sp-2); }
 .role-access-card { display: grid; gap: 2px; padding: var(--sp-2) var(--sp-3); box-shadow: none; background: var(--surface-2); }
-.role-access-card > span { color: var(--text-strong); font-weight: 600; }
+.role-access-card > span { color: var(--text-strong); font-weight: 600; text-transform: capitalize; }
 .role-access-card > p { color: var(--text-muted); font-size: var(--fs-sm); }
 .compact-role-grid { grid-template-columns: minmax(0, 1fr); }
 
@@ -2007,14 +2018,14 @@ tr.is-clickable { cursor: pointer; }
 .nas-monitor > .live-body { display: grid; gap: var(--sp-4); }
 .nas-monitor h3 { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--sp-2); margin: 0 0 var(--sp-2); font-size: var(--fs-md); color: var(--text-strong); }
 .nas-monitor h3 small { font-weight: 400; }
-.nas-gauges { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: var(--sp-2); }
-.nas-gauge { display: grid; gap: 3px; align-content: start; padding: var(--sp-2) var(--sp-3); border: 1px solid var(--line); border-left: 3px solid var(--line-strong); border-radius: var(--radius); background: var(--surface-2); }
+.nas-gauges { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+/* Same strip as the key figures: hairlines between cells, the tone colours the number. */
+.nas-gauge { display: grid; gap: 3px; align-content: start; min-width: 0; padding: 14px 18px 15px; box-shadow: -1px 0 0 var(--line), 0 -1px 0 var(--line); }
 .nas-gauge > span { color: var(--text-muted); font-size: var(--fs-sm); }
 .nas-gauge > strong { color: var(--text-strong); font-size: var(--fs-metric); font-variant-numeric: tabular-nums; line-height: 1.15; }
 .nas-gauge > small { color: var(--text-muted); font-size: var(--fs-xs); }
-.nas-gauge.success { border-left-color: var(--success-solid); }
-.nas-gauge.warning { border-left-color: var(--warning); }
-.nas-gauge.danger { border-left-color: var(--danger); }
+.nas-gauge.warning > strong { color: var(--warning); }
+.nas-gauge.danger > strong { color: var(--danger); }
 .nas-gauge meter { width: 100%; height: 6px; }
 /* NAS monitor → Network tables: the table in its own box, like the interfaces. */
 .nas-tables-table .table-wrap { border: 1px solid var(--line); border-radius: var(--radius); }
