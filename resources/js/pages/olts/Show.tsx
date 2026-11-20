@@ -10,12 +10,12 @@ import { OnuPower, OnuStatus, SignalReading, type OnuRow } from '@/components/ol
 import { DataTable, Pagination } from '@/components/table';
 import { Tabs } from '@/components/tabs';
 import { MetricCards } from '@/components/metrics';
-import { Badge, Check, Field, ListPanel, Panel, RowActions, Select, Status, Time } from '@/components/ui';
+import { Badge, Check, Field, ListPanel, Panel, RowActions, Select, State, Status, Time } from '@/components/ui';
 import AppLayout from '@/layouts/AppLayout';
 import { useCan } from '@/lib/auth';
 import type { Paginated } from '@/lib/types';
 
-type Olt = { id: number; name: string; model: string; host: string; enabled: boolean; telnet: boolean; canChange: boolean; rxWarning: number; rxCritical: number; lastSync: string | null; lastMacSync: string | null; syncRequested: boolean; error: string; macError: string };
+type Olt = { id: number; name: string; model: string; host: string; enabled: boolean; telnet: boolean; canChange: boolean; rxWarning: number; rxCritical: number; maxOnus: number; lastSync: string | null; lastMacSync: string | null; syncRequested: boolean; error: string; macError: string };
 type Counts = { total: number; online: number; offline: number; weak: number };
 
 type Graphs = { range: string; ranges: Record<string, string>; charts: { key: string; title: string; url: string; data: ChartPayload }[] };
@@ -106,6 +106,7 @@ function Ports({ hardware, olt, path, range }: { hardware: Hardware; olt: Olt; p
                     { header: 'State', cell: (p) => <PortState port={p} /> },
                     ...(pon ? [
                         { header: 'ONUs online', cell: (p: Port) => (p.onus ? `${p.onus.online} / ${p.onus.total}` : '-') },
+                        { header: 'Free', cell: (p: Port) => { const free = olt.maxOnus - (p.onus?.total ?? 0); return free > 0 ? `${free} of ${olt.maxOnus}` : <State tone="warning">Full</State>; } },
                         { header: 'Autofind', cell: (p: Port) => (p.pon?.autofind == null ? '-' : p.pon.autofind ? 'On' : <Badge tone="warning">Off</Badge>) },
                         { header: 'Average signal', cell: (p: Port) => <OnuPower dbm={p.signal} weak={olt.rxWarning} veryWeak={olt.rxCritical} /> },
                         { header: 'Transmit power', cell: (p: Port) => (p.pon?.tx == null ? '-' : `${p.pon.tx.toFixed(2)} dBm`) },

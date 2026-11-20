@@ -271,6 +271,19 @@ final class OltManageTest extends TestCase
         $this->assertSame(0, (int) Db::value('SELECT COUNT(*) FROM customer_onus'));
     }
 
+    public function test_no_onu_is_added_on_a_port_that_has_the_most_onus_allowed(): void
+    {
+        $this->startAgent();
+        $olt = $this->olt();
+        $this->onu($olt);
+        Db::exec('UPDATE olts SET max_onus_per_pon=1 WHERE id=?', [$olt['id']]);
+        $this->actingAsOperator();
+        $this->post("/olts/{$olt['id']}/provision", ['sn' => 'HWTCAAAA0001', 'mode' => 'bridge', 'line_profile' => '6', 'service_profile' => '1', 'vlan' => '100', 'gem' => '1', 'traffic_up' => '8', 'traffic_down' => '9', 'description' => 'Full'])
+            ->assertSessionHas('flash.type', 'danger')->assertSessionHas('flash.message', fn (string $m) => str_contains($m, 'Port 0/1/0 already has 1 ONUs'));
+        $this->assertSame([], $this->changes());
+        $this->assertThrows(fn () => Olts::validated(['name' => 'x', 'model' => 'huawei_ma5800_x7', 'host' => '127.0.0.1', 'snmp_version' => '2c', 'snmp_community' => 'c', 'max_onus_per_pon' => '200'], null), \RuntimeException::class, 'from 1 to 128');
+    }
+
     public function test_an_onu_that_cannot_be_finished_is_taken_off_again(): void
     {
         $this->startAgent(['fail' => ['service-port vlan']]);

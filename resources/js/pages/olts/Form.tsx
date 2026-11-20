@@ -8,7 +8,7 @@ import { bind, bindCheck } from '@/lib/form';
 type Values = {
     name: string; model: string; host: string; enabled: boolean; snmp_version: string; snmp_port: string; snmp_community: string;
     v3_user: string; v3_context: string; v3_auth_protocol: string; v3_auth_password: string; v3_priv_protocol: string; v3_priv_password: string;
-    telnet_enabled: boolean; telnet_port: string; telnet_user: string; telnet_password: string; manage_enabled: boolean; rx_warning: string; rx_critical: string;
+    telnet_enabled: boolean; telnet_port: string; telnet_user: string; telnet_password: string; manage_enabled: boolean; rx_warning: string; rx_critical: string; max_onus_per_pon: string;
 };
 type Saved = Record<'snmp_community' | 'v3_auth_password' | 'v3_priv_password' | 'telnet_user' | 'telnet_password', boolean>;
 
@@ -69,6 +69,11 @@ export default function OltForm({ id, models, authOptions, privOptions, values, 
                                 <Field label="Password" type="password" autoComplete="new-password" hint={hint(saved.telnet_password)} {...bind(form, 'telnet_password')} />
                             </>
                         )}
+                    </div>
+                </Panel>
+                <Panel title="PON ports">
+                    <div className="form-grid">
+                        <Field label="Max ONUs per PON port" type="number" min={1} max={128} hint="Adding ONUs stops at this number." {...bind(form, 'max_onus_per_pon')} />
                     </div>
                 </Panel>
                 <Panel title="Signal levels">

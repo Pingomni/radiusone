@@ -4,6 +4,13 @@ RadiusOne follows [semantic versioning](https://semver.org): **major** for chang
 upgrading, **minor** for new features, **patch** for fixes. The version is in the `VERSION` file and shows in
 the portal's sidebar and under Settings → System information.
 
+## 2.33.0 (2026-11-20)
+
+Update with **Settings → Overview → Software update** or `sudo radiusone-update`.
+
+- **Max ONUs per PON port** per OLT; adding an ONU on a full port is refused. Free places on the Ports tab.
+- Migration `042_olt_max_onus.sql`.
+
 ## 2.32.0 (2026-11-20)
 
 Update with **Settings → Overview → Software update** or `sudo radiusone-update`.

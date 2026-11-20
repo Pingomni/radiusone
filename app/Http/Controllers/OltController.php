@@ -83,6 +83,7 @@ final class OltController extends Controller
                 'manage_enabled' => (bool) ($olt['manage_enabled'] ?? false),
                 'rx_warning' => (string) (float) ($olt['rx_warning'] ?? -27),
                 'rx_critical' => (string) (float) ($olt['rx_critical'] ?? -30),
+                'max_onus_per_pon' => (string) (int) ($olt['max_onus_per_pon'] ?? Olts::MAX_ONUS),
             ],
             // Secrets go one way: the page is only told whether one is saved.
             'saved' => [
@@ -108,7 +109,7 @@ final class OltController extends Controller
         }
         // Reads the OLT with the new settings on the next minute.
         Db::exec('UPDATE olts SET sync_requested_at=NOW() WHERE id=? AND enabled=1', [$saved]);
-        $public = static fn (array $o) => array_intersect_key($o, array_flip(['name', 'model', 'host', 'enabled', 'snmp_version', 'snmp_port', 'telnet_enabled', 'telnet_port', 'manage_enabled', 'rx_warning', 'rx_critical']));
+        $public = static fn (array $o) => array_intersect_key($o, array_flip(['name', 'model', 'host', 'enabled', 'snmp_version', 'snmp_port', 'telnet_enabled', 'telnet_port', 'manage_enabled', 'rx_warning', 'rx_critical', 'max_onus_per_pon']));
         Audit::log($stored ? 'update' : 'create', 'olt', (string) $saved, $stored ? $public($stored) : null, $public($values));
         $changed = $stored ? array_keys(array_diff_assoc(array_map('strval', $public($values)), array_map('strval', $public($stored)))) : [];
         // Secrets are not compared: a new password typed in shows as "telnet password" without its value.
@@ -190,7 +191,7 @@ final class OltController extends Controller
         return Inertia::render('olts/Show', [
             'olt' => [
                 'id' => (int) $olt['id'], 'name' => (string) $olt['name'], 'model' => Olts::MODELS[$olt['model']] ?? (string) $olt['model'], 'host' => (string) $olt['host'], 'enabled' => (bool) $olt['enabled'],
-                'telnet' => (bool) $olt['telnet_enabled'], 'canChange' => OltManager::canChange($olt), 'rxWarning' => (float) ($olt['rx_warning'] ?? -27), 'rxCritical' => (float) ($olt['rx_critical'] ?? -30), 'lastSync' => $olt['last_sync_at'], 'lastMacSync' => $olt['last_mac_sync_at'],
+                'telnet' => (bool) $olt['telnet_enabled'], 'canChange' => OltManager::canChange($olt), 'rxWarning' => (float) ($olt['rx_warning'] ?? -27), 'rxCritical' => (float) ($olt['rx_critical'] ?? -30), 'maxOnus' => (int) ($olt['max_onus_per_pon'] ?? Olts::MAX_ONUS), 'lastSync' => $olt['last_sync_at'], 'lastMacSync' => $olt['last_mac_sync_at'],
                 'syncRequested' => $olt['sync_requested_at'] !== null,
                 'error' => (string) ($olt['last_error'] ?? ''), 'macError' => (string) ($olt['last_mac_error'] ?? ''),
             ],

@@ -1359,13 +1359,18 @@ final class OltManager
         }
 
         $sent = [];
-        $onu = self::session($olt, static function (OltTelnet $t) use ($sn, $hex, $mode, $line, $service, $vlan, $gem, $up, $down, $wan, $route, $description, &$sent): array {
+        $onu = self::session($olt, static function (OltTelnet $t) use ($olt, $sn, $hex, $mode, $line, $service, $vlan, $gem, $up, $down, $wan, $route, $description, &$sent): array {
             // Where the ONU is comes from the OLT, not from the form.
             $found = array_values(array_filter(HuaweiCli::autofind($t->command('display ont autofind all')), static fn (array $o) => $o['sn'] === $sn));
             if (count($found) !== 1) {
                 throw new RuntimeException($found ? 'The OLT sees ' . $sn . ' on more than one port. Check the fibre first.' : 'The OLT no longer lists ' . $sn . ' as a new ONU. It may have been added or unplugged.');
             }
             $at = $found[0];
+            $max = (int) ($olt['max_onus_per_pon'] ?? Olts::MAX_ONUS);
+            $onPort = (int) Db::value('SELECT COUNT(*) FROM olt_onus WHERE olt_id=? AND frame=? AND slot=? AND port=?', [$olt['id'], $at['frame'], $at['slot'], $at['port']]);
+            if ($onPort >= $max) {
+                throw new RuntimeException(sprintf('Port %d/%d/%d already has %d ONUs, the most this OLT allows per PON port (%d). Raise it in the OLT settings to add more.', $at['frame'], $at['slot'], $at['port'], $onPort, $max));
+            }
             $lan = $mode === 'router' ? HuaweiCli::ethPorts($t->command('display ont-srvprofile gpon profile-id ' . $service)) : 1;
             $t->command('config');
             $t->command(sprintf('interface gpon %d/%d', $at['frame'], $at['slot']));

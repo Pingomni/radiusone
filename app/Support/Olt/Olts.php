@@ -84,6 +84,7 @@ final class Olts
             'telnet_password' => $secret('telnet_password', 'telnet_password', 'Telnet password'),
             'rx_warning' => self::level($input['rx_warning'] ?? ($stored['rx_warning'] ?? -27), 'weak'),
             'rx_critical' => self::level($input['rx_critical'] ?? ($stored['rx_critical'] ?? -30), 'very weak'),
+            'max_onus_per_pon' => self::maxOnus($input['max_onus_per_pon'] ?? ($stored['max_onus_per_pon'] ?? self::MAX_ONUS)),
             // Changes go over telnet, so without telnet there is nothing to allow.
             'manage_enabled' => empty($input['manage_enabled']) || empty($input['telnet_enabled']) ? 0 : 1,
         ];
@@ -99,6 +100,17 @@ final class Olts
             throw new RuntimeException('Telnet needs a user and a password. Turn it off to use SNMP only.');
         }
         return $values;
+    }
+
+    /** A Huawei GPON port takes ONU numbers 0 to 127. */
+    public const MAX_ONUS = 128;
+
+    private static function maxOnus(mixed $value): int
+    {
+        if (!is_numeric($value) || (int) $value != $value || (int) $value < 1 || (int) $value > self::MAX_ONUS) {
+            throw new RuntimeException('Max ONUs per PON port must be a whole number from 1 to ' . self::MAX_ONUS . '.');
+        }
+        return (int) $value;
     }
 
     private static function level(mixed $value, string $label): float
