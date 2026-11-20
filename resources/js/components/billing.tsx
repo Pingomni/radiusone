@@ -64,7 +64,7 @@ export function InvoiceDocuments({ invoice }: { invoice: Pick<InvoiceRow, 'id' |
     return (
         <>
             {invoice.draftPdf && <><a href={`/billing/invoices/${invoice.id}/draft-pdf`}>Payment request</a>{' '}</>}
-            {invoice.receipt && <span>{invoice.receipt.label}: <ReceiptActions invoiceId={invoice.id} /></span>}
+            {invoice.receipt && <span className="receipt-line" title={invoice.receipt.label}>Receipt: <ReceiptActions invoiceId={invoice.id} /></span>}
         </>
     );
 }

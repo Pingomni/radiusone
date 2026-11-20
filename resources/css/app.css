@@ -1773,6 +1773,8 @@ tr.is-clickable { cursor: pointer; }
 /* Print and Save for a payment receipt: two links, or two buttons in a page head. */
 .receipt-actions { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
 .receipt-actions .receipt-link { font-size: var(--fs-sm); font-weight: 500; white-space: nowrap; }
+.receipt-line { white-space: nowrap; }
+.receipt-line .receipt-actions { gap: 4px 10px; }
 .page-actions .receipt-actions, .panel-actions .receipt-actions { gap: var(--sp-2); }
 @media (max-width: 640px) { .billing-search { max-width: none; } }
 /* Invoice page: the invoice itself on the left, payments on the right. */
