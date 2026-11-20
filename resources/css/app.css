@@ -1485,7 +1485,6 @@ th.num, td.num { text-align: right; }
 @media (max-width: 520px) {
   .overview-figures .stat-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
-}
 
 /* --------------------------------------------------------------------------
    Client list: view tabs with counts, toolbar, clickable rows and the side panel
