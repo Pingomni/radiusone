@@ -551,6 +551,55 @@ final class OltController extends Controller
         ];
     }
 
+    /**
+     * The PON ports of every OLT in one list: how full each is, its signal and optics, and anything wrong with it.
+     */
+    public function ports(Request $request): Response
+    {
+        $olts = Db::select('SELECT * FROM olts ORDER BY name');
+        $oltId = (int) $request->query('olt', 0);
+        $view = (string) $request->query('view', '');
+        $view = in_array($view, ['used', 'problems'], true) ? $view : '';
+        $rows = [];
+        foreach ($olts as $olt) {
+            $max = (int) ($olt['max_onus_per_pon'] ?? Olts::MAX_ONUS);
+            foreach (self::hardware($olt)['ports'] as $p) {
+                if ($p['kind'] !== 'pon') {
+                    continue;
+                }
+                $total = (int) ($p['onus']['total'] ?? 0);
+                $online = (int) ($p['onus']['online'] ?? 0);
+                $rogue = trim((string) ($p['pon']['rogue'] ?? ''));
+                $rogue = $rogue !== '' && $rogue !== '-' && strtolower($rogue) !== 'inexistent';
+                $problems = array_values(array_filter([
+                    $rogue ? 'Rogue ONU' : null,
+                    $p['admin'] === false ? 'Turned off' : null,
+                    $total > 0 && $online === 0 ? 'All ONUs offline' : null,
+                    ($p['pon']['autofind'] ?? null) === false ? 'Autofind off' : null,
+                    $total >= $max ? 'Full' : null,
+                    $p['signal'] !== null && $p['signal'] < (float) ($olt['rx_warning'] ?? -27) ? 'Weak average signal' : null,
+                ]));
+                $rows[] = [
+                    'key' => $olt['id'] . '-' . $p['id'], 'oltId' => (int) $olt['id'], 'olt' => (string) $olt['name'],
+                    'port' => preg_match('~(\d+)\s*/\s*(\d+)\s*/\s*(\d+)~', (string) $p['name'], $m) ? $m[1] . '/' . $m[2] . '/' . $m[3] : (string) $p['name'],
+                    'alias' => $p['alias'], 'admin' => $p['admin'], 'oper' => $p['oper'], 'online' => $online, 'total' => $total, 'free' => max(0, $max - $total),
+                    'signal' => $p['signal'], 'weak' => (float) ($olt['rx_warning'] ?? -27), 'veryWeak' => (float) ($olt['rx_critical'] ?? -30),
+                    'tx' => $p['pon']['tx'] ?? null, 'temperature' => $p['pon']['temperature'] ?? null, 'autofind' => $p['pon']['autofind'] ?? null,
+                    'problems' => $problems, 'danger' => $rogue || ($total > 0 && $online === 0),
+                ];
+            }
+        }
+        $scoped = array_values(array_filter($rows, static fn (array $r) => !$oltId || $r['oltId'] === $oltId));
+        $used = array_values(array_filter($scoped, static fn (array $r) => $r['total'] > 0));
+        $problems = array_values(array_filter($scoped, static fn (array $r) => (bool) $r['problems']));
+        return Inertia::render('olts/Ports', [
+            'olts' => array_map(static fn (array $o) => ['id' => (int) $o['id'], 'name' => (string) $o['name']], $olts),
+            'counts' => ['all' => count($scoped), 'used' => count($used), 'problems' => count($problems)],
+            'filters' => ['view' => $view, 'olt' => in_array($oltId, array_map(static fn (array $o) => (int) $o['id'], $olts), true) ? $oltId : 0],
+            'ports' => $view === 'used' ? $used : ($view === 'problems' ? $problems : $scoped),
+        ]);
+    }
+
     public function graph(Request $request, string $id): JsonResponse
     {
         $olt = Olts::find((int) $id);

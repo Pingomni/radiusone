@@ -1467,6 +1467,9 @@ th.num, td.num { text-align: right; }
 .onu-switch > span { display: inline-flex; gap: 16px; }
 .clients-toolbar > input[type="search"] { flex: 1 1 260px; max-width: 380px; }
 .clients-toolbar > select { flex: 0 1 200px; }
+.filter-chip { display: inline-flex; align-items: center; gap: 6px; min-height: var(--control-h-sm); padding: 0 10px; border: 1px solid var(--line-strong); border-radius: var(--radius); color: var(--text-strong); font-size: var(--fs-sm); font-weight: 500; }
+.filter-chip:hover { text-decoration: none; border-color: var(--accent); }
+.filter-chip svg.icon { width: 12px; height: 12px; }
 .row-links { display: inline-flex; gap: 12px; white-space: nowrap; }
 .attention-list { display: grid; margin: 0; padding: 0; list-style: none; }
 .attention-list > li { display: flex; align-items: center; gap: var(--sp-3); padding: 11px var(--sp-3); border-bottom: 1px solid var(--line); }

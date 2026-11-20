@@ -485,7 +485,8 @@ final class ClientController extends Controller
     public function disconnect(Request $request, string $username): RedirectResponse
     {
         Auth::requireCan('clients.disconnect');
-        $back = '/clients/' . rawurlencode($username) . '/edit';
+        // From the list of all sessions, back to that list.
+        $back = $request->input('back') === 'sessions' ? '/sessions' : '/clients/' . rawurlencode($username) . '/edit';
         $nasId = (int) $request->input('nas_id', 0);
         $accountingId = (int) $request->input('radacctid', 0);
         $profiled = (bool) Db::value('SELECT s.access_profile_id FROM subscriptions s JOIN customer_profiles c ON c.id=s.customer_id WHERE c.username=?', [$username]);

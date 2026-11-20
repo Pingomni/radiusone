@@ -9,7 +9,7 @@ import type { Paginated } from '@/lib/types';
 
 type Row = OnuRow & { oltId: number; olt: string; weak: number; veryWeak: number };
 type Waiting = { sn: string; position: string; model: string; oltId: number; olt: string; canAdd: boolean };
-type Filters = { q: string; status: string; olt: number };
+type Filters = { q: string; status: string; olt: number; port: string };
 type Counts = { total: number; online: number; offline: number; weak: number; waiting: number };
 
 const VIEWS: [status: string, label: string, key: keyof Counts][] = [
@@ -17,7 +17,7 @@ const VIEWS: [status: string, label: string, key: keyof Counts][] = [
 ];
 
 /** Empty filters stay out of the address. */
-const clean = (f: Filters) => ({ ...(f.status ? { status: f.status } : {}), ...(f.olt ? { olt: f.olt } : {}), ...(f.q ? { q: f.q } : {}) });
+const clean = (f: Filters) => ({ ...(f.status ? { status: f.status } : {}), ...(f.olt ? { olt: f.olt } : {}), ...(f.port ? { port: f.port } : {}), ...(f.q ? { q: f.q } : {}) });
 
 /** Every ONU on every OLT: find one without first choosing its OLT. */
 export default function Onus({ olts, counts, filters, waiting, result }: { olts: { id: number; name: string }[]; counts: Counts; filters: Filters; waiting: Waiting[]; result: Paginated<Row> }) {
@@ -43,6 +43,7 @@ export default function Onus({ olts, counts, filters, waiting, result }: { olts:
                         </select>
                     )}
                     <button className="button"><Icon name="search" />Search</button>
+                    {filters.port && <Link className="filter-chip" href="/onus" data={clean({ ...filters, port: '' })} preserveState>Port <span className="mono">{filters.port}</span> <Icon name="close" /></Link>}
                 </form>
                 {filters.status === 'waiting' ? (
                     <DataTable

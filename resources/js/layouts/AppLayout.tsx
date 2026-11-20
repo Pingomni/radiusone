@@ -13,9 +13,11 @@ type NavCount = 'clients' | 'weakOnus';
 const NAV: [href: string, label: string, permission: string, icon: string, group: string, count?: NavCount][] = [
     ['/', 'Overview', 'dashboard.view', 'dashboard', 'Operations'],
     ['/clients', 'Clients', 'clients.view', 'clients', 'Operations', 'clients'],
+    ['/sessions', 'Sessions', 'clients.view', 'activity', 'Operations'],
     ['/services', 'Services', 'services.view', 'services', 'Operations'],
     ['/nas', 'NAS devices', 'nas.view', 'server', 'Network'],
     ['/onus', 'ONUs', 'nas.view', 'onu', 'Network', 'weakOnus'],
+    ['/ports', 'PON ports', 'nas.view', 'signal', 'Network'],
     ['/olts', 'OLTs', 'nas.view', 'fiber', 'Network'],
     ['/monitoring', 'Monitoring', 'nas.view', 'activity', 'Network'],
     ['/operations', 'Network operations', 'operations.view', 'signal', 'Network'],

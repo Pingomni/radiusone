@@ -19,6 +19,7 @@ use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ReportsController;
 use App\Http\Controllers\SearchController;
 use App\Http\Controllers\ServiceController;
+use App\Http\Controllers\SessionController;
 use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\SoftwareUpdateController;
 use App\Http\Controllers\UserController;
@@ -165,6 +166,7 @@ Route::middleware('frweb.auth')->group(function () {
 
     // Clients.
     Route::middleware('permission:clients.view')->group(function () {
+        Route::get('/sessions', [SessionController::class, 'index']);
         Route::get('/clients', [ClientController::class, 'index']);
         Route::get('/clients/export', [ClientController::class, 'export']);
         Route::get('/clients/create', [ClientController::class, 'form']);
@@ -207,6 +209,7 @@ Route::middleware('frweb.auth')->group(function () {
     // OLTs and their ONUs.
     Route::middleware('permission:nas.view')->group(function () {
         Route::get('/onus', [OnuController::class, 'index']);
+        Route::get('/ports', [OltController::class, 'ports']);
         Route::get('/olts', [OltController::class, 'index']);
         Route::get('/olts/mapping', [OltController::class, 'mapping']);
         Route::post('/clients/{username}/onu', [OltController::class, 'link']);

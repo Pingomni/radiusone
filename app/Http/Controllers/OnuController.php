@@ -69,6 +69,14 @@ final class OnuController extends Controller
 
         $where = ' WHERE 1=1' . $scope;
         $params = $scopeParams;
+        // One PON port ("0/1/15"), from the list of all ports.
+        $port = trim((string) $request->query('port', ''));
+        if (preg_match('~^(\d{1,2})/(\d{1,2})/(\d{1,3})$~D', $port, $at)) {
+            $where .= ' AND o.frame=? AND o.slot=? AND o.port=?';
+            array_push($params, (int) $at[1], (int) $at[2], (int) $at[3]);
+        } else {
+            $port = '';
+        }
         if ($status === 'online' || $status === 'offline') {
             $where .= ' AND o.status=?';
             $params[] = $status;
@@ -90,7 +98,7 @@ final class OnuController extends Controller
         return Inertia::render('olts/Onus', [
             'olts' => array_map(static fn (array $o) => ['id' => (int) $o['id'], 'name' => (string) $o['name']], $olts),
             'counts' => array_map('intval', $counts) + ['waiting' => count($waiting)],
-            'filters' => ['q' => $q, 'status' => $status, 'olt' => $oltId],
+            'filters' => ['q' => $q, 'status' => $status, 'olt' => $oltId, 'port' => $port],
             'waiting' => $waiting,
             'result' => ['rows' => array_map(static fn (array $r) => OltController::onuRow($r) + [
                 'oltId' => (int) $r['olt_id'], 'olt' => (string) $r['olt_name'], 'weak' => (float) $r['rx_warning'], 'veryWeak' => (float) $r['rx_critical'],
