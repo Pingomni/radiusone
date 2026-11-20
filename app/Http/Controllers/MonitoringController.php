@@ -63,8 +63,11 @@ final class MonitoringController extends Controller
         $rows = [];
         foreach ($overview['nas'] as $n) {
             $href = '/nas/' . $n['id'];
+            // SNMP is set up but has never answered: not proven working, so not shown as working.
+            $waiting = str_starts_with((string) ($n['state']['text'] ?? ''), 'waiting');
             $rows[] = ['key' => 'nas-' . $n['id'], 'kind' => 'router', 'name' => $n['name'], 'address' => $n['ip'], 'model' => $n['vendor'], 'href' => $href . '/edit', 'monitor' => $href . '/monitor',
-                'tone' => $n['radiusDisabled'] ? 'neutral' : ($n['danger'] ? 'danger' : 'good'), 'state' => $n['radiusDisabled'] ? 'RADIUS off' : ($n['danger'] ? 'Problem' : 'Working'),
+                'tone' => $n['radiusDisabled'] || $waiting ? 'neutral' : ($n['danger'] ? 'danger' : 'good'),
+                'state' => $n['radiusDisabled'] ? 'RADIUS off' : ($n['danger'] ? 'Problem' : ($waiting ? 'No answer yet' : 'Working')),
                 'count' => $value($n['items'], 'Online now') . ' online', 'countHref' => '/sessions?nas=' . $n['id'],
                 'detail' => $readings($n['readings']) ?: 'Last accounting ' . $value($n['items'], 'Last accounting'), 'problems' => $problems($href)];
         }
