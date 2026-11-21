@@ -75,12 +75,11 @@ function PortGraph({ title, url }: { title: string; url: string }) {
 }
 
 /** An uplink port's description on the OLT, edited where it is shown. */
-function UplinkDescription({ port, path, mayChange }: { port: Port; path: string; mayChange: boolean }) {
-    const [value, setValue] = useState<string | null>(null);
+function UplinkDescription({ port, path, onClose }: { port: Port; path: string; onClose: () => void }) {
+    const [value, setValueRaw] = useState<string | null>(port.alias ?? '');
+    const setValue = (v: string | null) => { if (v === null) onClose(); else setValueRaw(v); };
     const [busy, setBusy] = useState(false);
-    if (value === null) {
-        return <>{port.alias || (mayChange ? '' : '-')}{mayChange && <> <button type="button" className="link" onClick={() => setValue(port.alias ?? '')}>{port.alias ? 'Edit' : 'Add description'}</button></>}</>;
-    }
+    if (value === null) return null;
     const save = (e: React.FormEvent) => {
         e.preventDefault();
         setBusy(true);
@@ -98,10 +97,12 @@ function UplinkDescription({ port, path, mayChange }: { port: Port; path: string
 function Ports({ hardware, olt, path, range }: { hardware: Hardware; olt: Olt; path: string; range: string }) {
     const can = useCan();
     const [shown, setShown] = useState<Port | null>(null);
+    const [describing, setDescribing] = useState<number | null>(null);
     const mayChange = olt.canChange && can('nas.manage');
     const actions = (p: Port) => (
         <RowActions label={`Actions for ${p.name}`}>
             <button type="button" className="link" onClick={() => setShown(shown?.id === p.id ? null : p)}>{shown?.id === p.id ? 'Hide traffic graph' : 'Traffic graph'}</button>
+            {mayChange && p.kind === 'uplink' && <button type="button" className="link" onClick={() => setDescribing(p.id)}>{p.alias ? 'Edit description' : 'Add description'}</button>}
             {mayChange && p.kind === 'pon' && (
                 <>
                     {p.pon?.autofind === false
@@ -139,8 +140,8 @@ function Ports({ hardware, olt, path, range }: { hardware: Hardware; olt: Olt; p
                     { header: 'Speed', cell: (p) => speedText(p.speed) },
                     { header: 'In / out', cell: (p) => (p.in == null && p.out == null ? '-' : `${p.in ?? '-'} / ${p.out ?? '-'}`) },
                     { header: 'Errors', cell: (p) => p.errors ?? '-' },
+                    { header: 'Description', className: 'wrap', cell: (p) => (p.pon?.rogue && p.pon.rogue.toLowerCase() !== 'inexistent' ? <><State tone="danger">Rogue ONU: {p.pon.rogue}</State> {p.alias}</> : describing === p.id ? <UplinkDescription port={p} path={path} onClose={() => setDescribing(null)} /> : p.alias || '-') },
                     { header: '', cell: (p) => actions(p) },
-                    { header: 'Description', className: 'wrap', cell: (p) => (p.pon?.rogue && p.pon.rogue.toLowerCase() !== 'inexistent' ? <><State tone="danger">Rogue ONU: {p.pon.rogue}</State> {p.alias}</> : p.kind === 'uplink' ? <UplinkDescription port={p} path={path} mayChange={mayChange} /> : p.alias || '-') },
                 ]}
             />
         </Panel>
