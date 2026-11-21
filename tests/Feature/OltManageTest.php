@@ -1272,4 +1272,16 @@ final class OltManageTest extends TestCase
         $this->post($base, ['port' => self::PORT_A, 'description' => 'x'])->assertSessionHas('flash.type', 'danger');
         $this->assertSame(['port desc 0/9/0 description "To core MT undo vlan 100"', 'undo port desc 0/9/0'], $this->changes());
     }
+
+    public function test_the_status_report_keeps_the_useful_lines_and_makes_plain_tables(): void
+    {
+        $this->assertSame("Rx optical power(dBm) : -20.41\nTemperature(C)        : 29", HuaweiCli::keepLines("  Vendor name                            : WTD\n  Rx optical power(dBm)                  : -20.41\n  Temperature(C)                         : 29\n  Temperature alarm threshold(C)         : [-13,95]", ['Rx optical power(dBm)', 'Temperature(C)']));
+        $history = HuaweiCli::historyTable("  Index               : 2\n  UpTime              : 2026-11-14 22:21:02+02:00\n  DownTime            : -\n  DownCause           : -\n  Index               : 1\n  UpTime              : 2026-11-13 12:33:19+02:00\n  DownTime            : 2026-11-14 22:19:02+02:00\n  DownCause           : ONT dying-gasp\n Total :  2");
+        $this->assertStringContainsString('02  2026-11-14 22:21:02+02:00   ONU is currently online', $history);
+        $this->assertStringContainsString('01  2026-11-13 12:33:19+02:00   2026-11-14 22:19:02+02:00     ONT dying-gasp', $history);
+        $this->assertStringContainsString('1     GE    100          full     up         noloop', HuaweiCli::statusTable('lan', "  ONT-ID   ONT      ONT       Speed(Mbps)   Duplex   LinkState  RingStatus\n           port-ID  Port-type\n       3         1         GE 100           full     up         noloop\n       3         2         GE -             -        down       noloop\n"));
+        $this->assertStringContainsString('12        gpon  4c:f9:5d:f6:f3:6a  dynamic  0/1/0     200', HuaweiCli::statusTable('oltMacs', "   INDEX INDEX\n      12     -  gpon 4cf9-5df6-f36a dynamic  0 /1 /0   3    1         200\n  Total: 1\n"));
+        $this->assertStringContainsString("ETH        1         50:b0:3b:89:95:3c  4095\nWLAN       5         16:83:88:79:31:2b  -", HuaweiCli::statusTable('onuMacs', " 0/ 1/0      3    ETH              1   50b0-3b89-953c     4095\n 0/ 1/0      3    WLAN             5   1683-8879-312b        -\n Total: 2\n"));
+        $this->assertSame('', HuaweiCli::statusTable('onuMacs', "  Failure: The ONT is not online\n"));
+    }
 }

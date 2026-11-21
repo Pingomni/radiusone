@@ -382,6 +382,65 @@ final class HuaweiCli
         return trim(implode("\n", $kept), "\n");
     }
 
+    /**
+     * Only the "Label : value" lines of printed text whose label is in $keep, in the OLT's order, lined up.
+     *
+     * @param  list<string>  $keep
+     */
+    public static function keepLines(string $text, array $keep): string
+    {
+        $width = max([0, ...array_map('strlen', $keep)]) + 1;
+        $lines = [];
+        foreach (explode("\n", $text) as $line) {
+            if (preg_match('/^\s*(.+?)\s*:\s?(.*)$/', $line, $m) && in_array($m[1], $keep, true)) {
+                $lines[] = str_pad($m[1], $width) . ': ' . trim($m[2]);
+            }
+        }
+        return implode("\n", $lines);
+    }
+
+    /** The ONU's ups and downs ("display ont register-info") as one line each. */
+    public static function historyTable(string $text): string
+    {
+        $rows = [];
+        foreach (preg_split('/^(?=\s*Index\s*:)/m', $text) ?: [] as $block) {
+            $f = self::fields($block);
+            if (!isset($f['Index'], $f['UpTime'])) {
+                continue;
+            }
+            $down = trim($f['DownTime'] ?? '-');
+            $rows[] = sprintf('%02d  %-27s %-29s %s', (int) $f['Index'], trim($f['UpTime']), $down === '-' ? 'ONU is currently online' : $down, $down === '-' ? '' : trim($f['DownCause'] ?? ''));
+        }
+        return $rows ? rtrim(sprintf('%-3s %-27s %-29s %s', '#', 'Up time', 'Offline time', 'Down reason') . "\n" . implode("\n", array_map('rtrim', $rows))) : '';
+    }
+
+    /** "4cf9-5df6-f36a" as "4c:f9:5d:f6:f3:6a". */
+    private static function colonMac(string $mac): string
+    {
+        return strtolower(implode(':', str_split(str_replace('-', '', $mac), 2)));
+    }
+
+    /**
+     * The tables of the status report, without the OLT's wrapped headings and legends: "lan" (display ont port
+     * state), "oltMacs" (display mac-address port ... ont) and "onuMacs" (display mac-address ont).
+     */
+    public static function statusTable(string $kind, string $text): string
+    {
+        $mac = '([0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4})';
+        [$pattern, $head, $row] = match ($kind) {
+            'lan' => ['/^\s*\d+\s+(\d+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s*$/m', sprintf('%-5s %-5s %-12s %-8s %-10s %s', 'Port', 'Type', 'Speed(Mbps)', 'Duplex', 'LinkState', 'RingStatus'),
+                static fn (array $m) => sprintf('%-5s %-5s %-12s %-8s %-10s %s', $m[1], $m[2], $m[3], $m[4], $m[5], $m[6])],
+            'oltMacs' => ['~^\s*(\d+)\s+\S+\s+(\S+)\s+' . $mac . '\s+(\S+)\s+(\d+)\s*/\s*(\d+)\s*/\s*(\d+)\s+\S+\s+\S+\s+(\S+)\s*$~m', sprintf('%-9s %-5s %-18s %-8s %-9s %s', 'Srv-port', 'Type', 'MAC address', 'Learned', 'F/S/P', 'VLAN'),
+                static fn (array $m) => sprintf('%-9s %-5s %-18s %-8s %-9s %s', $m[1], $m[2], self::colonMac($m[3]), $m[4], "$m[5]/$m[6]/$m[7]", $m[8])],
+            default => ['~^\s*\d+/\s*\d+/\s*\d+\s+\d+\s+(\S+)\s+(\d+)\s+' . $mac . '\s+(\S+)\s*$~m', sprintf('%-10s %-9s %-18s %s', 'Port type', 'ONT port', 'MAC address', 'VLAN'),
+                static fn (array $m) => sprintf('%-10s %-9s %-18s %s', $m[1], $m[2], self::colonMac($m[3]), $m[4])],
+        };
+        if (!preg_match_all($pattern, $text, $rows, PREG_SET_ORDER)) {
+            return '';
+        }
+        return $head . "\n" . implode("\n", array_map(static fn (array $m) => rtrim($row($m)), $rows));
+    }
+
     /** A configuration as the OLT prints it, without the command's echo before it and the prompt after it. */
     public static function configText(string $output): string
     {

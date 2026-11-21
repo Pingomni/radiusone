@@ -743,10 +743,28 @@ final class OltManager
         if (HuaweiCli::failure($out[0]) !== null || HuaweiCli::serialFromCli(HuaweiCli::fields($out[0])['SN'] ?? '') !== (string) $onu['sn']) {
             throw new RuntimeException('The OLT no longer has this ONU at ' . Olts::position($onu) . '. Use Read now on the OLT\'s page.');
         }
+        // SmartOLT's selection of lines. Anything the OLT printed in a form not known here is shown as it came.
+        $or = static fn (string $short, string $full): string => $short !== '' ? $short : $full;
+        $info = HuaweiCli::printed($out[0]);
+        $wans = [];
+        foreach (preg_split('/^(?=\s*F\/S\/P\s*:)/m', HuaweiCli::printed($out[1])) ?: [] as $block) {
+            $kept = HuaweiCli::keepLines($block, ['Name', 'Service type', 'Connection type', 'IPv4 Connection status', 'IPv4 access type', 'IPv4 address', 'Subnet mask', 'Default gateway',
+                'Primary DNS', 'Secondary DNS', 'Manage VLAN', 'Manage priority', 'MAC address', 'IPv4 switch', 'IPv6 Connection status', 'IPv6 address']);
+            if ($kept !== '') {
+                $wans[] = '(' . (count($wans) + 1) . ")\n" . $kept;
+            }
+        }
+        $macNote = str_contains($out[3], 'WLAN') ? "\nFor WLAN, the ONT port is the Wi-Fi network (SSID) number." : '';
         $sections = [
-            ['Optical status', HuaweiCli::printed($out[6])], ['ONU details', HuaweiCli::printed($out[0], true)], ['History', HuaweiCli::printed($out[7])],
-            ['ONU WAN interfaces', HuaweiCli::printed($out[1])], ['ONU LAN interfaces', HuaweiCli::printed($out[8])],
-            ['MACs on the OLT from this ONU', HuaweiCli::printed($out[2])], ['Online MACs on this ONU', HuaweiCli::printed($out[3])],
+            ['Optical status', $or(HuaweiCli::keepLines(HuaweiCli::printed($out[6]), ['Module type', 'Module sub-type', 'Rx optical power(dBm)', 'Tx optical power(dBm)', 'Laser bias current(mA)', 'Temperature(C)', 'Voltage(V)', 'OLT Rx ONT optical power(dBm)', 'CATV Rx optical power(dBm)']), HuaweiCli::printed($out[6]))],
+            ['ONU details', $or(HuaweiCli::keepLines($info, ['Control flag', 'Run state', 'Config state', 'Match state', 'ONT distance(m)', 'ONT last distance(m)', 'Memory occupation', 'CPU occupation', 'Temperature', 'SN', 'Management mode',
+                'ONT IP 1 address/mask', 'Description', 'Last down cause', 'Last up time', 'Last down time', 'Last dying gasp time', 'ONT online duration', 'ONT system up duration', 'Interoperability-mode', 'FEC upstream state',
+                'Line profile name', 'Service profile name']), HuaweiCli::printed($out[0], true))],
+            ['History', $or(HuaweiCli::historyTable(HuaweiCli::printed($out[7])), HuaweiCli::printed($out[7]))],
+            ['ONU WAN interfaces', $or(implode("\n\n", $wans), HuaweiCli::printed($out[1]))],
+            ['ONU LAN interfaces', $or(HuaweiCli::statusTable('lan', $out[8]), HuaweiCli::printed($out[8]))],
+            ['MACs on the OLT from this ONU', $or(HuaweiCli::statusTable('oltMacs', $out[2]), HuaweiCli::printed($out[2]))],
+            ['Online MACs on this ONU', $or(HuaweiCli::statusTable('onuMacs', $out[3]) . (HuaweiCli::statusTable('onuMacs', $out[3]) !== '' ? $macNote : ''), HuaweiCli::printed($out[3]))],
         ];
         return array_map(static fn (array $x) => ['title' => $x[0], 'text' => $x[1]], $sections);
     }

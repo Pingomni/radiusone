@@ -4,6 +4,10 @@ RadiusOne follows [semantic versioning](https://semver.org): **major** for chang
 upgrading, **minor** for new features, **patch** for fixes. The version is in the `VERSION` file and shows in
 the portal's sidebar and under Settings → System information.
 
+## 2.42.1 (2026-11-21)
+
+- ONU Status tab: shorter, like SmartOLT's. Only the useful lines of each section, the up and down history as one line each, and plain tables for LAN ports and MAC addresses.
+
 ## 2.42.0 (2026-11-21)
 
 - OLT page, Ports: an uplink port's description can be added, changed or removed. It is saved on the OLT ("port desc") and read back before the portal shows it. The change is in the OLT's changelog.
