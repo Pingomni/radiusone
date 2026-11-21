@@ -3064,3 +3064,6 @@ tr.is-clickable { cursor: pointer; }
 .changelog-more pre { max-height: 24rem; }
 .changelog-added { color: var(--success, #3fb950); }
 .changelog-removed { color: var(--danger, #f85149); }
+
+.inline-edit { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); }
+.inline-edit input { flex: 1 1 180px; min-width: 0; }

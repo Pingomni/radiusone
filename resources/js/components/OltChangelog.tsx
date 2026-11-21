@@ -26,6 +26,7 @@ const ACTIONS: Record<string, [string, Kind]> = {
     port_off: ['PON port turned off', 'ports'], port_on: ['PON port turned on', 'ports'], card_restart: ['Card restarted', 'ports'],
     rogue_found: ['Rogue ONU on the port', 'ports'], rogue_gone: ['Rogue ONU cleared', 'ports'],
     vlan_add: ['VLAN created', 'network'], vlan_edit: ['VLAN changed', 'network'], vlan_remove: ['VLAN deleted', 'network'],
+    port_desc: ['Uplink description changed', 'network'],
     uplink_vlan_add: ['VLAN added to an uplink', 'network'], uplink_vlan_remove: ['VLAN taken off an uplink', 'network'],
     ntp_add: ['Time server added', 'network'], ntp_remove: ['Time server removed', 'network'], olt_traffic_table_add: ['Speed added', 'network'],
     create: ['OLT added to the portal', 'settings'], update: ['OLT settings changed', 'settings'],
@@ -53,6 +54,7 @@ function summary(c: Change): string {
         case 'onu_eth_port': return `LAN ${text(d.lan_port)}${d.mode ? `: ${text(d.mode)}` : ''}`;
         case 'onu_lan_vlan': return `LAN ${text(d.lan_port)}${d.vlan ? `, VLAN ${text(d.vlan)}` : ''}`;
         case 'vlan_add': case 'vlan_edit': case 'vlan_remove': return `VLAN ${text(d.vlan)}${Array.isArray(d.uplinks) && d.uplinks.length ? ` on ${d.uplinks.join(', ')}` : ''}`;
+        case 'port_desc': return `${text(d.port)}: ${text(d.after) || 'removed'}`;
         case 'uplink_vlan_add': case 'uplink_vlan_remove': return `VLAN ${text(d.vlan)} on ${text(d.port)}`;
         case 'ntp_add': case 'ntp_remove': return text(d.server);
         case 'olt_traffic_table_add': return `traffic table ${text(d.traffic_table)}, ${Math.round(Number(d.kbps) / 1024)} Mbit/s`;

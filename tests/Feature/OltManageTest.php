@@ -1255,4 +1255,21 @@ final class OltManageTest extends TestCase
         $this->assertSame("  Index               : 1\n  UpTime              : 2026-11-18 00:55:43+01:00\n Total :  1", HuaweiCli::printed($out));
         $this->assertSame("  Index               : 1\n  UpTime              : 2026-11-18 00:55:43+01:00", HuaweiCli::printed($out, true));
     }
+
+    public function test_an_uplink_port_gets_a_description_on_the_olt(): void
+    {
+        $this->startAgent();
+        $olt = $this->olt();
+        $this->ports($olt);
+        file_put_contents($this->log, '');
+        $this->actingAsOperator();
+        $base = "/olts/{$olt['id']}/settings/uplink-desc";
+        $this->post($base, ['port' => 7, 'description' => "To core \"MT\"?\r\nundo vlan 100"])->assertSessionHas('flash.type', 'success');
+        $this->assertSame('To core MT undo vlan 100', Db::value('SELECT alias FROM olt_ports WHERE olt_id=? AND if_index=7', [$olt['id']]));
+        $this->post($base, ['port' => 7, 'description' => ''])->assertSessionHas('flash.type', 'success');
+        $this->assertSame('', Db::value('SELECT alias FROM olt_ports WHERE olt_id=? AND if_index=7', [$olt['id']]));
+        // Only uplink ports.
+        $this->post($base, ['port' => self::PORT_A, 'description' => 'x'])->assertSessionHas('flash.type', 'danger');
+        $this->assertSame(['port desc 0/9/0 description "To core MT undo vlan 100"', 'undo port desc 0/9/0'], $this->changes());
+    }
 }

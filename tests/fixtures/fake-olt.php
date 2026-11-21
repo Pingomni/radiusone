@@ -100,6 +100,7 @@ $lanOff = [];
 $ntp = ['192.0.2.123'];
 $vlans = [1 => [8, 0], 100 => [1, 16]];
 $portVlans = ['0/9/0' => [1, 100, 200]];
+$portDesc = [];
 $vlanMeta = [100 => ['type' => 'smart', 'name' => 'internet', 'desc' => 'Customers']];
 $tables = [6 => ['off', 'off'], 8 => ['1048064', '1048064'], 9 => ['1048064', '1048064']];
 $failing = $config['fail'] ?? [];
@@ -133,7 +134,7 @@ $ontInfo = static function (string $key) use (&$onts): string {
         . "  Service profile ID   : {$o['srv']}\n  Service profile name : HG8346M\n  -----------------------------------------------------------------------------\n";
 };
 // A command the command line knows beyond the first reads. Returns false for one it does not.
-$cli = static function (string $text) use (&$mode, &$state, &$onts, &$autofind, &$servicePorts, &$pending, &$ntp, &$vlans, &$portVlans, &$vlanMeta, &$lanOff, &$tables, $failing, $say, $profiles, $portRows, $ontInfo, $config): bool {
+$cli = static function (string $text) use (&$mode, &$state, &$onts, &$autofind, &$servicePorts, &$pending, &$ntp, &$vlans, &$portVlans, &$portDesc, &$vlanMeta, &$lanOff, &$tables, $failing, $say, $profiles, $portRows, $ontInfo, $config): bool {
     foreach ($failing as $prefix) {
         if (str_starts_with($text, $prefix)) {
             $say("\n  Failure: Made to fail by the test\n");
@@ -246,6 +247,15 @@ $cli = static function (string $text) use (&$mode, &$state, &$onts, &$autofind, 
             }
         }
         $say("#\nreturn\n");
+        return true;
+    }
+    if (preg_match('~^display port desc (\d+)/(\d+)/(\d+)$~', $text, $m)) {
+        $say("\n  ------------------------------------------------------------\n    F/ S/ P   IMA Group   Port Description\n  ------------------------------------------------------------\n"
+            . sprintf("    %d/ %d/ %d   -           %s\n", $m[1], $m[2], $m[3], $portDesc["$m[1]/$m[2]/$m[3]"] ?? '') . "  ------------------------------------------------------------\n");
+        return true;
+    }
+    if ($mode === 'config' && preg_match('~^(undo )?port desc (\d+/\d+/\d+)(?: description (.+))?$~', $text, $m)) {
+        $portDesc[$m[2]] = $m[1] === '' ? trim($m[3] ?? '', '"') : '';
         return true;
     }
     if ($mode === 'config' && preg_match('~^(undo )?port vlan (\d+)(?: to (\d+))? (\d+/\d+) (\d+)$~', $text, $m)) {

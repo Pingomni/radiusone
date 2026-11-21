@@ -597,6 +597,46 @@ final class OltManager
     }
 
     /**
+     * Sets or clears the description of an uplink port ("port desc"). Read back from the OLT before it is saved.
+     *
+     * @param  array<string, mixed>  $olt
+     */
+    public static function uplinkDescription(array $olt, int $ifIndex, int $frame, int $slot, int $port, string $typed): string
+    {
+        self::requireChange($olt);
+        $clean = HuaweiCli::description($typed);
+        if (trim($typed) !== '' && $clean === '') {
+            throw new RuntimeException('Enter a description of letters and digits (up to 64 characters).');
+        }
+        $where = "$frame/$slot/$port";
+        $sent = [];
+        $now = self::session($olt, static function (OltTelnet $t) use ($where, $clean, &$sent): string {
+            $read = static function () use ($t, $where): string {
+                $out = $t->command("display port desc $where");
+                if (HuaweiCli::failure($out) !== null || !preg_match('~^\s*\d+/\s*\d+/\s*\d+\s+\S+[ \t]*(.*)$~m', str_replace("\r", '', $out), $m)) {
+                    throw new RuntimeException("The OLT did not show port $where.");
+                }
+                return trim($m[1]);
+            };
+            $before = $read();
+            if ($before === $clean) {
+                throw new RuntimeException("Port $where already has this description.");
+            }
+            $t->command('config');
+            self::send($t, $clean === '' ? "undo port desc $where" : "port desc $where description " . (str_contains($clean, ' ') ? '"' . $clean . '"' : $clean), $sent);
+            $after = $read();
+            if ($after !== $clean) {
+                throw new RuntimeException("The OLT accepted the command, but port $where now shows \"$after\".");
+            }
+            return $before;
+        });
+        Db::exec('UPDATE olt_ports SET alias=? WHERE olt_id=? AND if_index=?', [$clean, $olt['id'], $ifIndex]);
+        Audit::log('port_desc', 'olt', (string) $olt['id'], null, ['port' => $where, 'before' => $now, 'after' => $clean, 'commands' => $sent]);
+        OltChangelog::add((int) $olt['id'], 'port_desc', null, $where, ['port' => $where, 'before' => $now, 'after' => $clean, 'commands' => $sent]);
+        return $clean === '' ? "The description of uplink port $where was removed." : "Uplink port $where is now described as \"$clean\".";
+    }
+
+    /**
      * Restarts one card. Everything on it is offline until it is back.
      *
      * @param  array<string, mixed>  $olt

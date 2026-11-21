@@ -371,6 +371,14 @@ final class OltController extends Controller
                     ? OltManager::vlanCreate($olt, (int) $request->input('vlan', 0), (int) ($request->input('to') ?: 0), (string) $request->input('type', 'smart'), (string) $request->input('name', ''), (string) $request->input('desc', ''), self::uplinkKeys($olt, (array) $request->input('uplinks', [])))
                     : OltManager::vlan($olt, false, (int) $request->input('vlan', 0)),
                 'vlan-edit' => OltManager::vlanUpdate($olt, (int) $request->input('vlan', 0), (string) $request->input('name', ''), (string) $request->input('desc', ''), self::uplinkKeys($olt, (array) $request->input('uplinks', [])), Auth::can('danger.delete')),
+                'uplink-desc' => (static function () use ($olt, $request) {
+                    $index = (int) $request->input('port', 0);
+                    $port = Db::row('SELECT name FROM olt_ports WHERE olt_id=? AND if_index=? AND kind="uplink"', [$olt['id'], $index]);
+                    if (!$port || !preg_match('~(\d+)\s*/\s*(\d+)\s*/\s*(\d+)~', (string) $port['name'], $m)) {
+                        throw new RuntimeException('Choose an uplink port.');
+                    }
+                    return OltManager::uplinkDescription($olt, $index, (int) $m[1], (int) $m[2], (int) $m[3], (string) $request->input('description', ''));
+                })(),
                 'uplink-vlans' => (static function () use ($olt, $request, $add) {
                     $port = Db::row('SELECT name FROM olt_ports WHERE olt_id=? AND if_index=? AND kind="uplink"', [$olt['id'], (int) $request->input('port', 0)]);
                     if (!$port || !preg_match('~(\d+)\s*/\s*(\d+)\s*/\s*(\d+)~', (string) $port['name'], $m)) {

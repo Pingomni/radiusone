@@ -74,6 +74,27 @@ function PortGraph({ title, url }: { title: string; url: string }) {
     return <LivePanel title={title} url={url} interval={60} initial={payload} className="traffic-panel" render={(data) => <ChartOrMessage payload={data} />} />;
 }
 
+/** An uplink port's description on the OLT, edited where it is shown. */
+function UplinkDescription({ port, path, mayChange }: { port: Port; path: string; mayChange: boolean }) {
+    const [value, setValue] = useState<string | null>(null);
+    const [busy, setBusy] = useState(false);
+    if (value === null) {
+        return <>{port.alias || (mayChange ? '' : '-')}{mayChange && <> <button type="button" className="link" onClick={() => setValue(port.alias ?? '')}>{port.alias ? 'Edit' : 'Add description'}</button></>}</>;
+    }
+    const save = (e: React.FormEvent) => {
+        e.preventDefault();
+        setBusy(true);
+        router.post(`${path}/settings/uplink-desc`, { port: port.id, description: value }, { preserveScroll: true, preserveState: true, onSuccess: () => setValue(null), onFinish: () => setBusy(false) });
+    };
+    return (
+        <form className="inline-edit" onSubmit={save}>
+            <input aria-label={`Description of ${port.name}`} maxLength={64} value={value} autoFocus onChange={(e) => setValue(e.target.value)} onKeyDown={(e) => { if (e.key === 'Escape') setValue(null); }} />
+            <button className="button primary" disabled={busy || value.trim() === (port.alias ?? '')}>{busy ? 'Saving…' : 'Save'}</button>
+            <button type="button" className="button" onClick={() => setValue(null)}>Cancel</button>
+        </form>
+    );
+}
+
 function Ports({ hardware, olt, path, range }: { hardware: Hardware; olt: Olt; path: string; range: string }) {
     const can = useCan();
     const [shown, setShown] = useState<Port | null>(null);
@@ -119,7 +140,7 @@ function Ports({ hardware, olt, path, range }: { hardware: Hardware; olt: Olt; p
                     { header: 'In / out', cell: (p) => (p.in == null && p.out == null ? '-' : `${p.in ?? '-'} / ${p.out ?? '-'}`) },
                     { header: 'Errors', cell: (p) => p.errors ?? '-' },
                     { header: '', cell: (p) => actions(p) },
-                    { header: 'Description', className: 'wrap', cell: (p) => (p.pon?.rogue && p.pon.rogue.toLowerCase() !== 'inexistent' ? <><State tone="danger">Rogue ONU: {p.pon.rogue}</State> {p.alias}</> : p.alias || '-') },
+                    { header: 'Description', className: 'wrap', cell: (p) => (p.pon?.rogue && p.pon.rogue.toLowerCase() !== 'inexistent' ? <><State tone="danger">Rogue ONU: {p.pon.rogue}</State> {p.alias}</> : p.kind === 'uplink' ? <UplinkDescription port={p} path={path} mayChange={mayChange} /> : p.alias || '-') },
                 ]}
             />
         </Panel>
