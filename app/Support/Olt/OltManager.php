@@ -684,6 +684,34 @@ final class OltManager
     }
 
     /**
+     * Everything the OLT says about the ONU, as the OLT prints it (SmartOLT's "Get status"). Only reads.
+     *
+     * @param  array<string, mixed>  $olt
+     * @param  array<string, mixed>  $onu
+     * @return list<array{title: string, text: string}>
+     */
+    public static function statusReport(array $olt, array $onu): array
+    {
+        if (!self::canRead($olt)) {
+            throw new RuntimeException('This needs telnet turned on for this OLT, under Edit.');
+        }
+        [$f, $s, $p, $n] = [(int) $onu['frame'], (int) $onu['slot'], (int) $onu['port'], (int) $onu['ont_id']];
+        $out = Olts::cli($olt, 90.0)->read([
+            "display ont info $f $s $p $n", "display ont wan-info $f/$s $p $n", "display mac-address port $f/$s/$p ont $n", "display mac-address ont $f/$s/$p $n",
+            'config', "interface gpon $f/$s", "display ont optical-info $p $n", "display ont register-info $p $n", "display ont port state $p $n eth-port all", 'quit',
+        ]);
+        if (HuaweiCli::failure($out[0]) !== null || HuaweiCli::serialFromCli(HuaweiCli::fields($out[0])['SN'] ?? '') !== (string) $onu['sn']) {
+            throw new RuntimeException('The OLT no longer has this ONU at ' . Olts::position($onu) . '. Use Read now on the OLT\'s page.');
+        }
+        $sections = [
+            ['Optical status', HuaweiCli::printed($out[6])], ['ONU details', HuaweiCli::printed($out[0], true)], ['History', HuaweiCli::printed($out[7])],
+            ['ONU WAN interfaces', HuaweiCli::printed($out[1])], ['ONU LAN interfaces', HuaweiCli::printed($out[8])],
+            ['MACs on the OLT from this ONU', HuaweiCli::printed($out[2])], ['Online MACs on this ONU', HuaweiCli::printed($out[3])],
+        ];
+        return array_map(static fn (array $x) => ['title' => $x[0], 'text' => $x[1]], $sections);
+    }
+
+    /**
      * The ONU's part of the OLT's configuration, as text. Only reads.
      *
      * @param  array<string, mixed>  $olt

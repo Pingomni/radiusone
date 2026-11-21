@@ -264,6 +264,45 @@ function RunningConfig({ live }: { live: LiveState }) {
     );
 }
 
+type StatusAnswer = { ok: true; sections: { title: string; text: string }[]; at: string } | { ok: false; error: string };
+
+/** Everything the OLT says about the ONU, as the OLT prints it. Asked when the tab opens, and again on request. */
+function FullStatus({ base }: { base: string }) {
+    const [answer, setAnswer] = useState<StatusAnswer | null>(null);
+    const [busy, setBusy] = useState(false);
+    const read = useCallback(async () => {
+        setBusy(true);
+        try {
+            const response = await fetch(`${base}/status`, { headers: { Accept: 'application/json' } });
+            setAnswer(response.ok ? await response.json() as StatusAnswer : { ok: false, error: `The portal answered ${response.status}.` });
+        } catch {
+            setAnswer({ ok: false, error: 'The portal did not answer.' });
+        } finally {
+            setBusy(false);
+        }
+    }, [base]);
+    useEffect(() => { void read(); }, [read]);
+    const all = answer?.ok ? answer.sections.map((s) => `${s.title}\n${s.text}`).join('\n\n') : '';
+    return (
+        <Panel
+            title="Status from the OLT"
+            actions={<>
+                {all !== '' && <button type="button" className="button" onClick={() => void navigator.clipboard?.writeText(all)}>Copy</button>}
+                <button type="button" className="button" disabled={busy} onClick={() => void read()}><Icon name="refresh" />{busy ? 'Asking the OLT…' : 'Get status'}</button>
+            </>}
+        >
+            {!answer && <p className="hint" role="status">Asking the OLT. This takes a few seconds.</p>}
+            {answer && !answer.ok && <p className="flash warning" role="alert">{answer.error}</p>}
+            {answer?.ok && answer.sections.map((s) => (
+                <section key={s.title} className="onu-status-section">
+                    <h4>{s.title}</h4>
+                    <pre className="mono" tabIndex={0}>{s.text || '-'}</pre>
+                </section>
+            ))}
+        </Panel>
+    );
+}
+
 function ServicePorts({ ports, tables, base, mayChange, onDone }: { ports: ServicePort[]; tables: TrafficTable[]; base: string; mayChange: boolean; onDone: () => void }) {
     const [editing, setEditing] = useState<{ index: number; up: string; down: string } | null>(null);
     const byId = new Map(tables.map((t) => [t.id, t]));
@@ -713,6 +752,7 @@ export default function OnuPage({ olt, onu, neighbours, clients, disconnections,
         { key: 'ports', title: 'Ports', icon: 'fiber', count: data ? data.lan.length : undefined, content: data ? <Ports live={data} base={base} mayChange={mayChange} onDone={reread} /> : <Waiting live={live} /> },
         { key: 'speed', title: 'Speed profiles', icon: 'activity', count: data ? data.servicePorts.length : undefined, content: data ? <ServicePorts ports={data.servicePorts} tables={choices?.ok ? choices.data.trafficTables : trafficTables} base={base} mayChange={mayChange} onDone={() => { rereadChoices(); reread(); }} /> : <Waiting live={live} /> },
         ...(mayChange ? [{ key: 'omci', title: 'Configure', icon: 'settings', hint: 'Push settings to the ONU over OMCI', content: <Configure base={base} live={live} choices={choices} clients={clients} onDone={reread} /> }] : []),
+        ...(olt.canRead ? [{ key: 'status', title: 'Status', icon: 'logs', content: <FullStatus base={base} /> }] : []),
         ...(olt.canRead ? [{ key: 'config', title: 'Running config', icon: 'logs', content: <RunningConfig live={live} /> }] : []),
         { key: 'history', title: 'History', icon: 'activity', count: history.length, content: <Changelog rows={history} oltId={olt.id} forOnu title={`History of ${onu.sn}`} /> },
         ...(mayChange ? [{

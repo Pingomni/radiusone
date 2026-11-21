@@ -279,6 +279,19 @@ final class OnuController extends Controller
         return response()->json($payload)->header('Cache-Control', 'no-store');
     }
 
+    /** Everything the OLT says about the ONU, as text. Only reads. */
+    public function status(string $id, string $onu): JsonResponse
+    {
+        [$olt, $row] = self::find($id, $onu);
+        set_time_limit(120);
+        try {
+            $payload = ['ok' => true, 'sections' => OltManager::statusReport($olt, $row), 'at' => date('Y-m-d H:i:s')];
+        } catch (RuntimeException $e) {
+            $payload = ['ok' => false, 'error' => $e->getMessage()];
+        }
+        return response()->json($payload)->header('Cache-Control', 'no-store');
+    }
+
     /** What the OMCI settings can be chosen from, read from the OLT. Only reads. */
     public function omciOptions(string $id, string $onu): JsonResponse
     {

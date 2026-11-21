@@ -1248,4 +1248,11 @@ final class OltManageTest extends TestCase
         $this->assertSame(4, HuaweiCli::ethPorts("  POTS          2               -\n  ETH           4               -\n"));
         $this->assertNull(HuaweiCli::ethPorts("  ETH           adaptive        4\n"));
     }
+
+    public function test_what_the_olt_printed_is_shown_without_echo_prompt_and_rules(): void
+    {
+        $out = "display ont register-info 15 3 \r\n ------------------\r\n  Index               : 1\r\n  UpTime              : 2026-11-18 00:55:43+01:00\r\n ------------------\r\n Total :  1\r\n\r\nMA5800-X7(config-if-gpon-0/1)#";
+        $this->assertSame("  Index               : 1\n  UpTime              : 2026-11-18 00:55:43+01:00\n Total :  1", HuaweiCli::printed($out));
+        $this->assertSame("  Index               : 1\n  UpTime              : 2026-11-18 00:55:43+01:00", HuaweiCli::printed($out, true));
+    }
 }

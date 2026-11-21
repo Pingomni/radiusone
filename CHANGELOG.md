@@ -4,6 +4,10 @@ RadiusOne follows [semantic versioning](https://semver.org): **major** for chang
 upgrading, **minor** for new features, **patch** for fixes. The version is in the `VERSION` file and shows in
 the portal's sidebar and under Settings → System information.
 
+## 2.41.0 (2026-11-21)
+
+- ONU page: a Status tab with everything the OLT says about the ONU, as text (SmartOLT's "Get status"): optical status, ONU details, up and down history, WAN and LAN interfaces, MACs on the OLT and the devices online behind the ONU. Copy button. Only reads.
+
 ## 2.40.1 (2026-11-21)
 
 - ONU name and address are shown apart. SmartOLT saves both in one description on the OLT ("Name_descr_Address"); lists, the ONU page, the search and the client page now show the name, with the address under it.

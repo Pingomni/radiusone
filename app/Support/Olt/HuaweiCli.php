@@ -356,6 +356,32 @@ final class HuaweiCli
         return ['up' => $number('Up traffic (kbps)'), 'down' => $number('Down traffic (kbps)')];
     }
 
+    /**
+     * What a display command printed, as text to show: without the command's echo, the prompt after it and the
+     * dashed rules. With $firstBlock, only what is between the first two rules (the ONU's own details, not the long
+     * profile tables "display ont info" adds).
+     */
+    public static function printed(string $output, bool $firstBlock = false): string
+    {
+        $lines = explode("\n", str_replace("\r", '', $output));
+        array_shift($lines);
+        while ($lines && (trim((string) end($lines)) === '' || preg_match('/^\S*[>#]\s*$/', (string) end($lines)))) {
+            array_pop($lines);
+        }
+        $kept = [];
+        $rules = 0;
+        foreach ($lines as $line) {
+            if (preg_match('/^\s*-{10,}\s*$/', $line)) {
+                if (++$rules >= 2 && $firstBlock) {
+                    break;
+                }
+                continue;
+            }
+            $kept[] = rtrim($line);
+        }
+        return trim(implode("\n", $kept), "\n");
+    }
+
     /** A configuration as the OLT prints it, without the command's echo before it and the prompt after it. */
     public static function configText(string $output): string
     {

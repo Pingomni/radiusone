@@ -240,6 +240,7 @@ Route::middleware('frweb.auth')->group(function () {
         });
         Route::get('/olts/{id}/onus/{onu}', [OnuController::class, 'show'])->whereNumber(['id', 'onu']);
         Route::get('/olts/{id}/onus/{onu}/live', [OnuController::class, 'live'])->whereNumber(['id', 'onu']);
+        Route::get('/olts/{id}/onus/{onu}/status', [OnuController::class, 'status'])->whereNumber(['id', 'onu']);
         Route::get('/olts/{id}/onus/{onu}/config', [OnuController::class, 'config'])->whereNumber(['id', 'onu']);
         Route::get('/olts/{id}/onus/{onu}/omci-options', [OnuController::class, 'omciOptions'])->whereNumber(['id', 'onu']);
         Route::get('/olts/{id}/onus/{onu}/graph', [OnuController::class, 'graph'])->whereNumber(['id', 'onu']);
