@@ -6,7 +6,7 @@ import { ChartOrMessage, type ChartPayload } from '@/components/LineChart';
 import { Changelog, type Change } from '@/components/OltChangelog';
 import { LivePanel } from '@/components/LivePanel';
 import OltConsole from '@/components/OltConsole';
-import { OnuPower, OnuStatus, SignalReading, type OnuRow } from '@/components/olt';
+import { onuName, OnuPower, OnuStatus, SignalReading, type OnuRow } from '@/components/olt';
 import { DataTable, Pagination } from '@/components/table';
 import { Tabs } from '@/components/tabs';
 import { MetricCards } from '@/components/metrics';
@@ -691,7 +691,7 @@ export default function OltShow({ olt, counts, filters, hardware, details, backu
                     exportRows
                     emptyText={counts.total ? 'No ONU matches.' : 'No ONUs read yet.'}
                     columns={[
-                        { header: 'ONU', className: 'wrap', cell: (o) => <Link className="olt-onu-cell" href={`${path}/onus/${o.id}`}><strong>{o.description || o.sn}</strong><small className="mono">{o.sn}</small></Link> },
+                        { header: 'ONU', className: 'wrap', cell: (o) => <Link className="olt-onu-cell" href={`${path}/onus/${o.id}`}><strong>{onuName(o.description).name || o.sn}</strong>{onuName(o.description).note && <small>{onuName(o.description).note}</small>}<small className="mono">{o.sn}</small></Link> },
                         { header: 'Status', cell: (o) => (o.active === false ? <State tone="warning">Turned off</State> : <OnuStatus status={o.status} />) },
                         { header: 'Port', cell: (o) => <span className="mono">{o.position}</span> },
                         { header: 'Client', cell: (o) => (o.clients.length ? o.clients.map((u) => <div key={u}><Link href={`/clients/${encodeURIComponent(u)}/edit?tab=onu`}>{u}</Link></div>) : <span className="onu-pending">Not linked</span>) },

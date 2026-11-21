@@ -222,6 +222,12 @@ final class Olts
         return ['ok' => $ok, 'lines' => $lines];
     }
 
+    /** The name part of an ONU description. SmartOLT saves "Name_descr_Address" in one description. */
+    public static function onuName(string $description): string
+    {
+        return trim(explode('_descr_', $description, 2)[0]);
+    }
+
     /**
      * @param  array<string, mixed>  $onu
      */

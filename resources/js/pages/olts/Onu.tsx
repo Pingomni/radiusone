@@ -4,7 +4,7 @@ import { DeleteButton, PostButton, useConfirm } from '@/components/confirm';
 import Icon from '@/components/Icon';
 import { ChartOrMessage, type ChartPayload } from '@/components/LineChart';
 import { Changelog, type Change } from '@/components/OltChangelog';
-import { SignalScale, type OnuRow } from '@/components/olt';
+import { joinOnuName, onuName, SignalScale, type OnuRow } from '@/components/olt';
 import { DataTable } from '@/components/table';
 import { Tabs, type TabDef } from '@/components/tabs';
 import { Check, Field, Panel, Select, Status, Time, State } from '@/components/ui';
@@ -348,31 +348,41 @@ function Ports({ live, base, mayChange, onDone }: { live: Live; base: string; ma
     );
 }
 
-/** The ONU's name (its description on the OLT), edited where it is shown. */
-function RenameTitle({ name, sn, base, mayChange }: { name: string; sn: string; base: string; mayChange: boolean }) {
+/** The ONU's name and address (one description on the OLT, "Name_descr_Address"), edited where they are shown. */
+function RenameTitle({ description, sn, base, mayChange }: { description: string; sn: string; base: string; mayChange: boolean }) {
+    const now = onuName(description);
     const [editing, setEditing] = useState(false);
-    const [value, setValue] = useState(name);
+    const [name, setName] = useState(now.name);
+    const [note, setNote] = useState(now.note);
     const [busy, setBusy] = useState(false);
-    useEffect(() => setValue(name), [name]);
+    const reset = () => { setName(now.name); setNote(now.note); };
+    useEffect(() => { setName(now.name); setNote(now.note); }, [now.name, now.note]);
     if (!editing) {
         return (
-            <div className="onu-title">
-                <h1>{name || sn}</h1>
-                {mayChange && <button type="button" className="onu-icon-button" onClick={() => setEditing(true)} aria-label="Rename this ONU" title="Rename this ONU on the OLT"><Icon name="edit" /></button>}
-            </div>
+            <>
+                <div className="onu-title">
+                    <h1>{now.name || sn}</h1>
+                    {mayChange && <button type="button" className="onu-icon-button" onClick={() => setEditing(true)} aria-label="Edit the name and address" title="Edit the name and address on the OLT"><Icon name="edit" /></button>}
+                </div>
+                {now.note && <p className="onu-note">{now.note}</p>}
+            </>
         );
     }
+    const joined = joinOnuName(name, note);
+    const tooLong = joined.length > 64;
     const save = (e: React.FormEvent) => {
         e.preventDefault();
         setBusy(true);
-        router.post(`${base}/describe`, { description: value }, { preserveScroll: true, preserveState: true, onSuccess: () => setEditing(false), onFinish: () => setBusy(false) });
+        router.post(`${base}/describe`, { description: joined }, { preserveScroll: true, preserveState: true, onSuccess: () => setEditing(false), onFinish: () => setBusy(false) });
     };
+    const escape = (e: React.KeyboardEvent) => { if (e.key === 'Escape') { reset(); setEditing(false); } };
     return (
         <form className="onu-rename" onSubmit={save}>
-            <Field label="Name on the OLT" name="description" maxLength={64} value={value} autoFocus onChange={(e) => setValue(e.target.value)} onKeyDown={(e) => { if (e.key === 'Escape') { setValue(name); setEditing(false); } }} hint="Up to 64 characters. ë and ç are saved as e and c." />
+            <Field label="Name" name="name" maxLength={64} value={name} autoFocus onChange={(e) => setName(e.target.value)} onKeyDown={escape} />
+            <Field label="Address or comment" name="note" maxLength={56} value={note} onChange={(e) => setNote(e.target.value)} onKeyDown={escape} hint={tooLong ? `${joined.length - 64} characters too long for the OLT.` : undefined} />
             <div className="onu-rename-actions">
-                <button className="button primary" disabled={busy || !value.trim() || value === name}>{busy ? 'Saving on the OLT…' : 'Save'}</button>
-                <button type="button" className="button" onClick={() => { setValue(name); setEditing(false); }}>Cancel</button>
+                <button className="button primary" disabled={busy || tooLong || !name.trim() || joined === description}>{busy ? 'Saving on the OLT…' : 'Save'}</button>
+                <button type="button" className="button" onClick={() => { reset(); setEditing(false); }}>Cancel</button>
             </div>
         </form>
     );
@@ -713,7 +723,7 @@ export default function OnuPage({ olt, onu, neighbours, clients, disconnections,
                         <div className="toolbar">
                             {off
                                 ? <PostButton action={`${base}/enable`} preserveState onSuccess={reread} label="Enable ONU" className="button" />
-                                : <PostButton action={`${base}/disable`} preserveState onSuccess={reread} label="Disable ONU" className="button" confirm={{ title: 'Turn this ONU off?', message: `${onu.description || onu.sn} loses its connection until you turn the ONU on again. Its settings stay on the OLT.`, confirmLabel: 'Turn off' }} />}
+                                : <PostButton action={`${base}/disable`} preserveState onSuccess={reread} label="Disable ONU" className="button" confirm={{ title: 'Turn this ONU off?', message: `${onuName(onu.description).name || onu.sn} loses its connection until you turn the ONU on again. Its settings stay on the OLT.`, confirmLabel: 'Turn off' }} />}
                         </div>
                     </Panel>
                     {can('danger.delete') && (
@@ -731,8 +741,8 @@ export default function OnuPage({ olt, onu, neighbours, clients, disconnections,
     ];
 
     return (
-        <AppLayout title={onu.description || `ONU ${onu.sn}`} heading={false}>
-            {can('nas.manage') && !olt.canChange && <p className="hint">Read only. <Link href={`/olts/${olt.id}/edit`}>Allow changes</Link> on this OLT to restart, rename or remove ONUs.</p>}
+        <AppLayout title={onuName(onu.description).name || `ONU ${onu.sn}`} heading={false}>
+            {can('nas.manage') && !olt.canChange && <p className="hint">Read only. To rename, restart or remove ONUs, <Link href={`/olts/${olt.id}/edit`}>turn on telnet and changes</Link> for this OLT.</p>}
 
             <nav className="onu-switch" aria-label="Other ONUs">
                 <Link href="/onus"><Icon name="menu" />All ONUs</Link>
@@ -744,7 +754,7 @@ export default function OnuPage({ olt, onu, neighbours, clients, disconnections,
             <section className={`onu-hero ${status === 'online' ? 'is-online' : status === 'off' ? 'is-off' : status === 'offline' ? 'is-offline' : ''}`.trim()} aria-label="ONU at a glance">
                 <div className="onu-hero-top">
                     <div className="onu-identity">
-                        <RenameTitle name={onu.description} sn={onu.sn} base={base} mayChange={mayChange} />
+                        <RenameTitle description={onu.description} sn={onu.sn} base={base} mayChange={mayChange} />
                         <p className="onu-where">
                             <span>ONU {onuId} on port <span className="mono">{frame}/{slot}/{port}</span> of <Link href={`/olts/${olt.id}`}>{olt.name}</Link></span>
                             <span className="mono">{onu.sn}</span>
@@ -765,8 +775,7 @@ export default function OnuPage({ olt, onu, neighbours, clients, disconnections,
                                 <button type="button" className={`button onu-live-toggle${live.auto ? ' on' : ''}`} aria-pressed={live.auto} onClick={() => live.setAuto(!live.auto)} title="Ask the OLT again every 10 seconds"><span className="onu-live-dot" aria-hidden="true" />Live</button>
                             </>
                         )}
-                        {mayChange && can('danger.delete') && <Link className="button" href={`/olts/${olt.id}?tab=cli&at=${frame}/${slot}`} title={`Open the OLT's terminal at interface gpon ${frame}/${slot}`}><Icon name="terminal" />Terminal</Link>}
-                        {mayChange && <PostButton action={`${base}/reboot`} preserveState onSuccess={reread} label="Reboot" className="button" disabled={off || onu.status === 'offline'} confirm={{ title: 'Restart this ONU?', message: `${onu.description || onu.sn} loses its connection for a minute or two.`, confirmLabel: 'Restart' }} />}
+                        {mayChange && <PostButton action={`${base}/reboot`} preserveState onSuccess={reread} label="Reboot" className="button" disabled={off || onu.status === 'offline'} confirm={{ title: 'Restart this ONU?', message: `${onuName(onu.description).name || onu.sn} loses its connection for a minute or two.`, confirmLabel: 'Restart' }} />}
                     </div>
                 </div>
 

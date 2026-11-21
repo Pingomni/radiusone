@@ -79,3 +79,15 @@ export function SignalReading({ dbm, weak = -27, veryWeak = -30, oltDbm = null }
         </span>
     );
 }
+
+/**
+ * SmartOLT saves an ONU's name and its address in one description on the OLT, as "Name_descr_Address".
+ * This splits it back, and joins it the same way so both tools keep reading it.
+ */
+export function onuName(description: string | null | undefined): { name: string; note: string } {
+    const [name, ...rest] = (description ?? '').split('_descr_');
+    return { name: name.trim(), note: rest.join(' ').trim() };
+}
+export function joinOnuName(name: string, note: string): string {
+    return note.trim() ? `${name.trim()}_descr_${note.trim()}` : name.trim();
+}

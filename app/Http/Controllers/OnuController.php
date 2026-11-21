@@ -173,7 +173,7 @@ final class OnuController extends Controller
     private static function neighbours(array $olt, array $row): array
     {
         $at = [(int) $row['frame'], (int) $row['slot'], (int) $row['port'], (int) $row['ont_id']];
-        $link = static fn (?array $o) => $o === null ? null : ['href' => '/olts/' . (int) $o['olt_id'] . '/onus/' . (int) $o['id'], 'name' => (string) ($o['description'] ?: $o['sn']), 'position' => Olts::position($o)];
+        $link = static fn (?array $o) => $o === null ? null : ['href' => '/olts/' . (int) $o['olt_id'] . '/onus/' . (int) $o['id'], 'name' => Olts::onuName((string) $o['description']) ?: (string) $o['sn'], 'position' => Olts::position($o)];
         $step = static function (string $compare, string $order) use ($olt, $at): ?array {
             return Db::row("SELECT id,olt_id,sn,description,frame,slot,port,ont_id FROM olt_onus WHERE olt_id=? AND (frame,slot,port,ont_id) $compare (?,?,?,?) ORDER BY frame $order,slot $order,port $order,ont_id $order LIMIT 1", [$olt['id'], ...$at]);
         };

@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { PostButton } from '@/components/confirm';
 import { Empty, Panel, Time, State } from '@/components/ui';
 import { useCan } from '@/lib/auth';
-import { OnuStatus, SignalReading, type OnuRow } from '@/components/olt';
+import { onuName, OnuStatus, SignalReading, type OnuRow } from '@/components/olt';
 
 export type ClientOnuData = {
     link: { sn: string; olt: string; oltId: number; source: string; evidence: string; linkedAt: string } | null;
@@ -39,7 +39,8 @@ export default function ClientOnu({ username, data, canLink }: { username: strin
                                 <Row label="Signal at the ONU, dBm"><SignalReading dbm={onu.rx} oltDbm={onu.oltRx} /></Row>
                                 <Row label="OLT and port"><Link href={`/olts/${current.oltId}?q=${encodeURIComponent(current.sn)}`}>{current.olt}</Link> <span className="mono">{onu.position}</span></Row>
                                 <Row label="Serial number"><span className="mono">{onu.sn}</span></Row>
-                                <Row label="Description on the OLT">{onu.description || '-'}</Row>
+                                <Row label="Name on the OLT">{onuName(onu.description).name || '-'}</Row>
+                                {onuName(onu.description).note && <Row label="Address or comment">{onuName(onu.description).note}</Row>}
                                 <Row label="Model">{onu.model || '-'}</Row>
                                 <Row label="Line profile">{onu.profile || '-'}</Row>
                                 <Row label="Distance">{onu.distance === null ? '-' : `${onu.distance} m`}</Row>

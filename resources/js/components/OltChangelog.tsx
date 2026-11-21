@@ -122,7 +122,7 @@ export function Changelog({ rows, oltId, forOnu = false, multi = false, title }:
                     { header: 'What', className: 'wrap', cell: (r) => <><strong>{label(r)}</strong>{summary(r) && <div className="hint">{summary(r)}</div>}</> },
                     ...(forOnu ? [] : [{
                         header: 'ONU or port', className: 'wrap', cell: (r: Change) => (r.sn
-                            ? <>{r.onuId !== null ? <Link href={`/olts/${r.oltId ?? oltId}/onus/${r.onuId}`} className="mono">{r.sn}</Link> : <span className="mono">{r.sn}</span>}{(r.onuName || text(r.detail.description)) && <div className="hint">{r.onuName || text(r.detail.description)}</div>}{r.position && <div className="hint mono">{r.position}</div>}</>
+                            ? <>{r.onuId !== null ? <Link href={`/olts/${r.oltId ?? oltId}/onus/${r.onuId}`} className="mono">{r.sn}</Link> : <span className="mono">{r.sn}</span>}{(r.onuName || text(r.detail.description)) && <div className="hint">{(r.onuName || text(r.detail.description)).replace('_descr_', ', ')}</div>}{r.position && <div className="hint mono">{r.position}</div>}</>
                             : r.position ? <span className="mono">{r.position}</span> : '-'),
                     }]),
                     { header: 'Details', className: 'wrap', cell: (r) => <More c={r} /> },

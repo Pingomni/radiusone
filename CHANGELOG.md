@@ -4,6 +4,12 @@ RadiusOne follows [semantic versioning](https://semver.org): **major** for chang
 upgrading, **minor** for new features, **patch** for fixes. The version is in the `VERSION` file and shows in
 the portal's sidebar and under Settings → System information.
 
+## 2.40.1 (2026-11-21)
+
+- ONU name and address are shown apart. SmartOLT saves both in one description on the OLT ("Name_descr_Address"); lists, the ONU page, the search and the client page now show the name, with the address under it.
+- The Terminal button is gone from the ONU page. The terminal stays on the OLT page.
+- Editing an ONU has two fields, Name and Address or comment, saved in the same form SmartOLT reads.
+
 ## 2.40.0 (2026-11-20)
 
 Update with **Settings → Overview → Software update** or `sudo radiusone-update`.

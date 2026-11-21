@@ -2888,6 +2888,7 @@ tr.is-clickable { cursor: pointer; }
 .onu-icon-button:focus-visible { box-shadow: var(--focus); outline: 0; }
 .onu-icon-button svg.icon { width: 15px; height: 15px; }
 .onu-title:not(:hover) .onu-icon-button:not(:focus-visible) { opacity: .6; }
+.onu-note { margin: 2px 0 0; color: var(--text-muted); overflow-wrap: anywhere; }
 .onu-rename { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--sp-2); max-width: 560px; }
 .onu-rename > label { display: grid; flex: 1 1 280px; gap: 4px; }
 .onu-rename > label > span { color: var(--text-muted); font-size: var(--fs-sm); font-weight: 600; }

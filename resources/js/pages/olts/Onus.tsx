@@ -1,7 +1,7 @@
 import { Link, router } from '@inertiajs/react';
 import { useState } from 'react';
 import Icon from '@/components/Icon';
-import { OnuStatus, SignalReading, type OnuRow } from '@/components/olt';
+import { onuName, OnuStatus, SignalReading, type OnuRow } from '@/components/olt';
 import { DataTable, Pagination } from '@/components/table';
 import { State, Time } from '@/components/ui';
 import AppLayout from '@/layouts/AppLayout';
@@ -82,7 +82,7 @@ export default function Onus({ olts, counts, filters, choices, waiting, result }
                             serverPaginated
                             emptyText={counts.total ? 'No ONU matches.' : 'No ONUs read yet.'}
                             columns={[
-                                { header: 'ONU', className: 'wrap', cell: (o) => <Link className="olt-onu-cell" href={`/olts/${o.oltId}/onus/${o.id}`}><strong>{o.description || o.sn}</strong><small className="mono">{o.sn}</small></Link> },
+                                { header: 'ONU', className: 'wrap', cell: (o) => <Link className="olt-onu-cell" href={`/olts/${o.oltId}/onus/${o.id}`}><strong>{onuName(o.description).name || o.sn}</strong>{onuName(o.description).note && <small>{onuName(o.description).note}</small>}<small className="mono">{o.sn}</small></Link> },
                                 { header: 'Status', cell: (o) => (o.active === false ? <State tone="warning">Turned off</State> : <OnuStatus status={o.status} />) },
                                 { header: 'OLT and port', cell: (o) => <span className="list-cell-stack"><Link href={`/olts/${o.oltId}`}>{o.olt}</Link><span className="list-subline mono">{o.position}</span></span> },
                                 { header: 'Client', cell: (o) => (o.clients.length ? o.clients.map((u) => <div key={u}><Link href={`/clients/${encodeURIComponent(u)}/edit?tab=onu`}>{u}</Link></div>) : <span className="onu-pending">Not linked</span>) },

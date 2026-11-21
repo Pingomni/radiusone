@@ -53,7 +53,7 @@ final class SearchController extends Controller
                 try {
                     foreach (Db::select('SELECT o.id, o.olt_id, o.sn, o.description, o.status, o.frame, o.slot, o.port, o.ont_id, t.name AS olt FROM olt_onus o JOIN olts t ON t.id=o.olt_id
                         WHERE o.sn LIKE ? OR o.description LIKE ? ORDER BY o.description LIMIT ' . self::LIMIT, [$like, $like]) as $row) {
-                        $onus[] = ['name' => (string) ($row['description'] ?: $row['sn']), 'sn' => (string) $row['sn'], 'where' => $row['olt'] . ' ' . Olts::position($row), 'online' => $row['status'] === 'online',
+                        $onus[] = ['name' => (Olts::onuName((string) $row['description']) ?: (string) $row['sn']), 'sn' => (string) $row['sn'], 'where' => $row['olt'] . ' ' . Olts::position($row), 'online' => $row['status'] === 'online',
                             'href' => '/olts/' . (int) $row['olt_id'] . '/onus/' . (int) $row['id']];
                     }
                     foreach (Db::select('SELECT id, name, host FROM olts WHERE name LIKE ? OR host LIKE ? ORDER BY name LIMIT 3', [$like, $like]) as $row) {

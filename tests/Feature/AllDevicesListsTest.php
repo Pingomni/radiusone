@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Support\Olt\OltChangelog;
+use App\Support\Olt\Olts;
 use Inertia\Testing\AssertableInertia;
 use Tests\TestCase;
 
@@ -110,5 +111,11 @@ final class AllDevicesListsTest extends TestCase
         $total('q=Durresit', 1, 'HWTC00000001');
         $total('q=0691234', 1, 'HWTC00000001');
         $total('q=nothing-like-this', 0);
+    }
+
+    public function test_an_onu_name_is_the_part_before_the_smartolt_address(): void
+    {
+        $this->assertSame('Edi Basha', Olts::onuName('Edi Basha_descr_Dt e rregjistrimit 08.09.2026'));
+        $this->assertSame('FLUX ZYRE', Olts::onuName('FLUX ZYRE'));
     }
 }
