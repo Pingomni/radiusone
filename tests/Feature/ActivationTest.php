@@ -7,6 +7,7 @@ namespace Tests\Feature;
 use App\Support\Activation;
 use App\Support\License;
 use App\Support\Settings;
+use App\Support\SoftwareUpdate;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
@@ -54,6 +55,8 @@ final class ActivationTest extends TestCase
         Settings::save(Activation::KEY, (string) json_encode([...Activation::state(), 'last_attempt' => date('c', time() - 13 * 3600)]));
         $state = Activation::run();
         Http::assertSent(fn (Request $r) => $r->url() === 'https://account.test/api/v1/check-in' && $r['token'] === str_repeat('t', 64));
+        // The check-in tells the account this server's version and client count (My servers).
+        Http::assertSent(fn (Request $r) => $r->url() === 'https://account.test/api/v1/check-in' && $r['version'] === SoftwareUpdate::current() && is_int($r['clients']));
         $this->assertSame('2026-12-02', $state['lease_until']);
         $this->actingAsOperator();
         $this->get('/settings?tab=license')->assertInertia(fn ($page) => $page->where('license.activation.status', 'registered'));

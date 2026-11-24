@@ -139,12 +139,13 @@ final class Activation
         try {
             $response = null;
             if (!empty($state['token']) && ($state['license_id'] ?? null) === $id && ($state['fingerprint'] ?? null) === $fingerprint) {
-                $response = self::post('/api/v1/check-in', ['token' => $state['token'], 'fingerprint' => $fingerprint]);
+                // The version, client count and host name too, for "My servers" in the account (3.0.1): older portals ignore them.
+                $response = self::post('/api/v1/check-in', ['token' => $state['token'], 'fingerprint' => $fingerprint, 'hostname' => $hostname, ...self::about()]);
                 if (in_array($response->status(), [404, 409, 410], true)) {
                     $response = null; // this registration is gone (released, or another server): register again
                 }
             }
-            $response ??= self::post('/api/v1/activate', ['key' => $key, 'fingerprint' => $fingerprint, 'hostname' => $hostname]);
+            $response ??= self::post('/api/v1/activate', ['key' => $key, 'fingerprint' => $fingerprint, 'hostname' => $hostname, ...self::about()]);
         } catch (ConnectionException $e) {
             $state = [...$state, ...$base, 'status' => 'unreachable', 'message' => self::url() . ' could not be reached.'];
             self::store($state);
@@ -193,5 +194,22 @@ final class Activation
             'last_ok' => $state['last_ok'] ?? null,
             'account_url' => self::url(),
         ];
+    }
+
+    /**
+     * What the server tells the account about itself (My servers): its version and how many clients it holds.
+     *
+     * @return array{version?: string, clients?: int}
+     */
+    private static function about(): array
+    {
+        $about = ['version' => SoftwareUpdate::current()];
+        try {
+            $about['clients'] = License::clientCount();
+        } catch (Throwable) {
+            // The database is busy: the version alone.
+        }
+
+        return $about;
     }
 }
