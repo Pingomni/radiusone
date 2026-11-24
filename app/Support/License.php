@@ -10,16 +10,20 @@ namespace App\Support;
  * up to COMMUNITY_CLIENTS clients. A Pro key also sets how many clients the server may hold, by the licence
  * bought: Licence 1 up to 999, Licence 2 up to 4,999, Licence 3 no limit.
  *
+ * RadiusOne Community has a key too, free from the account portal: it registers the server (Registration)
+ * and turns on nothing, so the server runs exactly as Community does without a key.
+ *
  * A key is RADIUSONE1.<base64url payload JSON>.<base64url Ed25519 signature of the payload>, signed by
  * PingOmni (the account portal, account.pingomni.com) with the same key as DNSOne's. The payload is
- * {"v":1,"id","customer","issued","expires","features","clients"}, features ["all"] or feature names
- * (FEATURES), clients the limit (0: none; missing: PRO_CLIENTS).
+ * {"v":1,"product","id","customer","issued","expires","features","clients","edition"}, features ["all"] or
+ * feature names (FEATURES), clients the limit (0: none; missing: PRO_CLIENTS), edition "community" (features
+ * [], clients COMMUNITY_CLIENTS) or "pro". Keys issued before the free key have no edition: they are Pro.
  *
  * An expired licence never stops RADIUS or a Pro feature already set up: its pages stay readable and its
  * jobs keep running, but nothing in it can be changed until the licence is renewed, and new clients are
  * held to the Community limit. Over a limit, every client keeps working; only adding new ones is refused.
  *
- * @phpstan-type Licence array{state: string, customer?: string, id?: string, expires?: string, features?: list<string>, clients?: int|null, error?: string}
+ * @phpstan-type Licence array{state: string, edition?: string, customer?: string, id?: string, expires?: string, features?: list<string>, clients?: int|null, error?: string}
  */
 final class License
 {
@@ -68,10 +72,14 @@ final class License
             return ['state' => 'invalid', 'error' => 'This is not a RadiusOne licence key, or it was changed.'];
         }
         $features = array_values(array_filter((array) ($payload['features'] ?? []), 'is_string'));
-        $clients = $payload['clients'] ?? self::PRO_CLIENTS;
+        // A Community key turns on no feature and keeps the Community limit, whatever else it says.
+        $community = ($payload['edition'] ?? null) === 'community';
+        $clients = $community ? self::COMMUNITY_CLIENTS : ($payload['clients'] ?? self::PRO_CLIENTS);
+        $features = $community ? [] : $features;
 
         return [
             'state' => (string) $payload['expires'] < date('Y-m-d') ? 'expired' : 'active',
+            'edition' => $community ? 'community' : 'pro',
             'customer' => (string) ($payload['customer'] ?? ''),
             'id' => (string) ($payload['id'] ?? ''),
             'expires' => (string) $payload['expires'],
@@ -100,7 +108,9 @@ final class License
     {
         $limit = self::clientLimit();
         if ($limit !== null && self::clientCount() >= $limit) {
-            throw new \RuntimeException(match (self::current()['state']) {
+            $licence = self::current();
+            $community = ($licence['edition'] ?? '') === 'community';
+            throw new \RuntimeException(match ($community ? 'community' : $licence['state']) {
                 'active' => "This RadiusOne Pro licence covers {$limit} clients, and they are all in use. Archive clients you no longer serve, or move to a licence for more clients in your PingOmni account (account.pingomni.com): Licence 2 covers 4,999, Licence 3 has no limit.",
                 'expired' => "The RadiusOne Pro licence has expired: new clients are limited to {$limit} until it is renewed. Existing clients keep working.",
                 default => "RadiusOne Community covers up to {$limit} clients. Archive clients you no longer serve, or add a RadiusOne Pro licence under Settings → License.",

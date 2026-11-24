@@ -4,6 +4,12 @@ RadiusOne follows [semantic versioning](https://semver.org): **major** for chang
 upgrading, **minor** for new features, **patch** for fixes. The version is in the `VERSION` file and shows in
 the portal's sidebar and under Settings → System information.
 
+## 3.0.0 (2026-11-24)
+
+Needs action within 30 days of updating: add a licence key (a free one is enough) under Settings → License.
+
+- Every server registers with a free licence from the PingOmni account (RadiusOne Community, up to 150 clients). Without a key the console shows a banner for 30 days, then only "Register this server"; RADIUS, the queue, jobs and the payment pages never stop.
+
 ## 2.42.2 (2026-11-21)
 
 - OLT Ports: "Add description" and "Edit description" for an uplink port are in the port's More menu, next to Traffic graph. The Description column sits before the menu.

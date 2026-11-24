@@ -932,6 +932,8 @@ form.list-filterbar { padding: var(--sp-2) var(--sp-3); }
 .flash ul, .error-summary ul { margin: var(--sp-1) 0 0; }
 .flash a, .notice a, .notice-callout a, .error-summary a { font-weight: 600; }
 .notice-message { margin-top: var(--sp-1); }
+/* The registration banner (AppLayout) during the grace: above the page, on every page. */
+.registration-banner { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1) var(--sp-3); margin-bottom: var(--sp-3); }
 .error-page { display: grid; gap: var(--sp-2); justify-items: start; padding: var(--sp-5); }
 .error-page h2 { font-size: var(--fs-xl); }
 .revealed-secret code { display: inline-block; padding: 6px 10px; font-size: var(--fs-lg); letter-spacing: .04em; user-select: all; }
@@ -1343,6 +1345,11 @@ td .list-menu > summary:hover { border-color: var(--line); background: var(--sur
 .login-brand .po-mark { color: #fff; }
 .login-card-head h1 { font-size: 22px; letter-spacing: -.02em; line-height: 1.25; }
 .login-card-head p { color: var(--text-muted); }
+/* "Register this server" (pages/Register.tsx): the sign-in card, a little wider for the key. */
+.login-shell:has(.register-card) { width: min(520px, 100%); }
+.register-card label { display: grid; gap: 6px; font-size: var(--fs-sm); font-weight: 600; }
+.register-card textarea { width: 100%; font-family: var(--font-mono); font-size: var(--fs-sm); }
+.register-card code { word-break: break-all; }
 .login-field { display: grid; gap: 6px; font-size: var(--fs-sm); font-weight: 500; }
 .login-input { position: relative; display: flex; align-items: center; }
 .login-input > svg.icon { position: absolute; left: 12px; color: var(--text-faint); pointer-events: none; transition: color .15s; }

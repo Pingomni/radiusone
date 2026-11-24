@@ -5,11 +5,30 @@ import { TextArea, State } from '@/components/ui';
 import type { License } from '@/settings/types';
 
 const STATE: Record<License['state'], [string, string]> = {
-    none: ['Community', ''],
+    none: ['Community, not registered', 'warning'],
     active: ['Pro', 'success'],
     expired: ['Pro, expired', 'warning'],
     invalid: ['Key not valid', 'danger'],
 };
+
+/** The free key: RadiusOne Community, registered. */
+const COMMUNITY: Partial<Record<License['state'], [string, string]>> = {
+    active: ['Community (registered)', 'success'],
+    expired: ['Community, expired', 'warning'],
+};
+
+/** Whether the console needs a key (Registration), for the License tab. */
+function registrationRow(l: License): string {
+    const r = l.registration;
+    const days = r.days_left === 1 ? '1 day' : `${r.days_left} days`;
+    if (r.state === 'registered') {
+        return r.reason === 'expired' ? `Registered for ${days} more: renew the licence at account.pingomni.com` : 'Registered';
+    }
+    if (r.state === 'grace') {
+        return `Not registered: the console asks for a key in ${days}. RADIUS and every job keep running regardless.`;
+    }
+    return 'Not registered: the console opens only this tab until a key is saved. RADIUS and every job keep running.';
+}
 
 function accountRow(a: License['activation']): string {
     const when = a.last_ok ? a.last_ok.replace('T', ' ').slice(0, 16) : '';
@@ -23,11 +42,12 @@ function accountRow(a: License['activation']): string {
     }
 }
 
-/** Settings → License: the RadiusOne Pro key, what it turns on, and adding, replacing or removing it. */
+/** Settings → License: the licence key (RadiusOne Community's free key or a Pro key), what it turns on, and adding, replacing or removing it. */
 export function LicenseTab({ l }: { l: License }) {
     const form = useForm({ license_key: '' });
     const ask = useConfirm();
-    const [label, tone] = STATE[l.state];
+    const community = l.edition === 'community';
+    const [label, tone] = (community ? COMMUNITY[l.state] : undefined) ?? STATE[l.state];
     const licensed = l.state === 'active' || l.state === 'expired';
     const full = l.clientLimit !== null && l.clientCount >= l.clientLimit;
     const clients = l.clientLimit === null
@@ -40,19 +60,27 @@ export function LicenseTab({ l }: { l: License }) {
                 {licensed ? (
                     <SettingsRows rows={[
                         ['Licensed to', l.customer || '-'],
-                        ['Valid until', l.state === 'expired' ? `${l.expires} (expired: Pro keeps running as it is, but cannot be changed)` : (l.expires ?? '-')],
+                        ['Edition', community ? 'RadiusOne Community (registered)' : 'RadiusOne Pro'],
+                        ['Valid until', l.state === 'expired'
+                            ? `${l.expires} (expired: ${community ? 'renew the free licence at account.pingomni.com' : 'Pro keeps running as it is, but cannot be changed'})`
+                            : (l.expires ?? '-')],
                         ['Licence id', l.id || '-'],
                         ['Clients', clients],
+                        ['Registration', registrationRow(l)],
                         ['PingOmni account', accountRow(l.activation)],
                     ]} />
                 ) : (
                     <>
                         <p className="panel-text">
                             This is RadiusOne Community: clients, services, NAS devices, RADIUS, the network queue, reports and local backups,
-                            for up to {l.clientLimit?.toLocaleString()} clients. A RadiusOne Pro key from your PingOmni account
-                            (account.pingomni.com) turns on the features below, for up to 999 clients (Licence 1), 4,999 (Licence 2) or with no limit (Licence 3).
+                            for up to {l.clientLimit?.toLocaleString()} clients. Every server needs a licence key, also Community, whose key is free:
+                            get it from your PingOmni account (account.pingomni.com) and paste it below. A RadiusOne Pro key turns on the features
+                            below, for up to 999 clients (Licence 1), 4,999 (Licence 2) or with no limit (Licence 3).
                         </p>
-                        <SettingsRows rows={[['Clients', clients]]} />
+                        <SettingsRows rows={[['Clients', clients], ['Registration', registrationRow(l)]]} />
+                        <div className="form-actions">
+                            <a className="button primary" href={l.registerUrl} target="_blank" rel="noopener">Get a free licence</a>
+                        </div>
                     </>
                 )}
                 <div className="settings-list settings-sheet-list">
@@ -79,7 +107,9 @@ export function LicenseTab({ l }: { l: License }) {
                             <button type="button" onClick={async () => {
                                 const ok = await ask({
                                     title: 'Remove the licence?',
-                                    message: 'RadiusOne becomes Community: billing, notifications, NAS monitoring, remote backups and your logo turn off. Their data is kept, and comes back with a key.',
+                                    message: community
+                                        ? 'This server is no longer registered: the web console asks for a key again. RADIUS and every job keep running.'
+                                        : 'RadiusOne becomes Community: billing, notifications, NAS monitoring, remote backups and your logo turn off. Their data is kept, and comes back with a key. Without a key the web console asks for a free Community key.',
                                     confirmLabel: 'Remove',
                                 });
                                 if (ok) router.post('/settings/license', { license_key: '' }, { preserveScroll: true });

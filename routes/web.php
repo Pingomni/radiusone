@@ -52,6 +52,8 @@ Route::post('/logout', [AuthController::class, 'logout']);
 Route::middleware('frweb.auth')->group(function () {
     Route::get('/reauth', [AuthController::class, 'reauthPage']);
     Route::post('/reauth', [AuthController::class, 'reauth']);
+    // "Register this server" (RequireRegistration): the console's only page once the grace is over unregistered.
+    Route::get('/register', [SettingsController::class, 'register']);
 
     Route::middleware('permission:dashboard.view')->group(function () {
         Route::get('/', [DashboardController::class, 'dashboard']);

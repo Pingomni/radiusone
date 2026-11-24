@@ -5,7 +5,7 @@ import { DOCS_URL } from '@/lib/docs';
 import { FlashMessage } from '@/components/ui';
 import { useCan, useShared } from '@/lib/auth';
 import { useServerClock } from '@/lib/clock';
-import type { ProFeature } from '@/lib/types';
+import type { ProFeature, SharedProps } from '@/lib/types';
 
 type NavCount = 'clients' | 'weakOnus';
 
@@ -236,6 +236,21 @@ function TopSearch({ initial }: { initial: string }) {
     );
 }
 
+/** The grace without a licence key (Registration): on every page until the server is registered. */
+function RegistrationBanner({ banner, admin }: { banner: NonNullable<SharedProps['registration']>; admin: boolean }) {
+    const days = `${banner.days_left} ${banner.days_left === 1 ? 'day' : 'days'} left`;
+    return (
+        <div className="notice registration-banner" role="status">
+            <span>
+                {banner.reason === 'expired'
+                    ? <>Renew your free licence at <a href={banner.url} target="_blank" rel="noopener">account.pingomni.com</a> ({days})</>
+                    : <>Register this server: get a free RadiusOne licence at <a href={banner.url} target="_blank" rel="noopener">account.pingomni.com</a> ({days})</>}
+            </span>
+            {admin ? <Link href="/settings?tab=license">Settings → License</Link> : <span>Ask a workspace administrator to add the key.</span>}
+        </div>
+    );
+}
+
 /** Workspace shell: sidebar, topbar and page feedback (legacy render()). */
 export default function AppLayout({ title, heading = true, subtitle, actions, children }: {
     title: string;
@@ -247,7 +262,7 @@ export default function AppLayout({ title, heading = true, subtitle, actions, ch
     actions?: ReactNode;
     children: ReactNode;
 }) {
-    const { auth, flash, clock, appName, appVersion, pro, nav } = useShared();
+    const { auth, flash, clock, appName, appVersion, pro, nav, registration } = useShared();
     const time = useServerClock();
     const can = useCan();
     const { url } = usePage();
@@ -399,6 +414,7 @@ export default function AppLayout({ title, heading = true, subtitle, actions, ch
                             {actions && <div className="page-actions">{actions}</div>}
                         </div>
                     )}
+                    {registration && <RegistrationBanner banner={registration} admin={can('settings.manage')} />}
                     {flash && <FlashMessage flash={flash} />}
                     {children}
                 </div>

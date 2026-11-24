@@ -7,6 +7,7 @@ use App\Support\Branding;
 use App\Support\Currency;
 use App\Support\License;
 use App\Support\NavCounts;
+use App\Support\Registration;
 use App\Support\Settings;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
@@ -45,6 +46,8 @@ class HandleInertiaRequests extends Middleware
             'logo' => fn () => Settings::logo(),
             // RadiusOne Pro: which Pro features may run here (License::FEATURES), for the menu's "Pro" marks.
             'pro' => fn () => $user ? License::features() : [],
+            // While the server is in its grace without a registration (Registration), every page shows a banner.
+            'registration' => fn () => $user ? Registration::banner() : null,
             // The browser shows times in this clock and timezone (resources/js/lib/clock.ts).
             'currency' => fn () => Currency::code(),
             'clock' => fn () => ['time' => date('H:i'), 'now' => time(), 'timezone' => date_default_timezone_get()],

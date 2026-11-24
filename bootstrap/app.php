@@ -7,6 +7,7 @@ use App\Http\Middleware\PayHost;
 use App\Http\Middleware\RequirePermission;
 use App\Http\Middleware\RequirePro;
 use App\Http\Middleware\RequireRecentAuth;
+use App\Http\Middleware\RequireRegistration;
 use App\Http\Middleware\SecurityHeaders;
 use App\Support\Diagnostics;
 use App\Support\SchemaMismatch;
@@ -40,10 +41,12 @@ $app = Application::configure(basePath: dirname(__DIR__))
         $middleware->validateCsrfTokens(except: ['pay/webhook']);
         // The update progress stays readable while an update holds the portal in maintenance mode.
         $middleware->preventRequestsDuringMaintenance(except: ['settings/update/status']);
+        // Web console only: once the grace is over, an unregistered server opens only "Register this server".
         $middleware->web(append: [
             HandleInertiaRequests::class,
             // After Inertia's shared props: its refusals are ordinary error pages.
             PayHost::class,
+            RequireRegistration::class,
         ]);
         $middleware->alias([
             'frweb.auth' => Authenticate::class,

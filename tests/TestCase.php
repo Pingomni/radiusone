@@ -57,8 +57,8 @@ abstract class TestCase extends BaseTestCase
         License::save(self::licenceKey(['all'], date('Y-m-d', strtotime('+1 year')), clients: 0));
     }
 
-    /** A RadiusOne key signed with this process's test key pair, which License then trusts. $clients: the limit (0 none, null left out). */
-    protected static function licenceKey(array $features, string $expires, string $customer = 'Test ISP', ?int $clients = null, ?string $product = 'radiusone'): string
+    /** A RadiusOne key signed with this process's test key pair, which License then trusts. $clients: the limit (0 none, null left out); $edition: left out when null. */
+    protected static function licenceKey(array $features, string $expires, string $customer = 'Test ISP', ?int $clients = null, ?string $product = 'radiusone', ?string $edition = null): string
     {
         static $pair = null;
         if ($pair === null) {
@@ -67,7 +67,7 @@ abstract class TestCase extends BaseTestCase
         }
         $b64 = static fn (string $s): string => rtrim(strtr(base64_encode($s), '+/', '-_'), '=');
         $payload = json_encode(['v' => 1, 'id' => bin2hex(random_bytes(6)), 'customer' => $customer, 'issued' => date('Y-m-d'), 'expires' => $expires, 'features' => $features]
-            + ($clients === null ? [] : ['clients' => $clients]) + ($product === null ? [] : ['product' => $product]), JSON_THROW_ON_ERROR);
+            + ($clients === null ? [] : ['clients' => $clients]) + ($product === null ? [] : ['product' => $product]) + ($edition === null ? [] : ['edition' => $edition]), JSON_THROW_ON_ERROR);
 
         return License::PREFIX . '.' . $b64($payload) . '.' . $b64(sodium_crypto_sign_detached($payload, sodium_crypto_sign_secretkey($pair)));
     }

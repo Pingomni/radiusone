@@ -24,6 +24,7 @@ use App\Support\NotificationService;
 use App\Support\Paths;
 use App\Support\Pay\Gateways;
 use App\Support\PayPage;
+use App\Support\Registration;
 use App\Support\Retention;
 use App\Support\SchemaCompatibility;
 use App\Support\Security;
@@ -119,6 +120,8 @@ final class SettingsController extends Controller
                 'clientCount' => License::clientCount(),
                 'clientLimit' => License::clientLimit(),
                 'activation' => Activation::public(),
+                'registration' => Registration::status(),
+                'registerUrl' => Registration::URL,
             ] : null,
             'retention' => $tab === 'retention' ? [
                 'periods' => Retention::settings(),
@@ -292,6 +295,29 @@ final class SettingsController extends Controller
         ];
     }
 
+    /**
+     * "Register this server": the only console page once the grace is over without a registration
+     * (RequireRegistration). It says why, and takes a key as Settings → License does. Once registered it
+     * sends the operator on to the dashboard.
+     */
+    public function register(): Response|RedirectResponse
+    {
+        $status = Registration::status();
+        if ($status['state'] !== 'locked') {
+            return redirect('/');
+        }
+        $url = Activation::url();
+
+        return Inertia::render('Register', [
+            'reason' => $status['reason'],
+            'expires' => $status['expires'],
+            'url' => Registration::URL,
+            // The id the account portal lists this server under, when registration with the portal is on.
+            'serverId' => $url === '' ? null : Activation::fingerprint(),
+            'canSave' => Auth::can('settings.manage'),
+        ]);
+    }
+
     /** The user guide is on pingomni.com (resources/js/lib/docs.ts); old bookmarks of /docs go there. */
     public const DOCS_URL = 'https://pingomni.com/docs/radiusone/';
 
@@ -305,20 +331,30 @@ final class SettingsController extends Controller
         return redirect('/settings?tab=notifications&view=gateways' . ($channel === 'general' ? '' : '&gateway=' . $channel));
     }
 
-    /** Settings → License: adds, replaces or (empty) removes the RadiusOne Pro key. */
+    /**
+     * Settings → License: adds, replaces or (empty) removes the licence key, RadiusOne Community's free key or a
+     * RadiusOne Pro key. The "Register this server" page posts here too (from=register): a key it refuses is
+     * shown there again.
+     */
     public function saveLicense(Request $request): RedirectResponse
     {
         $before = License::current();
         $licence = License::save((string) $request->input('license_key', ''));
         if ($licence['state'] === 'invalid') {
-            return $this->fail($licence['error'] ?? 'This is not a RadiusOne licence key.', '/settings?tab=license');
+            return $this->fail($licence['error'] ?? 'This is not a RadiusOne licence key.', $request->input('from') === 'register' ? '/register' : '/settings?tab=license');
         }
         Audit::log('update', 'setting', 'license_key', ['license' => $before['id'] ?? null], ['license' => $licence['id'] ?? null, 'expires' => $licence['expires'] ?? null]);
         $expires = $licence['expires'] ?? '';
+        $community = ($licence['edition'] ?? '') === 'community';
+        $locked = Registration::locked();
         return match ($licence['state']) {
-            'none' => $this->ok('/settings?tab=license', 'Licence removed: this is RadiusOne Community. Pro data is kept; its pages and jobs are off.'),
-            'expired' => $this->warn('/settings?tab=license', "Licence saved, but it expired on {$expires}: its Pro features run as they are and cannot be changed until it is renewed."),
-            default => $this->ok('/settings?tab=license', "RadiusOne Pro is on until {$expires}."),
+            'none' => $locked
+                ? $this->warn('/settings?tab=license', 'Licence removed. This server is no longer registered, so the console opens only the registration page until a key is added.')
+                : $this->ok('/settings?tab=license', 'Licence removed: this is RadiusOne Community. Pro data is kept; its pages and jobs are off.'),
+            'expired' => $this->warn('/settings?tab=license', $community
+                ? "Licence saved, but it expired on {$expires}. Renew your free licence at account.pingomni.com" . ($locked ? ': until then the console opens only the registration page.' : '.')
+                : "Licence saved, but it expired on {$expires}: its Pro features run as they are and cannot be changed until it is renewed." . ($locked ? ' This server is no longer registered: renew the licence at account.pingomni.com.' : '')),
+            default => $this->ok('/settings?tab=license', $community ? "This server is registered: RadiusOne Community until {$expires}." : "RadiusOne Pro is on until {$expires}."),
         };
     }
 

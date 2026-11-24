@@ -30,6 +30,11 @@ export interface SharedProps {
     currency: string;
     /** RadiusOne Pro features (License::FEATURES) and whether each may run here; empty when signed out. */
     pro: Partial<Record<ProFeature, boolean>>;
+    /**
+     * Registration::banner(): set while this server runs on its grace without a licence key (reason none or
+     * invalid), or on the days after its key expired (expired); null otherwise and when signed out.
+     */
+    registration: { reason: 'none' | 'invalid' | 'expired'; days_left: number; url: string } | null;
     errors: Record<string, string>;
     [key: string]: unknown;
 }

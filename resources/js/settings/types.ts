@@ -112,11 +112,17 @@ export type Regional = {
 /** Settings → License (SettingsController::settings, License::current). */
 export type License = {
     state: 'none' | 'active' | 'expired' | 'invalid'; customer?: string; id?: string; expires?: string; error?: string;
+    /** community: the free key, which registers the server and turns on no Pro feature; pro: a paid key. */
+    edition?: 'community' | 'pro';
     features: Record<string, boolean>; names: Record<string, string>;
     /** Clients that count (not archived) and how many this licence allows; null: no limit. */
     clientCount: number; clientLimit: number | null; clients?: number | null;
     /** The licence's registration with the PingOmni account portal (report only: Pro never depends on it). */
     activation: { status: 'off' | 'pending' | 'registered' | 'in_use' | 'refused' | 'unreachable'; message: string; hostname: string | null; last_ok: string | null; account_url: string };
+    /** Registration::status(): whether the console needs a key, and the days left before it asks for one. */
+    registration: { state: 'registered' | 'grace' | 'locked'; reason: 'none' | 'invalid' | 'expired'; days_left: number | null; expires: string | null };
+    /** Where the free RadiusOne Community key is issued, and renewed. */
+    registerUrl: string;
 };
 
 export type FirewallRule = {
