@@ -181,6 +181,8 @@ Route::middleware('frweb.auth')->group(function () {
         Route::post('/clients/bulk', [ClientController::class, 'bulk']);
         Route::post('/clients/{username}/suspension', [ClientController::class, 'suspension'])->middleware('recent-auth');
         Route::post('/clients/{username}/delete', [ClientController::class, 'delete']);
+        Route::post('/clients/{username}/restore', [ClientController::class, 'restore'])->middleware('recent-auth');
+        Route::post('/clients/{username}/purge', [ClientController::class, 'purge'])->middleware('recent-auth');
         Route::post('/clients/{username}/disconnect', [ClientController::class, 'disconnect']);
         Route::post('/clients/{username}/reveal-password', [ClientController::class, 'revealPassword'])->middleware('recent-auth');
         Route::post('/documents/{id}/delete', [ClientController::class, 'documentDelete'])->whereNumber('id');

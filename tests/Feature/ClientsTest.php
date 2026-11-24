@@ -179,6 +179,78 @@ final class ClientsTest extends TestCase
         $this->getJson('/clients/nobody/usage')->assertNotFound();
     }
 
+    public function test_a_router_trying_first_does_not_block_its_client(): void
+    {
+        $this->actingAsOperator();
+        $this->plan();
+        // The CPE was set up before the client: its attempts were rejected and logged.
+        Db::exec('INSERT INTO radpostauth (username, pass, reply, authdate) VALUES ("alice", "", "Access-Reject", NOW())');
+        $this->post('/clients/save', $this->client())->assertSessionHas('flash.type', 'success');
+        $this->assertSame('active', Db::value('SELECT account_status FROM customer_profiles WHERE username="alice"'));
+
+        // Session history and accepted logins do not block either; only the RADIUS user list and clients do.
+        Db::exec('INSERT INTO radpostauth (username, pass, reply, authdate) VALUES ("carol", "", "Access-Accept", NOW())');
+        Db::exec('INSERT INTO radacct (username, nasipaddress, acctstarttime, acctstoptime) VALUES ("carol", "10.0.0.1", NOW(), NOW())');
+        $this->post('/clients/save', $this->client(['username' => 'carol', 'email' => 'carol@example.test']))->assertSessionHas('flash.type', 'success');
+        Db::exec('INSERT INTO radcheck (username, attribute, op, value) VALUES ("dave", "Cleartext-Password", ":=", "x")');
+        $this->post('/clients/save', $this->client(['username' => 'dave', 'email' => 'dave@example.test']))->assertSessionHasErrors(['username' => 'Username already exists in the RADIUS user list (radcheck). Remove it there or choose another username.']);
+        $this->post('/clients/alice/delete');
+        $this->post('/clients/save', $this->client())->assertSessionHasErrors(['username' => 'Username already exists: an archived client has it. Restore that client, or delete it permanently, under Clients → Archived.']);
+    }
+
+    public function test_restore_an_archived_client(): void
+    {
+        $this->actingAsOperator();
+        $this->plan();
+        $this->post('/clients/save', $this->client());
+        $this->post('/clients/alice/restore')->assertSessionHas('flash.type', 'danger');
+        $this->post('/clients/alice/delete');
+
+        $this->post('/clients/alice/restore')->assertRedirect('/clients/alice/edit');
+        $this->assertSame('disabled', Db::value('SELECT account_status FROM customer_profiles WHERE username="alice"'));
+        // Still cannot connect: rejected, and the archive removed the password.
+        $this->assertSame(1, (int) Db::value('SELECT COUNT(*) FROM radcheck WHERE username="alice" AND attribute="Auth-Type" AND value="Reject"'));
+        $this->assertSame(0, (int) Db::value('SELECT COUNT(*) FROM radcheck WHERE username="alice" AND attribute="Cleartext-Password"'));
+        $this->get('/clients/alice/edit')->assertInertia(fn ($page) => $page->where('canEdit', true));
+
+        $this->post('/clients/save', $this->client(['old_username' => 'alice', 'password' => 'new-pass-2']))->assertSessionHas('flash.type', 'success');
+        $this->assertSame('active', Db::value('SELECT account_status FROM customer_profiles WHERE username="alice"'));
+        $this->assertSame('new-pass-2', Db::value('SELECT value FROM radcheck WHERE username="alice" AND attribute="Cleartext-Password"'));
+        $this->assertSame(0, (int) Db::value('SELECT COUNT(*) FROM radcheck WHERE username="alice" AND attribute="Auth-Type"'));
+    }
+
+    public function test_delete_an_archived_client_permanently(): void
+    {
+        $this->actingAsOperator();
+        \App\Support\Currency::change('EUR');
+        $this->plan();
+        $this->post('/clients/save', $this->client());
+        $this->post('/clients/save', $this->client(['username' => 'bob', 'email' => 'bob@example.test']));
+        $this->post('/billing/invoices/save', ['id' => '', 'username' => 'alice', 'service_group' => 'home50', 'static_ip_pool_key' => '', 'billing_period' => 'monthly',
+            'description' => 'Home 50 service', 'currency' => 'EUR', 'discount_amount' => '0.00', 'tax_amount' => '0.00', 'issue_date' => date('Y-m-d'), 'status' => 'open', 'notes' => ''])->assertSessionHas('flash.type', 'success');
+        $invoice = (int) Db::value('SELECT MAX(id) FROM billing_invoices');
+        $this->assertGreaterThan(0, $invoice);
+        Db::exec('INSERT INTO radacct (username, nasipaddress, acctstarttime, acctupdatetime) VALUES ("alice", "10.0.0.1", NOW(), NOW())');
+
+        // Only an archived client, and not while a session is open.
+        $this->post('/clients/alice/purge')->assertSessionHas('flash.message', 'Archive the client first; only an archived client can be deleted permanently.');
+        $this->post('/clients/alice/delete');
+        $this->post('/clients/alice/purge')->assertSessionHas('flash.message', 'This client still has an open session. Disconnect it first, then delete.');
+        Db::exec('UPDATE radacct SET acctstoptime=NOW() WHERE username="alice"');
+
+        $this->post('/clients/alice/purge')->assertRedirect('/clients?status=archived')->assertSessionHas('flash.type', 'success');
+        $this->assertNull(Db::row('SELECT id FROM customer_profiles WHERE username="alice"'));
+        foreach (['radcheck', 'radreply', 'radusergroup', 'radacct', 'billing_invoices', 'access_policies'] as $table) {
+            $this->assertSame(0, (int) Db::value("SELECT COUNT(*) FROM {$table} WHERE username='alice'"), $table);
+        }
+        $this->assertSame(0, (int) Db::value('SELECT COUNT(*) FROM billing_invoice_items WHERE invoice_id=?', [$invoice]));
+        $this->assertSame('delete', Db::value('SELECT action FROM audit_logs WHERE entity_type="client" AND entity_id="alice" ORDER BY id DESC LIMIT 1'));
+        // Bob is untouched, and the name is free for a new client.
+        $this->assertSame('active', Db::value('SELECT account_status FROM customer_profiles WHERE username="bob"'));
+        $this->post('/clients/save', $this->client())->assertSessionHas('flash.type', 'success');
+        $this->assertSame('active', Db::value('SELECT account_status FROM customer_profiles WHERE username="alice"'));
+    }
+
     public function test_view_role_is_read_only(): void
     {
         $this->actingAsOperator();
@@ -188,5 +260,7 @@ final class ClientsTest extends TestCase
         $this->get('/clients/alice/edit')->assertOk()->assertInertia(fn ($page) => $page->where('canEdit', false)->where('client.overview.revealPassword', false));
         $this->post('/clients/save', $this->client(['old_username' => 'alice']))->assertForbidden();
         $this->post('/clients/alice/delete')->assertForbidden();
+        $this->post('/clients/alice/restore')->assertForbidden();
+        $this->post('/clients/alice/purge')->assertForbidden();
     }
 }

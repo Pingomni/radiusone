@@ -482,6 +482,38 @@ final class ClientController extends Controller
         return $this->ok('/clients', 'Client archived; billing and document history retained. Existing sessions are not disconnected.');
     }
 
+    /** An archived client back, Disabled: set a new PPPoE password and enable it on the edit page. */
+    public function restore(string $username): RedirectResponse
+    {
+        Auth::requireCan('danger.delete');
+        try {
+            RadiusRepository::restoreClient($username);
+        } catch (RuntimeException $e) {
+            return $this->fail($e->getMessage(), '/clients?status=archived');
+        }
+        Audit::log('restore', 'client', $username);
+        return $this->ok('/clients/' . rawurlencode($username) . '/edit', 'Client restored as Disabled. Set a new PPPoE password, choose Enabled and save to let them connect again.');
+    }
+
+    /** An archived client removed for good, with its billing, documents and session history. */
+    public function purge(string $username): RedirectResponse
+    {
+        Auth::requireCan('danger.delete');
+        try {
+            $files = RadiusRepository::purgeClient($username);
+        } catch (RuntimeException $e) {
+            return $this->fail($e->getMessage(), '/clients?status=archived');
+        }
+        foreach ($files as $file) {
+            if (is_file($file) && !@unlink($file)) {
+                Diagnostics::report(new RuntimeException('Could not remove a deleted client\'s document file.'));
+            }
+        }
+        // Only the username stays, in the audit log: who deleted whom, and when.
+        Audit::log('delete', 'client', $username, null, ['documents' => count($files)]);
+        return $this->ok('/clients?status=archived', "Client {$username} deleted permanently. The username can be used again.");
+    }
+
     public function disconnect(Request $request, string $username): RedirectResponse
     {
         Auth::requireCan('clients.disconnect');

@@ -1,6 +1,6 @@
 import { Link, router } from '@inertiajs/react';
 import { useEffect, useRef, useState, type MouseEvent } from 'react';
-import { DeleteButton, useConfirm } from '@/components/confirm';
+import { DeleteButton, PostButton, useConfirm } from '@/components/confirm';
 import Icon from '@/components/Icon';
 import { SignalReading } from '@/components/olt';
 import { DataTable, ExportMenu, Pagination } from '@/components/table';
@@ -221,6 +221,23 @@ export default function Clients({ filters, counts, plans, nasOptions, result }: 
                             message={`Authentication is disabled for ${r.username}. Billing and document history are kept. Existing sessions are not disconnected.`}
                             typeToConfirm={r.username}
                             title={`Archive client ${r.username}?`}
+                        />
+                    )}
+                    {can('danger.delete') && r.archived && (
+                        <PostButton
+                            action={`/clients/${encodeURIComponent(r.username)}/restore`}
+                            label="Restore"
+                            className="link"
+                            confirm={{ title: `Restore ${r.username}?`, message: 'The client comes back Disabled, with its billing and documents. Set a new PPPoE password and enable it to let them connect.', confirmLabel: 'Restore' }}
+                        />
+                    )}
+                    {can('danger.delete') && r.archived && (
+                        <DeleteButton
+                            action={`/clients/${encodeURIComponent(r.username)}/purge`}
+                            label="Delete permanently"
+                            message={`Everything about ${r.username} is removed: the profile, invoices and payments, contracts, documents, notifications and session history. This cannot be undone. The username becomes free again.`}
+                            typeToConfirm={r.username}
+                            title={`Delete ${r.username} permanently?`}
                         />
                     )}
                 </RowActions>

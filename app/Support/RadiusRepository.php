@@ -61,7 +61,9 @@ final class RadiusRepository
 
             $profile = Db::row('SELECT id,account_status,expiry_date FROM customer_profiles WHERE username = ? FOR UPDATE', [$oldUsername ?: $username]);
             if ($profile && $profile['account_status'] === 'archived') {
-                throw new RuntimeException('Archived customers cannot be provisioned or renamed.');
+                throw new RuntimeException($oldUsername
+                    ? 'Archived customers cannot be provisioned or renamed.'
+                    : 'Username already exists: an archived client has it. Restore that client, or delete it permanently, under Clients → Archived.');
             }
             if (!$profile) {
                 // A new client: within the licence's client limit (Community 150; Pro by licence: 999, 4,999 or none).
@@ -146,6 +148,149 @@ final class RadiusRepository
                 try {
                     $pdo->rollBack();
                     SubscriberPolicy::releaseLocks();
+                } catch (\Throwable) { /* Preserve the original failure. */
+                }
+            }
+            throw $e;
+        }
+    }
+
+    /**
+     * An archived client back in the list, Disabled: it cannot connect until an operator sets a new PPPoE password (the
+     * archive removed it) and enables the client. Billing, documents and history were kept by the archive.
+     */
+    public static function restoreClient(string $username): void
+    {
+        SchemaCompatibility::require('policy');
+        $pdo = Db::pdo();
+        $pdo->beginTransaction();
+        try {
+            $client = Db::row('SELECT id, account_status FROM customer_profiles WHERE username=? FOR UPDATE', [$username]);
+            if (!$client || $client['account_status'] !== 'archived') {
+                throw new RuntimeException('Only an archived client can be restored.');
+            }
+            // The archive's explicit rejection goes; provisioning writes a fresh one for a disabled client.
+            Db::exec('DELETE FROM radcheck WHERE username=?', [$username]);
+            $archiveDate = Db::value("SHOW COLUMNS FROM customer_profiles LIKE 'archived_at'") ? 'archived_at=NULL, ' : '';
+            Db::exec('UPDATE customer_profiles SET ' . $archiveDate . 'enabled=0, account_status="disabled", updated_at=NOW() WHERE username=?', [$username]);
+            self::provisionClient($username);
+            $pdo->commit();
+            SubscriberPolicy::releaseLocks();
+        } catch (\Throwable $e) {
+            if ($pdo->inTransaction()) {
+                try {
+                    $pdo->rollBack();
+                    SubscriberPolicy::releaseLocks();
+                } catch (\Throwable) { /* Preserve the original failure. */
+                }
+            }
+            throw $e;
+        }
+    }
+
+    /**
+     * An archived client removed for good: the profile, its RADIUS identity and session history (under this username and
+     * any former ones), billing (invoices, payments, contracts), documents, notifications and network state. The
+     * username is free again afterwards. Refused while a session is still open. All in one transaction: a table this
+     * does not know about makes the last DELETE fail on its foreign key, and nothing is removed.
+     *
+     * @return list<string> document files to remove once committed
+     */
+    public static function purgeClient(string $username): array
+    {
+        $pdo = Db::pdo();
+        $pdo->beginTransaction();
+        try {
+            $client = Db::row('SELECT id, account_status FROM customer_profiles WHERE username=? FOR UPDATE', [$username]);
+            if (!$client) {
+                throw new RuntimeException('Client not found.');
+            }
+            if ($client['account_status'] !== 'archived') {
+                throw new RuntimeException('Archive the client first; only an archived client can be deleted permanently.');
+            }
+            $id = (int) $client['id'];
+            $has = static fn (string $table): bool => (bool) Db::value('SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=?', [$table]);
+            $names = [$username];
+            if ($has('customer_identity_history')) {
+                foreach (Db::select('SELECT username FROM customer_identity_history WHERE customer_id=?', [$id]) as $row) {
+                    $names[] = (string) $row['username'];
+                }
+            }
+            $names = array_values(array_unique($names));
+            $in = implode(',', array_fill(0, count($names), '?'));
+            if (Db::value("SELECT COUNT(*) FROM radacct WHERE username IN ($in) AND acctstoptime IS NULL", $names)) {
+                throw new RuntimeException('This client still has an open session. Disconnect it first, then delete.');
+            }
+            $ids = static function (string $sql, array $params): array {
+                return array_map(static fn ($r) => (int) array_values($r)[0], Db::select($sql, $params));
+            };
+            $delete = static function (string $table, string $column, array $values) use ($has): void {
+                if ($values && $has($table)) {
+                    Db::exec("DELETE FROM {$table} WHERE {$column} IN (" . implode(',', array_fill(0, count($values), '?')) . ')', array_values($values));
+                }
+            };
+
+            // Network state and policy.
+            $subscriptions = $has('subscriptions') ? $ids('SELECT id FROM subscriptions WHERE customer_id=?', [$id]) : [];
+            $accounts = $has('subscriptions') ? $ids('SELECT billing_account_id FROM subscriptions WHERE customer_id=?', [$id]) : [];
+            $delete('network_operations', 'subscription_id', $subscriptions);
+            $delete('access_policies', 'subscription_id', $subscriptions);
+            $delete('access_policies', 'username', $names);
+            $delete('address_assignments', 'subscription_id', $subscriptions);
+            $delete('policy_revisions', 'subscription_id', $subscriptions);
+            $delete('subscriptions', 'id', $subscriptions);
+            if ($has('billing_accounts')) {
+                $accounts = array_merge($accounts, $ids('SELECT id FROM billing_accounts WHERE legacy_customer_id=?', [$id]));
+                $delete('billing_accounts', 'id', array_unique($accounts));
+            }
+
+            // Notifications.
+            foreach (['notification_deliveries', 'notification_onboarding', 'notification_jobs', 'customer_onus', 'usage_cycles'] as $table) {
+                $delete($table, 'customer_id', [$id]);
+            }
+            $delete('notification_logs', 'username', [$username]);
+
+            // Billing: card payments and contracts point at invoices, invoices may replace one another.
+            $invoices = $has('billing_invoices') ? $ids('SELECT id FROM billing_invoices WHERE username=?', [$username]) : [];
+            $delete('pay_payments', 'username', [$username]);
+            $delete('customer_contracts', 'username', [$username]);
+            $delete('billing_payments', 'username', [$username]);
+            $delete('billing_payments', 'invoice_id', $invoices);
+            $delete('billing_invoice_items', 'invoice_id', $invoices);
+            if ($invoices && Db::value("SHOW COLUMNS FROM billing_invoices LIKE 'replaces_invoice_id'")) {
+                Db::exec('UPDATE billing_invoices SET replaces_invoice_id=NULL WHERE id IN (' . implode(',', array_fill(0, count($invoices), '?')) . ')', $invoices);
+            }
+            $delete('billing_invoices', 'id', $invoices);
+
+            // Documents: the rows now, the files after the commit.
+            $files = [];
+            if ($has('uploaded_documents')) {
+                foreach (Db::select('SELECT stored_path FROM uploaded_documents WHERE username=?', [$username]) as $doc) {
+                    try {
+                        $files[] = Documents::path($doc);
+                    } catch (RuntimeException) { /* Already gone or unsafe: nothing to remove. */
+                    }
+                }
+                $delete('uploaded_documents', 'username', [$username]);
+            }
+
+            // RADIUS identity and history, under every name the client had.
+            if ($has('usage_session_marks')) {
+                Db::exec("DELETE m FROM usage_session_marks m JOIN radacct a ON a.radacctid=m.radacctid WHERE a.username IN ($in)", $names);
+            }
+            foreach (['radcheck', 'radreply', 'radusergroup', 'radacct', 'radpostauth', 'usage_daily', 'access_auth_events'] as $table) {
+                $delete($table, 'username', $names);
+            }
+            $delete('customer_identity_history', 'customer_id', [$id]);
+
+            Db::exec('DELETE FROM customer_profiles WHERE id=?', [$id]);
+            $pdo->commit();
+
+            return $files;
+        } catch (\Throwable $e) {
+            if ($pdo->inTransaction()) {
+                try {
+                    $pdo->rollBack();
                 } catch (\Throwable) { /* Preserve the original failure. */
                 }
             }
@@ -339,12 +484,17 @@ final class RadiusRepository
         if ($username === $old) {
             return;
         }
-        if (Db::row('SELECT username FROM customer_identity_history WHERE username=? FOR UPDATE', [$username])) {
-            throw new RuntimeException('Username is reserved by historical accounting identity.');
+        $existing = Db::row('SELECT account_status FROM customer_profiles WHERE username=? FOR UPDATE', [$username]);
+        if ($existing) {
+            throw new RuntimeException($existing['account_status'] === 'archived'
+                ? 'Username already exists: an archived client has it. Restore that client, or delete it permanently, under Clients → Archived.'
+                : 'Username already exists: another client has it.');
         }
-        foreach (['customer_profiles', 'radcheck', 'radreply', 'radusergroup', 'radacct', 'radpostauth'] as $table) {
+        // Only the RADIUS user list counts. Session history and login attempts never block a name: a router often tries
+        // before its client is created.
+        foreach (['radcheck', 'radreply', 'radusergroup'] as $table) {
             if (Db::row("SELECT username FROM $table WHERE username=? LIMIT 1 FOR UPDATE", [$username])) {
-                throw new RuntimeException('Username already exists in managed or unmanaged RADIUS/history records.');
+                throw new RuntimeException('Username already exists in the RADIUS user list (' . $table . '). Remove it there or choose another username.');
             }
         }
         if ($old) {
