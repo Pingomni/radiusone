@@ -4,6 +4,12 @@ RadiusOne follows [semantic versioning](https://semver.org): **major** for chang
 upgrading, **minor** for new features, **patch** for fixes. The version is in the `VERSION` file and shows in
 the portal's sidebar and under Settings → System information.
 
+## 3.1.0 (2026-11-25)
+
+- Clients → Archived: **Restore** brings an archived client back as Disabled, with its billing and documents. Set a new PPPoE password and choose Enabled to let them connect again.
+- Clients → Archived: **Delete permanently** removes an archived client with its invoices, payments, contracts, documents, notifications and session history. It is refused while the client still has an open session, and the username can be used again afterwards. Superadmins only.
+- New clients: a username is refused only when another client (archived ones included) or the RADIUS user list already has it, and the message says which. Login attempts and session history no longer block it, so a router that tried to connect before its client was created no longer stops you.
+
 ## 3.0.2 (2026-11-24)
 
 - "Register this server": no second logo and name in the card (it was white on white in light mode).
