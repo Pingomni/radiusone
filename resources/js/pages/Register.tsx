@@ -1,7 +1,6 @@
 import { Link, router, useForm } from '@inertiajs/react';
 import { FlashMessage, TextArea } from '@/components/ui';
 import { AuthLayout } from '@/layouts/AuthLayout';
-import { BrandLogo } from '@/layouts/AppLayout';
 import { useShared } from '@/lib/auth';
 
 type Props = { reason: 'none' | 'invalid' | 'expired'; expires: string | null; url: string; serverId: string | null; canSave: boolean };
@@ -11,7 +10,7 @@ type Props = { reason: 'none' | 'invalid' | 'expired'; expires: string | null; u
  * key. RADIUS and every job keep running; the page says so, links to the free key and takes it here.
  */
 export default function Register({ reason, expires, url, serverId, canSave }: Props) {
-    const { flash, appName } = useShared();
+    const { flash } = useShared();
     const form = useForm({ license_key: '', from: 'register' });
     const expired = reason === 'expired';
 
@@ -23,7 +22,6 @@ export default function Register({ reason, expires, url, serverId, canSave }: Pr
                 onSubmit={(e) => { e.preventDefault(); form.post('/settings/license'); }}
             >
                 <div className="login-card-head">
-                    <div className="login-brand"><BrandLogo /><strong>{appName}</strong></div>
                     <h1>Register this server</h1>
                     <p>
                         {expired

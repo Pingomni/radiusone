@@ -4,6 +4,10 @@ RadiusOne follows [semantic versioning](https://semver.org): **major** for chang
 upgrading, **minor** for new features, **patch** for fixes. The version is in the `VERSION` file and shows in
 the portal's sidebar and under Settings → System information.
 
+## 3.0.2 (2026-11-24)
+
+- "Register this server": no second logo and name in the card (it was white on white in light mode).
+
 ## 3.0.1 (2026-11-24)
 
 - The check-in with the PingOmni account carries the server's version and client count, shown under Servers in the account.
