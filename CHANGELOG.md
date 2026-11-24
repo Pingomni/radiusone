@@ -4,6 +4,11 @@ RadiusOne follows [semantic versioning](https://semver.org): **major** for chang
 upgrading, **minor** for new features, **patch** for fixes. The version is in the `VERSION` file and shows in
 the portal's sidebar and under Settings → System information.
 
+## 3.1.1 (2026-11-25)
+
+- Clients on a phone: the Bulk actions menu opens inside the screen, so its actions (Suspend, Disable, Archive) can be chosen.
+- Clients: superadmins always see the Archived tab, even before any client is archived.
+
 ## 3.1.0 (2026-11-25)
 
 - Clients → Archived: **Restore** brings an archived client back as Disabled, with its billing and documents. Set a new PPPoE password and choose Enabled to let them connect again.
