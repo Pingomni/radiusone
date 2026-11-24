@@ -1527,6 +1527,11 @@ th.num, td.num { text-align: right; }
 .view-tabs > a { display: inline-flex; align-items: baseline; gap: 6px; padding: 12px 0 10px; border-bottom: 2px solid transparent; margin-bottom: -1px; color: var(--text-muted); font-weight: 500; white-space: nowrap; }
 .view-tabs > a:hover { color: var(--text-strong); text-decoration: none; }
 .view-tabs > a[aria-current="page"] { border-bottom-color: var(--text-strong); color: var(--text-strong); }
+/* On a phone every view is in sight: the tabs wrap onto more lines instead of hiding off the edge. */
+@media (max-width: 760px) {
+  .view-tabs { flex-wrap: wrap; row-gap: 0; column-gap: 18px; overflow-x: visible; }
+  .view-tabs > a { padding: 8px 0 6px; }
+}
 .view-count { color: var(--text-faint); font-size: var(--fs-sm); font-variant-numeric: tabular-nums; }
 .clients-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); padding: var(--sp-2) var(--sp-3) var(--sp-2) 18px; border-bottom: 1px solid var(--line); }
 .clients-toolbar > form.list-filterbar { flex: 1 1 auto; padding: 0; align-items: center; }
