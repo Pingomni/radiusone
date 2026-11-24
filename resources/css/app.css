@@ -1098,6 +1098,10 @@ form.list-filterbar { padding: var(--sp-2) var(--sp-3); }
 .list-menu-options .list-subline { margin-top: 1px; }
 .list-menu-options .bulk-actions { display: grid; gap: var(--sp-2); margin: 0; padding: var(--sp-2); }
 .list-menu-options .bulk-actions button { justify-self: start; }
+/* On a phone the bulk menu sits at the left of the toolbar: open it rightwards, inside the screen. */
+@media (max-width: 760px) {
+  .list-bulk-menu > .list-menu-options { right: auto; left: 0; }
+}
 
 /* Row actions open in place so scrolling tables never clip them. */
 td .list-menu > summary {

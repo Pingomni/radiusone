@@ -260,7 +260,7 @@ export default function Clients({ filters, counts, plans, nasOptions, result }: 
             <div className={`clients-workspace${open ? ' has-panel' : ''}`}>
                 <section className="panel clients-page clients-list" aria-label="Clients">
                     <nav className="view-tabs" aria-label="Client views">
-                        {VIEWS.filter(([status, , key]) => status !== 'archived' || counts[key] > 0 || filters.status === 'archived').map(([status, label, key]) => (
+                        {VIEWS.filter(([status, , key]) => status !== 'archived' || counts[key] > 0 || filters.status === 'archived' || can('danger.delete')).map(([status, label, key]) => (
                             <Link key={key} href={`/clients${query(clean({ ...filters, status }))}`} aria-current={filters.status === status ? 'page' : undefined} preserveScroll>
                                 {label} <span className="view-count">{counts[key].toLocaleString('en-US')}</span>
                             </Link>
