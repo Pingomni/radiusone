@@ -96,6 +96,27 @@ final class ClientsTest extends TestCase
         $this->assertSame('Durres', Db::value('SELECT city FROM customer_profiles WHERE username="alice2"'));
     }
 
+    public function test_a_client_can_take_back_its_former_username(): void
+    {
+        $this->actingAsOperator();
+        $this->plan();
+        $this->post('/clients/save', $this->client());
+        $this->post('/clients/save', $this->client(['old_username' => 'alice', 'username' => 'alice2', 'password' => '']))->assertSessionHas('flash.type', 'success');
+        // The old name is reserved against anyone else.
+        $this->post('/clients/save', $this->client(['username' => 'alice', 'email' => 'other@example.test']))->assertSessionHasErrors('username');
+
+        $this->post('/clients/save', $this->client(['old_username' => 'alice2', 'username' => 'alice', 'password' => '']))->assertSessionHas('flash.type', 'success');
+        $this->assertSame('active', Db::value('SELECT account_status FROM customer_profiles WHERE username="alice"'));
+        // Alice logs in as before: her password, no rejection left over; alice2 is now the reserved one.
+        $this->assertSame('pppoe-pass-1', Db::value('SELECT value FROM radcheck WHERE username="alice" AND attribute="Cleartext-Password"'));
+        $this->assertSame(0, (int) Db::value('SELECT COUNT(*) FROM radcheck WHERE username="alice" AND attribute="Auth-Type"'));
+        $this->assertSame(1, (int) Db::value('SELECT COUNT(*) FROM radcheck WHERE username="alice2" AND attribute="Auth-Type" AND value="Reject"'));
+        $this->assertSame(['alice2'], array_column(Db::select('SELECT username FROM customer_identity_history'), 'username'));
+        // And again, back and forth.
+        $this->post('/clients/save', $this->client(['old_username' => 'alice', 'username' => 'alice2', 'password' => '']))->assertSessionHas('flash.type', 'success');
+        $this->assertSame('pppoe-pass-1', Db::value('SELECT value FROM radcheck WHERE username="alice2" AND attribute="Cleartext-Password"'));
+    }
+
     public function test_reveal_password_bulk_suspend_and_archive(): void
     {
         $this->actingAsOperator();

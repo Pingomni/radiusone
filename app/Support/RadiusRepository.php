@@ -490,6 +490,10 @@ final class RadiusRepository
                 ? 'Username already exists: an archived client has it. Restore that client, or delete it permanently, under Clients → Archived.'
                 : 'Username already exists: another client has it.');
         }
+        // A client may take back one of its own former usernames: the rename left only its reservation there.
+        if ($old && self::isOwnFormerName($username, $old)) {
+            return;
+        }
         // Only the RADIUS user list counts. Session history and login attempts never block a name: a router often tries
         // before its client is created.
         foreach (['radcheck', 'radreply', 'radusergroup'] as $table) {
@@ -510,9 +514,33 @@ final class RadiusRepository
         }
     }
 
+    /**
+     * $name was a former username of the client now called $current, and nothing but the reservation the rename left
+     * (Auth-Type := Reject) is in the RADIUS user list under it.
+     */
+    private static function isOwnFormerName(string $name, string $current): bool
+    {
+        $id = Db::value('SELECT id FROM customer_profiles WHERE username=?', [$current]);
+        if (!$id || !Db::row('SELECT username FROM customer_identity_history WHERE username=? AND customer_id=? FOR UPDATE', [$name, $id])) {
+            return false;
+        }
+        foreach (['radreply', 'radusergroup'] as $table) {
+            if (Db::row("SELECT username FROM $table WHERE username=? LIMIT 1 FOR UPDATE", [$name])) {
+                return false;
+            }
+        }
+
+        return !Db::row('SELECT id FROM radcheck WHERE username=? AND NOT (attribute="Auth-Type" AND value="Reject") LIMIT 1 FOR UPDATE', [$name]);
+    }
+
     private static function renameRadiusUser(string $old, string $new): void
     {
         $id = Db::value('SELECT id FROM customer_profiles WHERE username=?', [$old]);
+        // Taking back a former username: its reservation and its line in the history go; it is the current name again.
+        if (self::isOwnFormerName($new, $old)) {
+            Db::exec('DELETE FROM radcheck WHERE username=? AND attribute="Auth-Type" AND value="Reject"', [$new]);
+            Db::exec('DELETE FROM customer_identity_history WHERE username=? AND customer_id=?', [$new, $id]);
+        }
         Db::exec('INSERT INTO customer_identity_history (username,customer_id,renamed_at) VALUES (?,?,NOW())', [$old, $id]);
         foreach (['radcheck', 'radreply', 'radusergroup'] as $table) {
             Db::exec("UPDATE $table SET username=? WHERE username=?", [$new, $old]);
