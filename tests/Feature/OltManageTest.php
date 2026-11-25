@@ -47,32 +47,44 @@ final class OltManageTest extends TestCase
     {
         $dir = (string) getenv('RADIUSONE_TEST_DIR');
         $this->log = $dir . '/fake-olt-' . bin2hex(random_bytes(4)) . '.log';
-        $this->snmpPort = random_int(20000, 40000);
-        $this->telnetPort = $this->snmpPort + 1;
-        $config = $dir . '/fake-olt-' . bin2hex(random_bytes(4)) . '.json';
-        $text = static fn (string $v) => [4, base64_encode($v)];
-        $b = self::BASE;
-        touch($this->log);
-        file_put_contents($config, json_encode($more + [
-            'log' => $this->log, 'ready' => $config . '.ready', 'snmp_port' => $this->snmpPort, 'telnet_port' => $this->telnetPort,
-            'community' => 'public-ro', 'user' => 'manager', 'password' => 'manage-pass', 'mac_table' => "  Total: 0\n",
-            'oids' => $oids + [
-                '1.3.6.1.2.1.1.1.0' => $text('Huawei Integrated Access Software MA5800-X7'),
-                '1.3.6.1.2.1.2.2.1.2.' . self::PORT_A => $text('GPON 0/1/0'),
-                "$b.43.1.3." . self::PORT_A . '.3' => $text('HWTC' . hex2bin('1234ABCD')),
-                "$b.43.1.3." . self::PORT_A . '.4' => $text('HWTC' . hex2bin('1234ABCE')),
-                "$b.46.1.1." . self::PORT_A . '.3' => [2, 1],
-                "$b.46.1.1." . self::PORT_A . '.4' => [2, 2],
-                "$b.46.1.15." . self::PORT_A . '.3' => [2, 1],
-                "$b.46.1.15." . self::PORT_A . '.4' => [2, 2],
-            ],
-        ], JSON_THROW_ON_ERROR));
-        $pipes = [];
-        $this->agent = proc_open([PHP_BINARY, base_path('tests/fixtures/fake-olt.php'), $config], [1 => ['file', '/dev/null', 'w'], 2 => ['file', '/dev/null', 'w']], $pipes);
-        for ($i = 0; $i < 100 && !is_file($config . '.ready'); $i++) {
-            usleep(50000);
+        // A port in use or a slow machine (CI) can stop the fake OLT from starting: it is tried again on new ports,
+        // and what it printed is shown if it never starts.
+        $errors = '';
+        for ($attempt = 0; $attempt < 3; $attempt++) {
+            $this->snmpPort = random_int(20000, 40000);
+            $this->telnetPort = $this->snmpPort + 1;
+            $config = $dir . '/fake-olt-' . bin2hex(random_bytes(4)) . '.json';
+            $text = static fn (string $v) => [4, base64_encode($v)];
+            $b = self::BASE;
+            touch($this->log);
+            file_put_contents($config, json_encode($more + [
+                'log' => $this->log, 'ready' => $config . '.ready', 'snmp_port' => $this->snmpPort, 'telnet_port' => $this->telnetPort,
+                'community' => 'public-ro', 'user' => 'manager', 'password' => 'manage-pass', 'mac_table' => "  Total: 0\n",
+                'oids' => $oids + [
+                    '1.3.6.1.2.1.1.1.0' => $text('Huawei Integrated Access Software MA5800-X7'),
+                    '1.3.6.1.2.1.2.2.1.2.' . self::PORT_A => $text('GPON 0/1/0'),
+                    "$b.43.1.3." . self::PORT_A . '.3' => $text('HWTC' . hex2bin('1234ABCD')),
+                    "$b.43.1.3." . self::PORT_A . '.4' => $text('HWTC' . hex2bin('1234ABCE')),
+                    "$b.46.1.1." . self::PORT_A . '.3' => [2, 1],
+                    "$b.46.1.1." . self::PORT_A . '.4' => [2, 2],
+                    "$b.46.1.15." . self::PORT_A . '.3' => [2, 1],
+                    "$b.46.1.15." . self::PORT_A . '.4' => [2, 2],
+                ],
+            ], JSON_THROW_ON_ERROR));
+            $stderr = $config . '.err';
+            $pipes = [];
+            $this->agent = proc_open([PHP_BINARY, base_path('tests/fixtures/fake-olt.php'), $config], [1 => ['file', '/dev/null', 'w'], 2 => ['file', $stderr, 'w']], $pipes);
+            for ($i = 0; $i < 300 && !is_file($config . '.ready') && proc_get_status($this->agent)['running']; $i++) {
+                usleep(50000);
+            }
+            if (is_file($config . '.ready')) {
+                return;
+            }
+            $errors .= (string) @file_get_contents($stderr);
+            proc_terminate($this->agent);
+            proc_close($this->agent);
         }
-        $this->assertFileExists($config . '.ready');
+        $this->fail('The fake OLT did not start: ' . $errors);
     }
 
     /** @return array<string, mixed> */
