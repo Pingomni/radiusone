@@ -157,6 +157,73 @@ final class RadiusRepository
     }
 
     /**
+     * A DHCP client's new device: its username is the MAC address, so the new MAC becomes its username. The same client
+     * (same row, plan, billing, documents and contracts) keeps everything; its RADIUS entries and its history (sessions,
+     * login attempts, daily usage) move to the new MAC, and nothing is left under the old one. PPPoE usernames never
+     * change. Returns the new username.
+     */
+    public static function changeDevice(string $username, string $mac): string
+    {
+        SchemaCompatibility::require('policy');
+        $new = self::normalizeMacAddress($mac);
+        if (!preg_match('/^[0-9A-F]{2}(:[0-9A-F]{2}){5}$/', $new)) {
+            throw new RuntimeException('Enter the new MAC address, like AA:BB:CC:DD:EE:FF.');
+        }
+        $pdo = Db::pdo();
+        $pdo->beginTransaction();
+        try {
+            $client = Db::row('SELECT id, auth_method, account_status FROM customer_profiles WHERE username=? FOR UPDATE', [$username]);
+            if (!$client) {
+                throw new RuntimeException('Client not found.');
+            }
+            if ($client['auth_method'] !== 'dhcp') {
+                throw new RuntimeException('Only a DHCP client changes device: a PPPoE username never changes.');
+            }
+            if ($client['account_status'] === 'archived') {
+                throw new RuntimeException('Restore the client first.');
+            }
+            if ($new === $username) {
+                throw new RuntimeException('That is already this client\'s MAC address.');
+            }
+            self::assertIdentityAvailable($new, $username);
+            foreach (['billing_invoices', 'billing_payments', 'uploaded_documents', 'notification_logs'] as $table) {
+                if (Db::value("SELECT COUNT(*) FROM $table WHERE username=?", [$username]) && !Db::value('SELECT COUNT(*) FROM information_schema.REFERENTIAL_CONSTRAINTS WHERE CONSTRAINT_SCHEMA=DATABASE() AND TABLE_NAME=? AND REFERENCED_TABLE_NAME="customer_profiles" AND UPDATE_RULE="CASCADE"', [$table])) {
+                    throw new RuntimeException('Identity reference migration is required before changing this client\'s device.');
+                }
+            }
+            foreach (['radcheck', 'radreply', 'radusergroup', 'radacct', 'radpostauth'] as $table) {
+                Db::exec("UPDATE $table SET username=? WHERE username=?", [$new, $username]);
+            }
+            $has = static fn (string $table): bool => (bool) Db::value('SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=?', [$table]);
+            if ($has('access_auth_events')) {
+                Db::exec('UPDATE access_auth_events SET username=? WHERE username=?', [$new, $username]);
+            }
+            if ($has('usage_daily')) {
+                foreach (Db::select('SELECT day, down, up FROM usage_daily WHERE username=?', [$username]) as $day) {
+                    Db::exec('INSERT INTO usage_daily (username, day, down, up) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE down=down+VALUES(down), up=up+VALUES(up)', [$new, $day['day'], $day['down'], $day['up']]);
+                }
+                Db::exec('DELETE FROM usage_daily WHERE username=?', [$username]);
+            }
+            // The same row: billing, documents, contracts and notices follow through ON UPDATE CASCADE.
+            Db::exec('UPDATE customer_profiles SET username=?, mac_address=?, updated_at=NOW() WHERE id=?', [$new, $new, $client['id']]);
+            self::provisionClient($new);
+            $pdo->commit();
+            SubscriberPolicy::releaseLocks();
+
+            return $new;
+        } catch (\Throwable $e) {
+            if ($pdo->inTransaction()) {
+                try {
+                    $pdo->rollBack();
+                    SubscriberPolicy::releaseLocks();
+                } catch (\Throwable) { /* Preserve the original failure. */
+                }
+            }
+            throw $e;
+        }
+    }
+
+    /**
      * An archived client back in the list, Disabled: it cannot connect until an operator sets a new PPPoE password (the
      * archive removed it) and enables the client. Billing, documents and history were kept by the archive.
      */

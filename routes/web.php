@@ -181,6 +181,7 @@ Route::middleware('frweb.auth')->group(function () {
         Route::post('/clients/bulk', [ClientController::class, 'bulk']);
         Route::post('/clients/{username}/suspension', [ClientController::class, 'suspension'])->middleware('recent-auth');
         Route::post('/clients/{username}/delete', [ClientController::class, 'delete']);
+        Route::post('/clients/{username}/device', [ClientController::class, 'device']);
         Route::post('/clients/{username}/restore', [ClientController::class, 'restore'])->middleware('recent-auth');
         Route::post('/clients/{username}/purge', [ClientController::class, 'purge'])->middleware('recent-auth');
         Route::post('/clients/{username}/disconnect', [ClientController::class, 'disconnect']);

@@ -1,4 +1,4 @@
-import { Link, useForm } from '@inertiajs/react';
+import { Link, router, useForm, usePage } from '@inertiajs/react';
 import { useState, type ReactNode } from 'react';
 import { InvoiceTable, ReceiptActions, StatCards, type InvoiceRow, type Stat } from '@/components/billing';
 import { PostButton } from '@/components/confirm';
@@ -50,6 +50,30 @@ function Section({ title, children }: { title: string; description?: string; ico
             </header>
             <div className="form-grid">{children}</div>
         </section>
+    );
+}
+
+/** A DHCP client's new device: its MAC address is its username, so the new MAC replaces it; the client keeps the rest. */
+function ChangeDevice({ username }: { username: string }) {
+    const [open, setOpen] = useState(false);
+    const [mac, setMac] = useState('');
+    const [busy, setBusy] = useState(false);
+    const error = (usePage().props.errors as Record<string, string> | undefined)?.device_mac;
+    const change = () => router.post(`/clients/${encodeURIComponent(username)}/device`, { mac_address: mac }, { preserveScroll: true, onStart: () => setBusy(true), onFinish: () => setBusy(false) });
+    if (!open && !error) return <button type="button" className="button" onClick={() => setOpen(true)}><Icon name="refresh" />Change device</button>;
+    return (
+        <div className="span2">
+            <Field label="New device's MAC address" name="device_mac" value={mac} onChange={(e) => setMac(e.target.value)} placeholder="AA:BB:CC:DD:EE:FF" error={error}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); if (mac.trim() !== '') change(); } }}
+                hint="The new MAC becomes the username. The plan, billing and history stay with this client." />
+            <div className="form-actions">
+                <button type="button" className="button primary" disabled={busy || mac.trim() === ''}
+                    onClick={change}>
+                    {busy ? 'Changing…' : 'Change device'}
+                </button>
+                <button type="button" className="button" onClick={() => { setOpen(false); setMac(''); }}>Cancel</button>
+            </div>
+        </div>
     );
 }
 
@@ -265,7 +289,8 @@ export default function ClientForm({ values, draftRestored, draftTab, canEdit, c
                         {field('Trusted NAS access circuit', 'circuit_id', { hint: 'Only on an isolated access port or VLAN.' })}
                     </>
                 ) : <p className="span2">Access profiles require migration 018 before provisioning.</p>}
-                {field('CPE MAC address', 'mac_address', { required: dhcp, readOnly: dhcp && Boolean(client), hint: dhcp && client ? 'For a DHCP client the MAC address is its username: it cannot be changed.' : undefined })}
+                {field('CPE MAC address', 'mac_address', { required: dhcp, readOnly: dhcp && Boolean(client), hint: dhcp && client ? 'The MAC address is this client\'s username. A new router? Use Change device.' : undefined })}
+                {dhcp && client && canEdit && <ChangeDevice username={values.username} />}
                 {!dhcp && <Check label="Allow this MAC only" disabled={disabled} {...bindCheck(form, 'mac_lock')} />}
                 <Select label="NAS restriction" disabled={disabled} options={{ all: 'All NAS', nas_ip: 'NAS-IP-Address', nas_identifier: 'NAS-Identifier' }} {...bind(form, 'nas_restriction_type')} />
                 {field('NAS restriction value', 'nas_restriction_value')}

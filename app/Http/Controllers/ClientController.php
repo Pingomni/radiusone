@@ -482,6 +482,20 @@ final class ClientController extends Controller
         return $this->ok('/clients', 'Client archived; billing and document history retained. Existing sessions are not disconnected.');
     }
 
+    /** A DHCP client's new device: the new MAC address becomes its username, everything else stays with it. */
+    public function device(Request $request, string $username): RedirectResponse
+    {
+        Auth::requireCan('clients.manage');
+        $back = '/clients/' . rawurlencode($username) . '/edit?tab=account';
+        try {
+            $new = RadiusRepository::changeDevice($username, (string) $request->input('mac_address', ''));
+        } catch (RuntimeException $e) {
+            return redirect($back)->withErrors(['device_mac' => $e->getMessage()])->with('flash', ['type' => 'danger', 'message' => $e->getMessage()]);
+        }
+        Audit::log('device_changed', 'client', $new, ['username' => $username], ['username' => $new]);
+        return $this->ok('/clients/' . rawurlencode($new) . '/edit?tab=account', "Device changed: the client now connects as {$new}. Its plan, billing and history stay with it.");
+    }
+
     /** An archived client back, Disabled: set a new PPPoE password and enable it on the edit page. */
     public function restore(string $username): RedirectResponse
     {
