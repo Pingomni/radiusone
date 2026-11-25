@@ -4,6 +4,10 @@ RadiusOne follows [semantic versioning](https://semver.org): **major** for chang
 upgrading, **minor** for new features, **patch** for fixes. The version is in the `VERSION` file and shows in
 the portal's sidebar and under Settings → System information.
 
+## 3.1.7 (2026-11-25)
+
+- Clients: a DHCP client can change device. Change device (Account tab, next to the MAC address) makes the new router's MAC address the client's username; the same client keeps its plan, billing, documents and history, and the old MAC address is free again. PPPoE usernames still never change.
+
 ## 3.1.6 (2026-11-25)
 
 - Clients: a username is given once, when the client is created, and can never be changed. On an existing client the username, the authentication method and (for DHCP) the MAC address are read-only. To use another username, create a new client and archive the old one.
