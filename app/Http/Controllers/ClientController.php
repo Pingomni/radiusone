@@ -9,6 +9,7 @@ use App\Http\Support\Csv;
 use App\Http\Support\Format;
 use App\Http\Support\FormDrafts;
 use App\Http\Support\Invoices;
+use App\Http\Support\MonitoringData;
 use App\Http\Support\Present;
 use App\Support\AccessPolicy;
 use App\Support\Accounting;
@@ -173,10 +174,7 @@ final class ClientController extends Controller
             'header' => Clients::header($row, $planNames, $openInvoices),
             'overview' => Clients::overview($row),
             'usage' => $this->usageHistory($ids, '30d', (int) $row['id']),
-            'weeklyTraffic' => array_reverse(array_map(static fn (array $r) => ['day' => (string) $r['traffic_time'], 'down' => (int) $r['down'], 'up' => (int) $r['up']], Db::select(
-                'SELECT DATE(COALESCE(acctupdatetime, acctstoptime, acctstarttime)) AS traffic_time, COALESCE(SUM(acctoutputoctets), 0) AS down, COALESCE(SUM(acctinputoctets), 0) AS up
-                 FROM radacct WHERE ' . $in . ' AND COALESCE(acctupdatetime, acctstoptime, acctstarttime) >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
-                 GROUP BY DATE(COALESCE(acctupdatetime, acctstoptime, acctstarttime)) ORDER BY traffic_time DESC', $ids))),
+            'traffic' => ['range' => '24h', 'data' => MonitoringData::clientTrafficChart($ids, '24h')],
             'sessions' => array_map(static fn (array $r) => [
                 'start' => (string) $r['acctstarttime'],
                 'stop' => (string) ($r['acctstoptime'] ?? ''),
@@ -319,6 +317,15 @@ final class ClientController extends Controller
         $range = (string) $request->query('range', '30d');
         abort_unless(isset(self::USAGE_RANGES[$range]), 404);
         return response()->json($this->usageHistory(ClientQuery::usernames($username), $range, (int) $id))->header('Cache-Control', 'no-store');
+    }
+
+    /** Download and upload as bit/s over 24 hours or 7 days, for the client page's Traffic history card. */
+    public function traffic(Request $request, string $username): JsonResponse
+    {
+        abort_if(!Db::value('SELECT id FROM customer_profiles WHERE username = ?', [$username]), 404, 'Client not found.');
+        $range = (string) $request->query('range', '24h');
+        abort_unless(isset(MonitoringData::CLIENT_RANGES[$range]), 404);
+        return response()->json(MonitoringData::clientTrafficChart(ClientQuery::usernames($username), $range))->header('Cache-Control', 'no-store');
     }
 
     private const USAGE_RANGES = ['7d' => 7, '30d' => 30, '12m' => 12];

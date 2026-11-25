@@ -1,5 +1,8 @@
 import { useState, type KeyboardEvent } from 'react';
 import { bytes } from '@/lib/format';
+import type { ChartPayload } from './LineChart';
+import { TrafficChart } from './TrafficChart';
+import { Empty } from './ui';
 
 export interface UsageHistory {
     range: '7d' | '30d' | '12m';
@@ -42,12 +45,6 @@ function CapMeter({ cycle }: { cycle: NonNullable<UsageHistory['cycle']> }) {
     );
 }
 
-/** Bar with only its top corners rounded: the bottom stays square on the baseline (or on the bar below). */
-function topRounded(x: number, y: number, w: number, h: number, r: number): string {
-    const rr = Math.min(r, w / 2, h);
-    return `M${x},${y + h} V${y + rr} Q${x},${y} ${x + rr},${y} H${x + w - rr} Q${x + w},${y} ${x + w},${y + rr} V${y + h} Z`;
-}
-
 /**
  * Download and upload per day or month for one client: stacked bars (download below, upload on top),
  * totals in the legend, and the hovered or focused bar's values in the readout line.
@@ -79,17 +76,12 @@ export function UsageCard({ username, initial }: { username: string; initial: Us
     };
 
     const points = data.points;
-    const [width, height, top, bottom] = [276, 112, 14, 18];
-    const plot = height - top - bottom;
     const max = Math.max(1, ...points.map((p) => p.down + p.up));
-    const slot = width / points.length;
-    const gap = points.length > 12 ? 2 : 6;
-    const barWidth = Math.max(2, slot - gap);
-    const scale = (v: number) => (v / max) * plot;
+    const percent = (v: number) => `${(v / max) * 100}%`;
     const empty = data.total.down + data.total.up === 0;
     const shown = active === null ? null : points[active];
 
-    const onKey = (event: KeyboardEvent<SVGSVGElement>) => {
+    const onKey = (event: KeyboardEvent<HTMLDivElement>) => {
         const moves: Record<string, number> = { ArrowLeft: -1, ArrowRight: 1 };
         if (event.key === 'Home' || event.key === 'End') {
             event.preventDefault();
@@ -103,7 +95,7 @@ export function UsageCard({ username, initial }: { username: string; initial: Us
     return (
         <section className="panel usage-card" aria-labelledby="usage-title" aria-busy={loading}>
             <div className="panel-head">
-                <h2 id="usage-title">Usage</h2>
+                <h2 id="usage-title">Data used</h2>
                 <div className="segmented" role="group" aria-label="Usage period">
                     {RANGES.map(([key, label]) => (
                         <button key={key} type="button" className={key === data.range ? 'active' : undefined} aria-pressed={key === data.range} onClick={() => void load(key)}>{label}</button>
@@ -125,37 +117,31 @@ export function UsageCard({ username, initial }: { username: string; initial: Us
                                 ? <><span>{bucketLabel(shown.key, data.monthly)}</span> Download {bytes(shown.down)} · Upload {bytes(shown.up)}</>
                                 : <span>Select a bar to see its {data.monthly ? 'month' : 'day'}.</span>}
                         </p>
-                        <svg
-                            className="usage-chart"
-                            viewBox={`0 0 ${width} ${height}`}
-                            role="img"
-                            aria-label={`Download and upload per ${data.monthly ? 'month' : 'day'}. Use the left and right arrow keys to read each bar.`}
-                            tabIndex={0}
-                            onKeyDown={onKey}
-                            onMouseLeave={() => setActive(null)}
-                            onBlur={() => setActive(null)}
-                        >
-                            <line className="usage-grid" x1="0" y1={top} x2={width} y2={top} />
-                            <text className="usage-axis" x="0" y={top - 4}>{bytes(max)}</text>
-                            {points.map((p, i) => {
-                                const x = i * slot + (slot - barWidth) / 2;
-                                const down = scale(p.down);
-                                const up = scale(p.up);
-                                const base = height - bottom;
-                                // A 2px surface gap separates the two segments when both are tall enough to show it.
-                                const split = down > 0 && up > 0 ? 2 : 0;
-                                return (
-                                    <g key={p.key} className={active === i ? 'is-active' : undefined}>
-                                        {down > 0 && <path className="usage-bar usage-down" d={up > 0 ? `M${x},${base} V${base - down} H${x + barWidth} V${base} Z` : topRounded(x, base - down, barWidth, down, 2)} />}
-                                        {up > 0 && <path className="usage-bar usage-up" d={topRounded(x, base - down - split - up, barWidth, up, 2)} />}
-                                        <rect className="usage-hit" x={i * slot} y="0" width={slot} height={height} onMouseEnter={() => setActive(i)} onClick={() => setActive(i)} />
-                                    </g>
-                                );
-                            })}
-                            <line className="usage-baseline" x1="0" y1={height - bottom} x2={width} y2={height - bottom} />
-                            <text className="usage-axis" x="0" y={height - 4}>{bucketLabel(points[0].key, data.monthly)}</text>
-                            <text className="usage-axis" x={width} y={height - 4} textAnchor="end">{bucketLabel(points[points.length - 1].key, data.monthly)}</text>
-                        </svg>
+                        <div className="usage-plot">
+                            <div className="usage-y" aria-hidden="true"><span>{bytes(max)}</span><span>0</span></div>
+                            <div
+                                className={`usage-chart${points.length > 12 ? ' is-dense' : ''}`}
+                                role="img"
+                                aria-label={`Download and upload per ${data.monthly ? 'month' : 'day'}. Use the left and right arrow keys to read each bar.`}
+                                tabIndex={0}
+                                onKeyDown={onKey}
+                                onMouseLeave={() => setActive(null)}
+                                onBlur={() => setActive(null)}
+                            >
+                                {points.map((p, i) => (
+                                    <div key={p.key} className={`usage-slot${active === i ? ' is-active' : ''}`} onMouseEnter={() => setActive(i)} onClick={() => setActive(i)}>
+                                        <span className="usage-stack" style={{ height: percent(p.down + p.up) }}>
+                                            {p.up > 0 && <span className="usage-bar usage-up" style={{ flexGrow: p.up }} />}
+                                            {p.down > 0 && <span className="usage-bar usage-down" style={{ flexGrow: p.down }} />}
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
+                            <div className="usage-x" aria-hidden="true">
+                                <span>{bucketLabel(points[0].key, data.monthly)}</span>
+                                <span>{bucketLabel(points[points.length - 1].key, data.monthly)}</span>
+                            </div>
+                        </div>
                         <table className="sr-only">
                             <caption>Usage per {data.monthly ? 'month' : 'day'}</caption>
                             <thead><tr><th scope="col">{data.monthly ? 'Month' : 'Day'}</th><th scope="col">Download</th><th scope="col">Upload</th></tr></thead>
@@ -164,7 +150,54 @@ export function UsageCard({ username, initial }: { username: string; initial: Us
                     </>
                 )}
                 {failed && <p className="field-error">Could not load this period. Try again.</p>}
-                <p className="usage-note">Updated every 5 minutes from RADIUS accounting.</p>
+                <p className="usage-note">Per {data.monthly ? 'month' : 'day'}, updated every 5 minutes from RADIUS accounting.</p>
+            </div>
+        </section>
+    );
+}
+
+const TRAFFIC_RANGES: [string, string][] = [['24h', '24 hours'], ['7d', '7 days']];
+
+/** The client's download and upload over time (bit/s), from the five-minute traffic history. */
+export function TrafficCard({ username, initial }: { username: string; initial: { range: string; data: ChartPayload } }) {
+    const [range, setRange] = useState(initial.range);
+    const [data, setData] = useState(initial.data);
+    const [loading, setLoading] = useState(false);
+    const [failed, setFailed] = useState(false);
+
+    const load = async (next: string) => {
+        if (next === range || loading) return;
+        setLoading(true);
+        setFailed(false);
+        try {
+            const response = await fetch(`/clients/${encodeURIComponent(username)}/traffic?range=${next}`, {
+                credentials: 'same-origin',
+                cache: 'no-store',
+                headers: { Accept: 'application/json' },
+            });
+            if (!response.ok) throw new Error(String(response.status));
+            setData(await response.json());
+            setRange(next);
+        } catch {
+            setFailed(true);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <section className="panel traffic-card" aria-labelledby="traffic-title" aria-busy={loading}>
+            <div className="panel-head">
+                <h2 id="traffic-title">Traffic history</h2>
+                <div className="segmented" role="group" aria-label="Traffic period">
+                    {TRAFFIC_RANGES.map(([key, label]) => (
+                        <button key={key} type="button" className={key === range ? 'active' : undefined} aria-pressed={key === range} onClick={() => void load(key)}>{label}</button>
+                    ))}
+                </div>
+            </div>
+            <div className="usage-body">
+                {'chart' in data ? <TrafficChart key={range} data={data.chart} /> : <Empty>{data.message}</Empty>}
+                {failed && <p className="field-error">Could not load this period. Try again.</p>}
             </div>
         </section>
     );

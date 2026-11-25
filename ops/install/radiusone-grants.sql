@@ -53,6 +53,7 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON `radius`.`radcheck` TO `radiusone_portal
 GRANT SELECT, INSERT, UPDATE, DELETE ON `radius`.`subscriptions` TO `radiusone_portal`@`localhost`;
 GRANT SELECT, INSERT, UPDATE, DELETE ON `radius`.`usage_daily` TO `radiusone_portal`@`localhost`;
 GRANT SELECT, INSERT, UPDATE, DELETE ON `radius`.`usage_session_marks` TO `radiusone_portal`@`localhost`;
+GRANT SELECT, INSERT, UPDATE, DELETE ON `radius`.`usage_traffic` TO `radiusone_portal`@`localhost`;
 GRANT SELECT, INSERT, UPDATE, DELETE ON `radius`.`usage_cycles` TO `radiusone_portal`@`localhost`;
 -- Contracts and the pay page (035): deleted only with their client (Delete permanently, an archived client).
 GRANT SELECT, INSERT, UPDATE, DELETE ON `radius`.`customer_contracts` TO `radiusone_portal`@`localhost`;

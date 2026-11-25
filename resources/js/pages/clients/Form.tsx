@@ -7,12 +7,13 @@ import { LivePanel } from '@/components/LivePanel';
 import { DataTable } from '@/components/table';
 import ClientOnu, { type ClientOnuData } from '@/components/ClientOnu';
 import { Tabs } from '@/components/tabs';
-import { UsageCard, type UsageHistory } from '@/components/usage';
+import { TrafficCard, UsageCard, type UsageHistory } from '@/components/usage';
+import type { ChartPayload } from '@/components/LineChart';
 import { Check, ConnectionState, Empty, ErrorSummary, Field, Panel, Select, Tag, TextArea, type TagData, State } from '@/components/ui';
 import AppLayout from '@/layouts/AppLayout';
 import { useCan } from '@/lib/auth';
 import { bind, bindCheck } from '@/lib/form';
-import { bytes, randomPassword } from '@/lib/format';
+import { randomPassword } from '@/lib/format';
 
 type Values = Record<string, string | boolean | File | null> & {
     old_username: string; auth_method: string; username: string; password: string; account_status: string; framed_ip_address: string;
@@ -33,7 +34,7 @@ type Client = {
     header: Header;
     overview: Overview;
     usage: UsageHistory;
-    weeklyTraffic: { day: string; down: number; up: number }[];
+    traffic: { range: string; data: ChartPayload };
     sessions: Session[];
     billing: { newInvoice: boolean; stats: Stat[]; overdue: string | null; invoices: InvoiceRow[]; payments: Payment[] };
     documents: { id: number; type: string; name: string; mime: string; uploaded: string }[];
@@ -140,48 +141,6 @@ function OverviewPanel({ username, initial }: { username: string; initial: Overv
 }
 
 /** Seven days of session counters by last update date (legacy clientTrafficGraph). */
-function TrafficGraph({ rows }: { rows: { day: string; down: number; up: number }[] }) {
-    if (!rows.length) return <div className="traffic-graph empty">No session counters updated in the last 7 days.</div>;
-    const max = Math.max(1, ...rows.flatMap((r) => [r.down, r.up]));
-    const [left, top, plotWidth, plotHeight] = [62, 32, 640, 145];
-    const bottom = top + plotHeight;
-    const step = rows.length > 1 ? plotWidth / (rows.length - 1) : 0;
-    const xAt = (i: number) => (rows.length > 1 ? left + i * step : left + plotWidth / 2);
-    const yAt = (v: number) => bottom - (v / max) * plotHeight;
-    const down = rows.map((r, i) => `${xAt(i).toFixed(1)},${yAt(r.down).toFixed(1)}`);
-    const up = rows.map((r, i) => `${xAt(i).toFixed(1)},${yAt(r.up).toFixed(1)}`);
-    const avg = (key: 'down' | 'up') => rows.reduce((sum, r) => sum + r[key], 0) / rows.length;
-    const peak = (key: 'down' | 'up') => Math.max(...rows.map((r) => r[key]));
-    const latest = rows[rows.length - 1];
-    return (
-        <div className="traffic-graph">
-            <svg viewBox="0 0 760 250" role="img" aria-label="Cumulative session counters grouped by last update date">
-                <text className="traffic-axis" x="18" y={top + plotHeight / 2} transform={`rotate(-90 18 ${top + plotHeight / 2})`}>Data</text>
-                <rect className="traffic-plot" x={left} y={top} width={plotWidth} height={plotHeight} />
-                <g className="traffic-grid">
-                    {[0, 1, 2, 3, 4].map((i) => {
-                        const y = top + (plotHeight / 4) * i;
-                        return (
-                            <g key={i}>
-                                <line x1={left} y1={y} x2={left + plotWidth} y2={y} />
-                                <text x="54" y={y + 4} textAnchor="end">{bytes(Math.round(max - (max / 4) * i))}</text>
-                            </g>
-                        );
-                    })}
-                </g>
-                <path className="traffic-down-area" d={`M ${xAt(0)} ${bottom} L ${down.join(' L ')} L ${xAt(rows.length - 1)} ${bottom} Z`} />
-                <polyline className="traffic-down-line" points={down.join(' ')} />
-                <polyline className="traffic-up-line" points={up.join(' ')} />
-                <g className="traffic-labels">{rows.map((r, i) => <text key={r.day} x={xAt(i)} y="198" textAnchor="middle">{r.day.slice(5)}</text>)}</g>
-            </svg>
-            <div className="traffic-legend">
-                <span><i className="legend-down" />Download: latest {bytes(latest.down)}, average {bytes(Math.round(avg('down')))}, peak {bytes(peak('down'))}</span>
-                <span><i className="legend-up" />Upload: latest {bytes(latest.up)}, average {bytes(Math.round(avg('up')))}, peak {bytes(peak('up'))}</span>
-            </div>
-        </div>
-    );
-}
-
 function StaticIpFields({ staticIps, value, disabled, error, onChange }: { staticIps: StaticIps; value: string; disabled: boolean; error?: string; onChange: (ip: string) => void }) {
     const poolOf = (ip: string) => staticIps.pools.find((p) => p.ips.includes(ip))?.key ?? '';
     const [pool, setPool] = useState(value ? poolOf(value) || staticIps.currentPool : '');
@@ -345,7 +304,7 @@ export default function ClientForm({ values, draftRestored, draftTab, canEdit, c
             key: 'overview', title: 'Overview', icon: 'dashboard',
             content: (
                 <>
-                    <UsageCard username={client.username} initial={client.usage} />
+                    <TrafficCard username={client.username} initial={client.traffic} />
                     <Panel title="Recent sessions">
                         <DataTable rows={client.sessions.slice(0, 6)} emptyText="No sessions yet." columns={sessionColumns} />
                     </Panel>
@@ -358,9 +317,7 @@ export default function ClientForm({ values, draftRestored, draftTab, canEdit, c
             key: 'accounting', title: 'Accounting', icon: 'signal',
             content: client ? (
                 <>
-                    <Panel title="Session totals by last update date, 7 days">
-                        <TrafficGraph rows={client.weeklyTraffic} />
-                    </Panel>
+                    <UsageCard username={client.username} initial={client.usage} />
                     <Panel title="Sessions">
                         <DataTable rows={client.sessions} exportRows columns={sessionColumns} />
                     </Panel>

@@ -176,6 +176,7 @@ Route::middleware('frweb.auth')->group(function () {
         Route::get('/clients/{username}/overview', [ClientController::class, 'overview']);
         Route::get('/clients/{username}/panel', [ClientController::class, 'panel']);
         Route::get('/clients/{username}/usage', [ClientController::class, 'usage']);
+        Route::get('/clients/{username}/traffic', [ClientController::class, 'traffic']);
         Route::get('/clients/{username}/diagnostics', [ClientController::class, 'diagnostics']);
         Route::post('/clients/save', [ClientController::class, 'save']);
         Route::post('/clients/bulk', [ClientController::class, 'bulk']);

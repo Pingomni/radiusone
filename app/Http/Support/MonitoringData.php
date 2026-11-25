@@ -15,6 +15,7 @@ use App\Support\NasTraffic;
 use App\Support\Olt\OltMonitor;
 use App\Support\ServerMonitor;
 use App\Support\SessionDisconnect;
+use App\Support\UsageCaps;
 
 /**
  * Data for the Monitoring pages and their live panels (legacy app/Http/monitoring.php). Everything is
@@ -616,6 +617,75 @@ final class MonitoringData
             ],
             'summary' => 'Traffic on ' . $name . ', ' . strtolower(NasTraffic::RANGES[$range][2]) . ': latest in ' . self::bpsOrDash($latest['in']) . ', out ' . self::bpsOrDash($latest['out'])
                 . '; peak in ' . self::bpsOrDash($series['peak_in']) . ', out ' . self::bpsOrDash($series['peak_out']) . '.',
+        ]);
+    }
+
+    /** Client traffic history ranges: [seconds shown, bucket seconds, label]. */
+    public const CLIENT_RANGES = ['24h' => [86400, 900, '24 hours'], '7d' => [604800, 3600, '7 days']];
+
+    /**
+     * A client's download and upload as bit/s over the last 24 hours or 7 days, from usage_traffic (the growth
+     * of its RADIUS counters per five minutes). Time before the first recorded slot shows as a gap, not as zero.
+     *
+     * Returns ['message' => ...] when nothing is recorded yet, else ['chart' => ...] for LineChart.tsx.
+     *
+     * @param  list<string>  $usernames  the client's username (and any it had before a device change)
+     * @return array<string, mixed>
+     */
+    public static function clientTrafficChart(array $usernames, string $range): array
+    {
+        [$seconds, $bucket, $label] = self::CLIENT_RANGES[$range];
+        $now = time();
+        // Recorded up to the collector's last run (the start of its five minutes), so the line does not drop to
+        // zero while the next run is due; the newest bucket may hold only part of its time.
+        $ran = (int) (Db::value('SELECT setting_value FROM settings WHERE setting_key=?', [UsageCaps::CURSOR]) ?: $now);
+        $recorded = intdiv(min($now, $ran), UsageCaps::SLOT) * UsageCaps::SLOT;
+        $last = intdiv($recorded - 1, $bucket) * $bucket;
+        $count = intdiv($seconds, $bucket);
+        $start = $last - ($count - 1) * $bucket;
+        $in = implode(',', array_fill(0, count($usernames), '?'));
+        $rows = $usernames === [] ? [] : Db::select("SELECT at, down, up FROM usage_traffic WHERE username IN ($in) AND at >= ? ORDER BY at", [...$usernames, date('Y-m-d H:i:s', $start)]);
+        $first = $usernames === [] ? false : Db::value("SELECT MIN(at) FROM usage_traffic WHERE username IN ($in)", $usernames);
+        if (!$first) {
+            return ['message' => 'No traffic history yet. It is recorded every five minutes from RADIUS accounting, while the client is online.'];
+        }
+        $firstAt = intdiv((int) strtotime((string) $first), $bucket) * $bucket;
+        $sums = [];
+        foreach ($rows as $row) {
+            $t = intdiv((int) strtotime((string) $row['at']), $bucket) * $bucket;
+            $sums[$t] = [($sums[$t][0] ?? 0) + (int) $row['down'], ($sums[$t][1] ?? 0) + (int) $row['up']];
+        }
+        $points = [];
+        $total = [0, 0];
+        $peak = [0.0, 0.0];
+        for ($i = 0; $i < $count; $i++) {
+            $t = $start + $i * $bucket;
+            if ($t < $firstAt) {
+                $points[] = ['t' => $t, 'in' => null, 'out' => null];
+                continue;
+            }
+            [$down, $up] = $sums[$t] ?? [0, 0];
+            $total = [$total[0] + $down, $total[1] + $up];
+            $covered = max(UsageCaps::SLOT, min($bucket, $recorded - $t));
+            $rate = [$down * 8 / $covered, $up * 8 / $covered];
+            $peak = [max($peak[0], $rate[0]), max($peak[1], $rate[1])];
+            $points[] = ['t' => $t, 'in' => $rate[0], 'out' => $rate[1]];
+        }
+        $series = ['start' => $start, 'end' => $last + $bucket, 'bucket' => $bucket, 'points' => $points];
+        $latest = self::latestValues($points, ['in', 'out']);
+        return self::chart($series, $range, [
+            'title' => 'Traffic, ' . strtolower($label),
+            'note' => 'bit/s, ' . self::bucketLabel($bucket) . ' averages',
+            'unit' => 'bps',
+            'area' => 'in',
+            'empty' => 'No traffic in the last ' . strtolower($label) . '.',
+            'series' => [
+                'in' => ['Download', Format::bytes($total[0])],
+                'out' => ['Upload', Format::bytes($total[1])],
+            ],
+            'footnote' => 'From RADIUS accounting every five minutes: a router that reports less often makes the line steppier.',
+            'summary' => 'Client traffic, ' . strtolower($label) . ': ' . Format::bytes($total[0]) . ' downloaded, ' . Format::bytes($total[1]) . ' uploaded; latest download '
+                . self::bpsOrDash($latest['in']) . ', upload ' . self::bpsOrDash($latest['out']) . '; peak download ' . Nas::bps($peak[0]) . ', upload ' . Nas::bps($peak[1]) . '.',
         ]);
     }
 

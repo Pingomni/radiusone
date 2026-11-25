@@ -204,6 +204,12 @@ final class RadiusRepository
                 }
                 Db::exec('DELETE FROM usage_daily WHERE username=?', [$username]);
             }
+            if ($has('usage_traffic')) {
+                foreach (Db::select('SELECT at, down, up FROM usage_traffic WHERE username=?', [$username]) as $sample) {
+                    Db::exec('INSERT INTO usage_traffic (username, at, down, up) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE down=down+VALUES(down), up=up+VALUES(up)', [$new, $sample['at'], $sample['down'], $sample['up']]);
+                }
+                Db::exec('DELETE FROM usage_traffic WHERE username=?', [$username]);
+            }
             // The same row: billing, documents, contracts and notices follow through ON UPDATE CASCADE.
             Db::exec('UPDATE customer_profiles SET username=?, mac_address=?, updated_at=NOW() WHERE id=?', [$new, $new, $client['id']]);
             self::provisionClient($new);
@@ -346,7 +352,7 @@ final class RadiusRepository
             if ($has('usage_session_marks')) {
                 Db::exec("DELETE m FROM usage_session_marks m JOIN radacct a ON a.radacctid=m.radacctid WHERE a.username IN ($in)", $names);
             }
-            foreach (['radcheck', 'radreply', 'radusergroup', 'radacct', 'radpostauth', 'usage_daily', 'access_auth_events'] as $table) {
+            foreach (['radcheck', 'radreply', 'radusergroup', 'radacct', 'radpostauth', 'usage_daily', 'usage_traffic', 'access_auth_events'] as $table) {
                 $delete($table, 'username', $names);
             }
             $delete('customer_identity_history', 'customer_id', [$id]);

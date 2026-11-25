@@ -765,7 +765,7 @@ body:has(.main) { background: var(--frame); }
 /* Flush content: tables, filter rows and pagination run edge to edge. */
 .panel > .table-wrap, .settings-sheet > .table-wrap, .panel > .toolbar.list-filterbar, .panel > .list-filterbar,
 .panel > .pagination, .settings-sheet > .pagination, .panel > .settings-list, .settings-sheet > .settings-list,
-.panel > .invoice-summary, .panel > .empty, .settings-sheet > .empty, .panel > .list-empty, .panel > .traffic-graph,
+.panel > .invoice-summary, .panel > .empty, .settings-sheet > .empty, .panel > .list-empty,
 .panel > [data-live-body], .health-card > .health-grid, .panel > .segmented { margin: 0; }
 .panel > .table-wrap:last-child, .settings-sheet > .table-wrap:last-child { border-radius: 0 0 var(--radius) var(--radius); }
 .panel > form.toolbar.list-filterbar, .panel > .toolbar.list-filterbar { border-bottom: 1px solid var(--line); }
@@ -1629,21 +1629,6 @@ tr.is-clickable { cursor: pointer; }
 /* --------------------------------------------------------------------------
    Traffic graph
    -------------------------------------------------------------------------- */
-.traffic-graph { padding: var(--sp-3); }
-.traffic-graph.empty { color: var(--text-muted); text-align: center; }
-.traffic-graph svg { display: block; width: 100%; height: auto; max-height: 260px; font-family: var(--font); font-size: 11px; }
-.traffic-title { fill: var(--text-strong); font-weight: 600; }
-.traffic-axis, .traffic-labels text, .traffic-grid text { fill: var(--text-muted); }
-.traffic-grid line { stroke: var(--chart-grid); stroke-dasharray: 2 3; }
-.traffic-plot { fill: var(--surface); stroke: var(--line-strong); }
-.traffic-down-area { fill: var(--chart-down-fill); stroke: none; }
-.traffic-down-line { fill: none; stroke: var(--chart-down); stroke-width: 2; }
-.traffic-up-line { fill: none; stroke: var(--chart-up); stroke-width: 2; }
-.traffic-legend { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--sp-1) var(--sp-4); margin-top: var(--sp-2); color: var(--text-muted); font-size: var(--fs-sm); font-variant-numeric: tabular-nums; }
-.traffic-legend span { display: inline-flex; align-items: center; gap: 6px; }
-.traffic-legend i { width: 10px; height: 10px; border-radius: 2px; }
-.legend-down { background: var(--chart-down); }
-.legend-up { background: var(--chart-up); }
 
 /* --------------------------------------------------------------------------
    Client profile: tabbed form with the account overview beside it
@@ -1738,9 +1723,9 @@ tr.is-clickable { cursor: pointer; }
 .client-side { display: grid; gap: var(--sp-3); align-self: stretch; align-content: start; min-width: 0; }
 
 /* Usage card: download and upload per day or month, stacked bars (colours shared with the NAS traffic charts). */
-.usage-card .panel-head { flex-wrap: wrap; }
-.usage-card .segmented { margin-left: auto; }
-.usage-card .segmented button { padding: 0 8px; font-size: var(--fs-xs); }
+.usage-card .panel-head, .traffic-card .panel-head { flex-wrap: wrap; }
+.usage-card .segmented, .traffic-card .segmented { margin-left: auto; }
+.usage-card .segmented button, .traffic-card .segmented button { padding: 0 8px; font-size: var(--fs-xs); }
 .usage-body { display: grid; gap: var(--sp-2); }
 .usage-legend { display: flex; flex-wrap: wrap; gap: var(--sp-1) var(--sp-3); margin: 0; padding: 0; list-style: none; color: var(--text-muted); font-size: var(--fs-sm); }
 .usage-legend li { display: inline-flex; align-items: center; gap: 6px; }
@@ -1750,14 +1735,19 @@ tr.is-clickable { cursor: pointer; }
 .usage-swatch.usage-up, .usage-bar.usage-up { background: var(--nas-out); fill: var(--nas-out); }
 .usage-readout { min-height: 1.45em; color: var(--text); font-size: var(--fs-sm); font-variant-numeric: tabular-nums; }
 .usage-readout > span:first-child { color: var(--text-muted); }
-.usage-chart { display: block; width: 100%; height: auto; overflow: visible; border-radius: var(--radius-sm); font-family: var(--font); }
+.usage-plot { display: grid; grid-template-columns: auto 1fr; grid-template-rows: 160px auto; column-gap: var(--sp-2); }
+.usage-y { display: flex; flex-direction: column; justify-content: space-between; color: var(--text-muted); font-size: var(--fs-xs); font-variant-numeric: tabular-nums; text-align: right; }
+.usage-y span:first-child { transform: translateY(-50%); }
+.usage-y span:last-child { transform: translateY(50%); }
+.usage-chart { display: flex; align-items: stretch; gap: 6px; border-top: 1px dashed var(--chart-grid); border-bottom: 1px solid var(--line-strong); border-radius: 0; }
+.usage-chart.is-dense { gap: 2px; }
 .usage-chart:focus-visible { outline: none; box-shadow: var(--focus); }
-.usage-axis { fill: var(--text-muted); font-size: 10px; font-variant-numeric: tabular-nums; }
-.usage-grid { stroke: var(--chart-grid); stroke-dasharray: 2 3; }
-.usage-baseline { stroke: var(--line-strong); }
-.usage-hit { fill: transparent; cursor: crosshair; }
-.usage-bar { transition: opacity .12s; }
-.usage-chart:has(.is-active) g:not(.is-active) .usage-bar { opacity: .35; }
+.usage-slot { display: flex; flex: 1 1 0; min-width: 0; align-items: flex-end; cursor: crosshair; }
+.usage-stack { display: flex; flex-direction: column; gap: 2px; width: 100%; max-width: 48px; margin: 0 auto; min-height: 0; }
+.usage-bar { display: block; min-height: 2px; flex-basis: 0; transition: opacity .12s; }
+.usage-stack > .usage-bar:first-child { border-radius: 4px 4px 0 0; }
+.usage-x { grid-column: 2; display: flex; justify-content: space-between; padding-top: 4px; color: var(--text-muted); font-size: var(--fs-xs); font-variant-numeric: tabular-nums; }
+.usage-chart:has(.is-active) .usage-slot:not(.is-active) .usage-bar { opacity: .35; }
 .usage-empty { padding: var(--sp-4) 0; color: var(--text-muted); font-size: var(--fs-sm); text-align: center; }
 .usage-note { color: var(--text-muted); font-size: var(--fs-xs); }
 .usage-cap { display: grid; gap: 6px; padding: var(--sp-2) 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); font-size: var(--fs-sm); }
@@ -2142,9 +2132,6 @@ tr.is-clickable { cursor: pointer; }
 .tc-key-s6, .tc-dot-s6 { background: var(--nas-t6); } .tc-line-s6 { stroke: var(--nas-t6); }
 .tc-key-s7, .tc-dot-s7 { background: var(--nas-t7); } .tc-line-s7 { stroke: var(--nas-t7); }
 .tc-footnote { margin: 0; }
-.traffic-filters { flex-wrap: wrap; align-items: flex-end; gap: var(--sp-2) var(--sp-3); }
-.traffic-filter-if { min-width: 200px; }
-.traffic-filters .segmented { align-self: flex-end; }
 .nas-traffic [data-live-body] { padding: var(--sp-3); }
 .tc { display: grid; gap: var(--sp-2); margin: 0; }
 .tc-legend { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--sp-1) var(--sp-4); font-size: var(--fs-sm); color: var(--text-muted); }
@@ -2185,6 +2172,39 @@ tr.is-clickable { cursor: pointer; }
 .tc-tip-time { color: var(--text-muted); font-size: var(--fs-xs); }
 .tc-tip-row { display: flex; align-items: center; gap: 6px; }
 .tc-tip-row strong { color: var(--text-strong); font-variant-numeric: tabular-nums; }
+
+/* Client traffic history (components/TrafficChart.tsx): a port-graph style chart. */
+.tt { display: grid; gap: 6px; margin: 0; }
+.tt-legend { display: flex; flex-wrap: wrap; gap: var(--sp-1) var(--sp-4); color: var(--text-muted); font-size: var(--fs-sm); }
+.tt-legend-item { display: inline-flex; align-items: center; gap: 6px; }
+.tt-legend-item strong { color: var(--text-strong); font-variant-numeric: tabular-nums; }
+.tt-key { display: inline-block; width: 12px; height: 3px; border-radius: 2px; flex: none; }
+.tt-key-in, .tt-dot-in { background: var(--nas-in); }
+.tt-key-out, .tt-dot-out { background: var(--nas-out); }
+.tt-used { margin-left: auto; font-size: var(--fs-xs); font-variant-numeric: tabular-nums; }
+.tt-frame { display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: 200px 22px; column-gap: var(--sp-2); margin-top: var(--sp-2); }
+.tt-y { position: relative; min-width: 56px; color: var(--text-muted); font-size: var(--fs-xs); font-variant-numeric: tabular-nums; }
+.tt-y span { position: absolute; right: 0; transform: translateY(-50%); white-space: nowrap; }
+.tt-plot { position: relative; outline: none; touch-action: pan-y; cursor: crosshair; }
+.tt-plot:focus-visible { box-shadow: var(--focus); border-radius: var(--radius-sm); }
+.tt-plot svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.tt-grid { stroke: var(--chart-grid); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.tt-base { stroke: var(--line-strong); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.tt-fill-top { stop-color: var(--nas-in); stop-opacity: .22; }
+.tt-fill-bottom { stop-color: var(--nas-in); stop-opacity: .02; }
+.tt-line { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+.tt-line-in { stroke: var(--nas-in); }
+.tt-line-out { stroke: var(--nas-out); }
+.tt-dot { position: absolute; width: 9px; height: 9px; border: 2px solid var(--surface); border-radius: 50%; transform: translate(-50%, -50%); pointer-events: none; box-sizing: content-box; }
+.tt-cross { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--line-strong); pointer-events: none; }
+.tt-tip { position: absolute; top: 4px; z-index: 2; display: grid; gap: 2px; margin-left: 12px; padding: 6px 10px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow-pop); color: var(--text-muted); font-size: var(--fs-sm); white-space: nowrap; pointer-events: none; }
+.tt-tip.tt-tip-left { transform: translateX(-100%); margin-left: -12px; }
+.tt-tip-time { font-size: var(--fs-xs); }
+.tt-tip-row { display: flex; align-items: center; gap: 6px; }
+.tt-tip-row strong { color: var(--text-strong); font-variant-numeric: tabular-nums; }
+.tt-x { position: relative; grid-column: 2; color: var(--text-muted); font-size: var(--fs-xs); font-variant-numeric: tabular-nums; }
+.tt-x span { position: absolute; top: 6px; transform: translateX(-50%); white-space: nowrap; }
+@media (max-width: 760px) { .tt-frame { grid-template-rows: 170px 22px; } .tt-y { min-width: 48px; } }
 .tc-cross[hidden], .tc-dot[hidden], .tc-tip[hidden] { display: none; }
 .tc-table > summary { color: var(--text-muted); font-size: var(--fs-sm); font-weight: 600; }
 .tc-table .table-wrap { margin-top: var(--sp-2); border: 1px solid var(--line); border-radius: var(--radius); }

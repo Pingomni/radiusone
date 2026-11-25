@@ -4,6 +4,11 @@ RadiusOne follows [semantic versioning](https://semver.org): **major** for chang
 upgrading, **minor** for new features, **patch** for fixes. The version is in the `VERSION` file and shows in
 the portal's sidebar and under Settings → System information.
 
+## 3.2.0 (2026-11-25)
+
+- Clients: a traffic history on the Overview tab. Download and upload speed over the last 24 hours or 7 days, recorded every five minutes from RADIUS accounting and kept eight days, with the latest speed and the data used in the legend and the exact values on hover. History starts when this version is installed. Database migration 043 adds the usage_traffic table.
+- Clients: the Accounting tab shows data used per day (7 or 30 days) or per month (12 months) in place of the session totals chart, which drew nothing for a single day. The bars and their labels now keep their size on wide screens.
+
 ## 3.1.7 (2026-11-25)
 
 - Clients: a DHCP client can change device. Change device (Account tab, next to the MAC address) makes the new router's MAC address the client's username; the same client keeps its plan, billing, documents and history, and the old MAC address is free again. PPPoE usernames still never change.

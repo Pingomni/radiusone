@@ -13,7 +13,8 @@ use DateTimeImmutable;
  * RADIUS keeps one running counter per session. Every few minutes collect() reads the open and recently
  * closed sessions, adds how much each counter grew since it was last seen to that day's row in usage_daily,
  * and remembers the new counters in usage_session_marks. A counter that went down (a NAS restart reusing
- * the session) counts from zero again. The first run fills usage_daily from the existing history, each
+ * the session) counts from zero again. The same growth goes to usage_traffic per five minutes, for the
+ * client page's traffic history (bit/s). The first run fills usage_daily from the existing history, each
  * closed session on the day it last reported, like the client page used to.
  *
  * caps() then checks every customer on a plan with a data cap (service_metadata.total_quota, GB per cycle):
@@ -25,11 +26,14 @@ use DateTimeImmutable;
 final class UsageCaps
 {
     public const WARN_AT = 0.8;
-    private const CURSOR = 'usage_collected_until';
+    public const CURSOR = 'usage_collected_until';
     /** Closed sessions are read again for this long after the last run, so none is missed between runs. */
     private const OVERLAP = 900;
     private const BACKFILL_DAYS = 400;
     private const GB = 1073741824;
+    /** Traffic history: five-minute slots, kept eight days. */
+    public const SLOT = 300;
+    private const TRAFFIC_KEPT = 8 * 86400;
 
     /** @return array{sessions:int, days:int, backfilled:bool} */
     public static function collect(?int $now = null): array
@@ -67,6 +71,9 @@ final class UsageCaps
                 }
             }
             $days = [];
+            $traffic = [];
+            // The five minutes that just ended: what the counters grew by since the last run happened in them.
+            $slot = date('Y-m-d H:i:s', intdiv($now, self::SLOT) * self::SLOT - self::SLOT);
             $seenRows = [];
             $seen = date('Y-m-d H:i:s', $now);
             foreach ($sessions as $s) {
@@ -79,6 +86,11 @@ final class UsageCaps
                 if (($grewDown > 0 || $grewUp > 0) && $s['day'] !== null) {
                     $key = $s['username'] . "\0" . $s['day'];
                     $days[$key] = [$s['username'], $s['day'], ($days[$key][2] ?? 0) + $grewDown, ($days[$key][3] ?? 0) + $grewUp];
+                    // Not on the first run: a session never seen before then counts its whole history at once.
+                    if (!$backfilled) {
+                        $name = (string) $s['username'];
+                        $traffic[$name] = [$name, $slot, ($traffic[$name][2] ?? 0) + $grewDown, ($traffic[$name][3] ?? 0) + $grewUp];
+                    }
                 }
                 $seenRows[] = [$id, $down, $up, $seen];
             }
@@ -88,6 +100,10 @@ final class UsageCaps
             foreach (array_chunk(array_values($days), 500) as $chunk) {
                 Db::exec('INSERT INTO usage_daily (username, day, down, up) VALUES ' . implode(',', array_fill(0, count($chunk), '(?, ?, ?, ?)')) . ' ON DUPLICATE KEY UPDATE down = down + VALUES(down), up = up + VALUES(up)', array_merge(...$chunk));
             }
+            foreach (array_chunk(array_values($traffic), 500) as $chunk) {
+                Db::exec('INSERT INTO usage_traffic (username, at, down, up) VALUES ' . implode(',', array_fill(0, count($chunk), '(?, ?, ?, ?)')) . ' ON DUPLICATE KEY UPDATE down = down + VALUES(down), up = up + VALUES(up)', array_merge(...$chunk));
+            }
+            Db::exec('DELETE FROM usage_traffic WHERE at < ?', [date('Y-m-d H:i:s', $now - self::TRAFFIC_KEPT)]);
             // A session not seen for two days has closed long ago; its mark is no longer needed.
             Db::exec('DELETE FROM usage_session_marks WHERE seen_at < ?', [date('Y-m-d H:i:s', $now - 2 * 86400)]);
             Db::exec('INSERT INTO settings (setting_key, setting_value, is_secret, updated_by, updated_at) VALUES (?, ?, 0, NULL, NOW()) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value), updated_at = NOW()', [self::CURSOR, (string) $now]);
