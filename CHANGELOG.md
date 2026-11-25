@@ -4,6 +4,11 @@ RadiusOne follows [semantic versioning](https://semver.org): **major** for chang
 upgrading, **minor** for new features, **patch** for fixes. The version is in the `VERSION` file and shows in
 the portal's sidebar and under Settings → System information.
 
+## 3.1.2 (2026-11-25)
+
+- Delete permanently now works on an installed server. In 3.1.0 and 3.1.1 it stopped with "DELETE command denied" (and removed nothing): the portal's database user had no permission to delete from the client tables. Updating applies the new permissions.
+- Clients on a phone: the view tabs wrap onto more lines, so Suspended, Disabled and Archived are always in sight.
+
 ## 3.1.1 (2026-11-25)
 
 - Clients on a phone: the Bulk actions menu opens inside the screen, so its actions (Suspend, Disable, Archive) can be chosen.
