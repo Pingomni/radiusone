@@ -533,20 +533,33 @@ final class RadiusRepository
         return !Db::row('SELECT id FROM radcheck WHERE username=? AND NOT (attribute="Auth-Type" AND value="Reject") LIMIT 1 FOR UPDATE', [$name]);
     }
 
+    /**
+     * The same client under a new username: its RADIUS login and settings, and its history (sessions, login attempts,
+     * daily usage), move to the new name. Nothing is left under the old one, so it is free again. Billing, documents,
+     * contracts and notices follow through their foreign keys (ON UPDATE CASCADE).
+     */
     private static function renameRadiusUser(string $old, string $new): void
     {
         $id = Db::value('SELECT id FROM customer_profiles WHERE username=?', [$old]);
-        // Taking back a former username: its reservation and its line in the history go; it is the current name again.
+        // A name an earlier version reserved for this client (Auth-Type Reject) is cleared before it is used again.
         if (self::isOwnFormerName($new, $old)) {
             Db::exec('DELETE FROM radcheck WHERE username=? AND attribute="Auth-Type" AND value="Reject"', [$new]);
             Db::exec('DELETE FROM customer_identity_history WHERE username=? AND customer_id=?', [$new, $id]);
         }
-        Db::exec('INSERT INTO customer_identity_history (username,customer_id,renamed_at) VALUES (?,?,NOW())', [$old, $id]);
-        foreach (['radcheck', 'radreply', 'radusergroup'] as $table) {
+        foreach (['radcheck', 'radreply', 'radusergroup', 'radacct', 'radpostauth'] as $table) {
             Db::exec("UPDATE $table SET username=? WHERE username=?", [$new, $old]);
         }
-        // Historical events are immutable. Reserve and reject the former network identity.
-        Db::exec('INSERT INTO radcheck (username,attribute,op,value) VALUES (?,"Auth-Type",":=","Reject")', [$old]);
+        $has = static fn (string $table): bool => (bool) Db::value('SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=?', [$table]);
+        if ($has('access_auth_events')) {
+            Db::exec('UPDATE access_auth_events SET username=? WHERE username=?', [$new, $old]);
+        }
+        if ($has('usage_daily')) {
+            // A day both names have (attempts under the new name before the rename) is added together.
+            foreach (Db::select('SELECT day, down, up FROM usage_daily WHERE username=?', [$old]) as $day) {
+                Db::exec('INSERT INTO usage_daily (username, day, down, up) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE down=down+VALUES(down), up=up+VALUES(up)', [$new, $day['day'], $day['down'], $day['up']]);
+            }
+            Db::exec('DELETE FROM usage_daily WHERE username=?', [$old]);
+        }
     }
 
     private static function upsertProfile(array $input, ?string $oldUsername): void

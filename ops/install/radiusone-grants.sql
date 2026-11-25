@@ -8,6 +8,7 @@
 
 -- radiusone_portal
 -- DELETE on the client tables is for Delete permanently (an archived client, by a superadmin); nothing else deletes there.
+-- UPDATE on radacct, radpostauth and access_auth_events moves a renamed client's history to its new username.
 GRANT SELECT, INSERT ON `radius`.`audit_logs` TO `radiusone_portal`@`localhost`;
 GRANT SELECT, INSERT, UPDATE, DELETE ON `radius`.`customer_profiles` TO `radiusone_portal`@`localhost`;
 GRANT SELECT, INSERT, UPDATE, DELETE ON `radius`.`service_metadata` TO `radiusone_portal`@`localhost`;
@@ -46,7 +47,7 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON `radius`.`notification_deliveries` TO `r
 GRANT SELECT, INSERT, UPDATE, DELETE ON `radius`.`network_operations` TO `radiusone_portal`@`localhost`;
 GRANT SELECT, INSERT, UPDATE, DELETE ON `radius`.`notification_onboarding` TO `radiusone_portal`@`localhost`;
 GRANT SELECT, INSERT, DELETE ON `radius`.`billing_payments` TO `radiusone_portal`@`localhost`;
-GRANT SELECT, DELETE ON `radius`.`radacct` TO `radiusone_portal`@`localhost`;
+GRANT SELECT, UPDATE, DELETE ON `radius`.`radacct` TO `radiusone_portal`@`localhost`;
 GRANT SELECT, INSERT, DELETE ON `radius`.`notification_logs` TO `radiusone_portal`@`localhost`;
 GRANT SELECT, INSERT, UPDATE, DELETE ON `radius`.`radcheck` TO `radiusone_portal`@`localhost`;
 GRANT SELECT, INSERT, UPDATE, DELETE ON `radius`.`subscriptions` TO `radiusone_portal`@`localhost`;
@@ -56,9 +57,9 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON `radius`.`usage_cycles` TO `radiusone_po
 -- Contracts and the pay page (035): deleted only with their client (Delete permanently, an archived client).
 GRANT SELECT, INSERT, UPDATE, DELETE ON `radius`.`customer_contracts` TO `radiusone_portal`@`localhost`;
 GRANT SELECT, INSERT, UPDATE, DELETE ON `radius`.`pay_payments` TO `radiusone_portal`@`localhost`;
-GRANT SELECT (`reply`, `authdate`, `username`), DELETE ON `radius`.`radpostauth` TO `radiusone_portal`@`localhost`;
+GRANT SELECT (`reply`, `authdate`, `username`), UPDATE (`username`), DELETE ON `radius`.`radpostauth` TO `radiusone_portal`@`localhost`;
 GRANT SELECT, INSERT, UPDATE, DELETE ON `radius`.`radgroupreply` TO `radiusone_portal`@`localhost`;
-GRANT SELECT, DELETE ON `radius`.`access_auth_events` TO `radiusone_portal`@`localhost`;
+GRANT SELECT, UPDATE, DELETE ON `radius`.`access_auth_events` TO `radiusone_portal`@`localhost`;
 GRANT SELECT, INSERT, UPDATE ON `radius`.`notification_events` TO `radiusone_portal`@`localhost`;
 GRANT SELECT, INSERT, UPDATE ON `radius`.`nas` TO `radiusone_portal`@`localhost`;
 GRANT SELECT, INSERT, UPDATE ON `radius`.`nas_metadata` TO `radiusone_portal`@`localhost`;
