@@ -4,6 +4,10 @@ RadiusOne follows [semantic versioning](https://semver.org): **major** for chang
 upgrading, **minor** for new features, **patch** for fixes. The version is in the `VERSION` file and shows in
 the portal's sidebar and under Settings → System information.
 
+## 3.1.4 (2026-11-25)
+
+- Clients: a renamed client can be renamed back to its former username. It keeps its PPPoE password and connects as before; the name it leaves is reserved instead. Other clients still cannot take a former username.
+
 ## 3.1.3 (2026-11-25)
 
 - ONU → Configure opens at once: it shows the last VLANs, profiles and ONU settings the portal read, and when they are more than an hour old it checks the OLT in the background and updates the page by itself ("Checking the OLT for changes"). Before, it waited for the OLT every hour.
