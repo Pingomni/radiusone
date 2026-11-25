@@ -4,6 +4,11 @@ RadiusOne follows [semantic versioning](https://semver.org): **major** for chang
 upgrading, **minor** for new features, **patch** for fixes. The version is in the `VERSION` file and shows in
 the portal's sidebar and under Settings → System information.
 
+## 3.1.3 (2026-11-25)
+
+- ONU → Configure opens at once: it shows the last VLANs, profiles and ONU settings the portal read, and when they are more than an hour old it checks the OLT in the background and updates the page by itself ("Checking the OLT for changes"). Before, it waited for the OLT every hour.
+- After a change to an ONU, another page opened on it still shows the last read at once and asks the OLT straight away.
+
 ## 3.1.2 (2026-11-25)
 
 - Delete permanently now works on an installed server. In 3.1.0 and 3.1.1 it stopped with "DELETE command denied" (and removed nothing): the portal's database user had no permission to delete from the client tables. Updating applies the new permissions.
