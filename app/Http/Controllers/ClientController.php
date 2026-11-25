@@ -47,7 +47,7 @@ final class ClientController extends Controller
     /** Field-level placement of RadiusRepository's validation messages. */
     private const FIELD_ERRORS = [
         'mac_address' => '/^(MAC address is required|Enter a valid MAC address)/',
-        'username' => '/^(Username is required|Username already exists|Username is reserved|Identity reference migration)/',
+        'username' => '/^(Username is required|Username already exists|Username is reserved|Username cannot be changed|Identity reference migration)/',
         'password' => '/^PPPoE password is required/',
         'expiry_date' => '/^Invalid expiry date/',
         'service_group' => '/^Select an enabled service plan/',

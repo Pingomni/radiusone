@@ -70,10 +70,11 @@ final class RadiusRepository
                 License::assertRoomForClient();
             }
 
-            self::assertIdentityAvailable($username, $oldUsername);
+            // A username is given once, when the client is created, and never changes (for DHCP it is the MAC address).
             if ($oldUsername && $oldUsername !== $username) {
-                self::renameRadiusUser($oldUsername, $username);
+                throw new RuntimeException('Username cannot be changed once the client is created. To use another one, create a new client and archive this one.');
             }
+            self::assertIdentityAvailable($username, $oldUsername);
 
             $exists = Db::value(
                 'SELECT COUNT(*) FROM customer_profiles WHERE username = ? AND (? IS NULL OR username <> ?)',
@@ -490,75 +491,12 @@ final class RadiusRepository
                 ? 'Username already exists: an archived client has it. Restore that client, or delete it permanently, under Clients → Archived.'
                 : 'Username already exists: another client has it.');
         }
-        // A client may take back one of its own former usernames: the rename left only its reservation there.
-        if ($old && self::isOwnFormerName($username, $old)) {
-            return;
-        }
         // Only the RADIUS user list counts. Session history and login attempts never block a name: a router often tries
         // before its client is created.
         foreach (['radcheck', 'radreply', 'radusergroup'] as $table) {
             if (Db::row("SELECT username FROM $table WHERE username=? LIMIT 1 FOR UPDATE", [$username])) {
                 throw new RuntimeException('Username already exists in the RADIUS user list (' . $table . '). Remove it there or choose another username.');
             }
-        }
-        if ($old) {
-            $profile = Db::row('SELECT id FROM customer_profiles WHERE username=? FOR UPDATE', [$old]);
-            if (!$profile) {
-                throw new RuntimeException('Client not found.');
-            }
-            foreach (['billing_invoices', 'billing_payments', 'uploaded_documents', 'notification_logs'] as $table) {
-                if (Db::value("SELECT COUNT(*) FROM $table WHERE username=?", [$old]) && !Db::value('SELECT COUNT(*) FROM information_schema.REFERENTIAL_CONSTRAINTS WHERE CONSTRAINT_SCHEMA=DATABASE() AND TABLE_NAME=? AND REFERENCED_TABLE_NAME="customer_profiles" AND UPDATE_RULE="CASCADE"', [$table])) {
-                    throw new RuntimeException('Identity reference migration is required before renaming this customer.');
-                }
-            }
-        }
-    }
-
-    /**
-     * $name was a former username of the client now called $current, and nothing but the reservation the rename left
-     * (Auth-Type := Reject) is in the RADIUS user list under it.
-     */
-    private static function isOwnFormerName(string $name, string $current): bool
-    {
-        $id = Db::value('SELECT id FROM customer_profiles WHERE username=?', [$current]);
-        if (!$id || !Db::row('SELECT username FROM customer_identity_history WHERE username=? AND customer_id=? FOR UPDATE', [$name, $id])) {
-            return false;
-        }
-        foreach (['radreply', 'radusergroup'] as $table) {
-            if (Db::row("SELECT username FROM $table WHERE username=? LIMIT 1 FOR UPDATE", [$name])) {
-                return false;
-            }
-        }
-
-        return !Db::row('SELECT id FROM radcheck WHERE username=? AND NOT (attribute="Auth-Type" AND value="Reject") LIMIT 1 FOR UPDATE', [$name]);
-    }
-
-    /**
-     * The same client under a new username: its RADIUS login and settings, and its history (sessions, login attempts,
-     * daily usage), move to the new name. Nothing is left under the old one, so it is free again. Billing, documents,
-     * contracts and notices follow through their foreign keys (ON UPDATE CASCADE).
-     */
-    private static function renameRadiusUser(string $old, string $new): void
-    {
-        $id = Db::value('SELECT id FROM customer_profiles WHERE username=?', [$old]);
-        // A name an earlier version reserved for this client (Auth-Type Reject) is cleared before it is used again.
-        if (self::isOwnFormerName($new, $old)) {
-            Db::exec('DELETE FROM radcheck WHERE username=? AND attribute="Auth-Type" AND value="Reject"', [$new]);
-            Db::exec('DELETE FROM customer_identity_history WHERE username=? AND customer_id=?', [$new, $id]);
-        }
-        foreach (['radcheck', 'radreply', 'radusergroup', 'radacct', 'radpostauth'] as $table) {
-            Db::exec("UPDATE $table SET username=? WHERE username=?", [$new, $old]);
-        }
-        $has = static fn (string $table): bool => (bool) Db::value('SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=?', [$table]);
-        if ($has('access_auth_events')) {
-            Db::exec('UPDATE access_auth_events SET username=? WHERE username=?', [$new, $old]);
-        }
-        if ($has('usage_daily')) {
-            // A day both names have (attempts under the new name before the rename) is added together.
-            foreach (Db::select('SELECT day, down, up FROM usage_daily WHERE username=?', [$old]) as $day) {
-                Db::exec('INSERT INTO usage_daily (username, day, down, up) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE down=down+VALUES(down), up=up+VALUES(up)', [$new, $day['day'], $day['down'], $day['up']]);
-            }
-            Db::exec('DELETE FROM usage_daily WHERE username=?', [$old]);
         }
     }
 

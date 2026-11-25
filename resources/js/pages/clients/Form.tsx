@@ -1,7 +1,7 @@
 import { Link, useForm } from '@inertiajs/react';
 import { useState, type ReactNode } from 'react';
 import { InvoiceTable, ReceiptActions, StatCards, type InvoiceRow, type Stat } from '@/components/billing';
-import { PostButton, useConfirm } from '@/components/confirm';
+import { PostButton } from '@/components/confirm';
 import Icon from '@/components/Icon';
 import { LivePanel } from '@/components/LivePanel';
 import { DataTable } from '@/components/table';
@@ -202,7 +202,6 @@ export default function ClientForm({ values, draftRestored, draftTab, canEdit, c
     client: Client | null;
 }) {
     const can = useCan();
-    const ask = useConfirm();
     const form = useForm<Values>({ ...values, id_front: null, id_back: null });
     const [tab, setTab] = useState(draftTab ?? (typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('tab') : null) ?? (client ? 'overview' : 'account'));
     // Overview, Accounting, Billing and Logs are read-only views: the form's Save bar does not apply there.
@@ -213,10 +212,6 @@ export default function ClientForm({ values, draftRestored, draftTab, canEdit, c
     const field = (label: string, key: string, props: Record<string, unknown> = {}) => <Field label={label} disabled={disabled} {...bind(form, key)} {...props} />;
 
     const submit = async () => {
-        if (client && form.data.username !== values.username) {
-            const ok = await ask({ title: 'Rename this client?', message: 'Renaming changes the RADIUS identity. Accounting history moves to the new name, but a live session keeps the old name until it reconnects.', confirmLabel: 'Rename and save' });
-            if (!ok) return;
-        }
         // Unchecked boxes and empty file inputs are left out, as a browser form post would.
         form.transform((data) => Object.fromEntries(Object.entries({ ...data, _active_tab: tab }).filter(([, v]) => v !== false && v !== null)));
         form.post('/clients/save', { forceFormData: true, preserveScroll: true, onSuccess: () => setGenerated(false), onFinish: () => form.setData('password', '') });
@@ -225,8 +220,8 @@ export default function ClientForm({ values, draftRestored, draftTab, canEdit, c
     const accountTab = (
         <>
             <Section title="Credentials" description="How the customer authenticates against RADIUS." icon="lock">
-                <Select label="Authentication" disabled={disabled} options={{ pppoe: 'PPPoE username/password', dhcp: 'DHCP MAC address' }} {...bind(form, 'auth_method')} />
-                {field('Username', 'username', { hint: 'For DHCP this is saved as the MAC address.', readOnly: dhcp, value: dhcp ? String(form.data.mac_address ?? '') : form.data.username })}
+                <Select label="Authentication" disabled={disabled || Boolean(client)} options={{ pppoe: 'PPPoE username/password', dhcp: 'DHCP MAC address' }} {...bind(form, 'auth_method')} />
+                {field('Username', 'username', { hint: client ? 'Set when the client was created; it cannot be changed.' : 'Set once: it cannot be changed later. For DHCP this is saved as the MAC address.', readOnly: dhcp || Boolean(client), value: dhcp ? String(form.data.mac_address ?? '') : form.data.username })}
                 {!dhcp && (
                     <Field
                         label="PPPoE password"
@@ -270,7 +265,7 @@ export default function ClientForm({ values, draftRestored, draftTab, canEdit, c
                         {field('Trusted NAS access circuit', 'circuit_id', { hint: 'Only on an isolated access port or VLAN.' })}
                     </>
                 ) : <p className="span2">Access profiles require migration 018 before provisioning.</p>}
-                {field('CPE MAC address', 'mac_address', { required: dhcp })}
+                {field('CPE MAC address', 'mac_address', { required: dhcp, readOnly: dhcp && Boolean(client), hint: dhcp && client ? 'For a DHCP client the MAC address is its username: it cannot be changed.' : undefined })}
                 {!dhcp && <Check label="Allow this MAC only" disabled={disabled} {...bindCheck(form, 'mac_lock')} />}
                 <Select label="NAS restriction" disabled={disabled} options={{ all: 'All NAS', nas_ip: 'NAS-IP-Address', nas_identifier: 'NAS-Identifier' }} {...bind(form, 'nas_restriction_type')} />
                 {field('NAS restriction value', 'nas_restriction_value')}
