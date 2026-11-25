@@ -215,8 +215,33 @@ final class OnuController extends Controller
 
     /** How long one read of an ONU serves its page, its tabs and a reload: each read is a telnet login on the OLT. */
     private const LIVE_SECONDS = 30;
-    /** The OLT's VLANs, profiles and traffic tables change rarely, and the portal forgets them when it changes them. */
+    /**
+     * The OLT's VLANs, profiles and traffic tables change rarely. The page shows the last copy at once and has the OLT
+     * read again in the background when the copy is older than this; the portal forgets it when it changes them.
+     */
     private const CHOICES_SECONDS = 3600;
+    /** How long a copy of the choices is kept to show at once. */
+    private const CHOICES_KEPT = 2592000;
+
+    /** @param  array<string, mixed>  $olt */
+    public static function choicesKey(array $olt): string
+    {
+        return 'olt-omci-choices-v2:' . (int) $olt['id'];
+    }
+
+    /**
+     * After a change the last read stays, marked old: a page opened now shows it at once and asks the OLT again
+     * straight away (the page that made the change asks at once anyway).
+     *
+     * @param  array<string, mixed>  $row
+     */
+    private static function staleLive(array $row): void
+    {
+        $cached = Cache::get(self::liveKey($row));
+        if (is_array($cached) && is_array($cached['data'] ?? null)) {
+            Cache::put(self::liveKey($row), ['stale' => true] + $cached, 604800);
+        }
+    }
 
     /** @param  array<string, mixed>  $row */
     private static function liveKey(array $row): string
@@ -234,10 +259,14 @@ final class OnuController extends Controller
     private static function liveRead(array $olt, array $row, bool $fresh, int $within = self::LIVE_SECONDS): array
     {
         $cached = $fresh ? null : Cache::get(self::liveKey($row));
-        if (is_array($cached) && is_int($cached['at'] ?? null) && is_array($cached['data'] ?? null) && time() - $cached['at'] <= $within) {
-            return ['at' => $cached['at'], 'data' => $cached['data']];
+        // A read marked old by a change is good only for showing at once (the page opening asks again straight after).
+        if (is_array($cached) && is_int($cached['at'] ?? null) && is_array($cached['data'] ?? null) && time() - $cached['at'] <= $within
+            && (empty($cached['stale']) || $within > self::LIVE_SECONDS)) {
+            return ['at' => empty($cached['stale']) ? $cached['at'] : min($cached['at'], time() - self::LIVE_SECONDS - 1), 'data' => $cached['data']];
         }
-        $read = ['at' => time(), 'data' => OltManager::live($olt, $row)];
+        $data = OltManager::live($olt, $row);
+        // Stamped when the OLT has answered: the age is that of what it said.
+        $read = ['at' => time(), 'data' => $data];
         // Kept for a week: a page opened later shows this at once, says how old it is, and asks the OLT again.
         Cache::put(self::liveKey($row), $read, 604800);
         return $read;
@@ -271,7 +300,7 @@ final class OnuController extends Controller
         try {
             // The page's own read has it, unless Read again asked for a new one.
             $cached = $request->boolean('fresh') ? null : Cache::get(self::liveKey($row));
-            $text = is_array($cached) && time() - (int) $cached['at'] <= 60 && ($cached['data']['config'] ?? '') !== '' ? (string) $cached['data']['config'] : null;
+            $text = is_array($cached) && empty($cached['stale']) && time() - (int) $cached['at'] <= 60 && ($cached['data']['config'] ?? '') !== '' ? (string) $cached['data']['config'] : null;
             $payload = ['ok' => true, 'output' => $text ?? OltManager::runningConfig($olt, $row)];
         } catch (RuntimeException $e) {
             $payload = ['ok' => false, 'error' => $e->getMessage()];
@@ -292,17 +321,31 @@ final class OnuController extends Controller
         return response()->json($payload)->header('Cache-Control', 'no-store');
     }
 
-    /** What the OMCI settings can be chosen from, read from the OLT. Only reads. */
-    public function omciOptions(string $id, string $onu): JsonResponse
+    /**
+     * What the OMCI settings can be chosen from, read from the OLT. Only reads. ?quick=1 (the page opening) answers only
+     * from what the portal kept, however old, with its age, and never logs in to the OLT: "missing" when nothing is
+     * kept. ?fresh=1 (the page checking a copy older than an hour) always reads the OLT.
+     */
+    public function omciOptions(Request $request, string $id, string $onu): JsonResponse
     {
         [$olt, $row] = self::find($id, $onu);
         set_time_limit(120);
         try {
-            $choices = Cache::remember('olt-omci-choices:' . (int) $olt['id'], self::CHOICES_SECONDS, static fn () => OltManager::omciChoices($olt));
+            $kept = Cache::get(self::choicesKey($olt));
+            $have = is_array($kept) && is_int($kept['at'] ?? null) && is_array($kept['data'] ?? null);
             // What the ONU has set comes with the page's own read, which the page also uses itself: no second login.
-            $cached = Cache::get(self::liveKey($row));
-            $state = is_array($cached) && is_array($cached['data']['omci'] ?? null) ? $cached['data']['omci'] : OltManager::onuState($olt, $row);
-            $payload = ['ok' => true, 'data' => $choices + ['state' => $state]];
+            $live = Cache::get(self::liveKey($row));
+            // A read marked old by a change is only good for showing at once (quick), never as what is set now.
+            $usable = is_array($live) && is_array($live['data']['omci'] ?? null) && ($request->boolean('quick') || empty($live['stale']));
+            $state = $usable ? $live['data']['omci'] : null;
+            if ($request->boolean('quick') && (!$have || $state === null)) {
+                return response()->json(['ok' => false, 'missing' => true, 'error' => 'Nothing read yet.'])->header('Cache-Control', 'no-store');
+            }
+            if (!$have || $request->boolean('fresh')) {
+                $kept = ['at' => time(), 'data' => OltManager::omciChoices($olt)];
+                Cache::put(self::choicesKey($olt), $kept, self::CHOICES_KEPT);
+            }
+            $payload = ['ok' => true, 'data' => $kept['data'] + ['state' => $state ?? OltManager::onuState($olt, $row)], 'age' => time() - $kept['at'], 'checkAfter' => self::CHOICES_SECONDS];
         } catch (RuntimeException $e) {
             $payload = ['ok' => false, 'error' => $e->getMessage()];
         }
@@ -349,7 +392,7 @@ final class OnuController extends Controller
         } catch (RuntimeException $e) {
             return $this->fail($e->getMessage());
         }
-        Cache::forget(self::liveKey($row));
+        self::staleLive($row);
         return back()->with('flash', ['type' => 'success', 'message' => $message]);
     }
 
@@ -407,9 +450,9 @@ final class OnuController extends Controller
         } catch (RuntimeException $e) {
             return $this->fail($e->getMessage());
         }
-        Cache::forget(self::liveKey($row));
+        self::staleLive($row);
         if ($action === 'add-speed') {
-            Cache::forget('olt-omci-choices:' . (int) $olt['id']);
+            Cache::forget(self::choicesKey($olt));
         }
         return $action === 'delete' ? $this->ok('/olts/' . (int) $olt['id'], $message) : back()->with('flash', ['type' => 'success', 'message' => $message]);
     }

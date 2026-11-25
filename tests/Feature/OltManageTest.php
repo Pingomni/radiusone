@@ -1130,6 +1130,37 @@ final class OltManageTest extends TestCase
         $this->postJson("/olts/{$olt['id']}/terminal", ['command' => 'display board 0'])->assertJsonPath('ok', false)->assertJsonPath('error', fn (string $e) => str_contains($e, 'Allow changes'));
     }
 
+    public function test_the_configure_tab_shows_the_last_choices_at_once_and_checks_them_in_the_background(): void
+    {
+        $this->startAgent();
+        $olt = $this->olt();
+        $onu = $this->onu($olt);
+        $this->actingAsOperator();
+        $base = "/olts/{$olt['id']}/onus/$onu";
+        $logins = fn () => count(array_filter($this->commands(), static fn (string $c) => $c === 'scroll'));
+
+        // Nothing kept yet: the page is told so at once, without a login, and reads the OLT after its own read.
+        $this->getJson("$base/omci-options?quick=1")->assertJsonPath('ok', false)->assertJsonPath('missing', true);
+        $this->assertSame(0, $logins());
+        $this->getJson("$base/live")->assertJsonPath('ok', true);
+        $this->getJson("$base/omci-options")->assertJsonPath('ok', true)->assertJsonPath('age', fn (int $age) => $age <= 5);
+        $this->assertSame(2, $logins());
+
+        // Two hours later the copy is shown at once with its age; ?fresh=1 is the background check.
+        $key = \App\Http\Controllers\OnuController::choicesKey($olt);
+        \Illuminate\Support\Facades\Cache::put($key, ['at' => time() - 7200] + \Illuminate\Support\Facades\Cache::get($key), 3600);
+        $this->getJson("$base/omci-options?quick=1")->assertJsonPath('ok', true)->assertJsonPath('data.vlans', [1, 100])->assertJsonPath('age', fn (int $age) => $age >= 7200);
+        $this->assertSame(2, $logins());
+        $this->getJson("$base/omci-options?fresh=1")->assertJsonPath('ok', true)->assertJsonPath('age', fn (int $age) => $age <= 5);
+        $this->assertSame(3, $logins());
+
+        // After a change the last read of the ONU is still shown at once, marked old, so the page asks again.
+        $this->post("$base/eth/4", ['mode' => 'access', 'native' => '100'])->assertSessionHas('flash.type', 'success');
+        $before = $logins();
+        $this->getJson("$base/live?quick=1")->assertJsonPath('ok', true)->assertJsonPath('age', fn (int $age) => $age > 30);
+        $this->assertSame($before, $logins());
+    }
+
     public function test_one_read_of_the_olt_serves_the_onu_page_and_its_tabs(): void
     {
         $this->startAgent();

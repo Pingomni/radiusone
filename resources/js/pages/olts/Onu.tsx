@@ -38,7 +38,7 @@ type OmciOptions = { vlans: number[]; wanProfiles: Profile[]; routeProfiles: Pro
 type Segment = { from: number; to: number; state: 'online' | 'offline' | 'none' };
 type Timeline = { from: number; to: number; segments: Segment[] };
 type LiveState = { answer: Answer | null; busy: boolean; auto: boolean; setAuto: (on: boolean) => void; read: (fresh?: boolean) => Promise<void>; enabled: boolean };
-type Choices = { ok: true; data: OmciOptions } | { ok: false; error: string };
+type Choices = { ok: true; data: OmciOptions; age?: number; checkAfter?: number } | { ok: false; error: string; missing?: boolean };
 
 /**
  * What this browser tab has read, by ONU. A page opened again, or rebuilt after an action, starts from here at once and
@@ -660,23 +660,55 @@ function EthPorts({ base, live, options, onDone }: { base: string; live: Live | 
     );
 }
 
-/** The OLT's VLANs, profiles and speeds to choose from. Asked for once the page has its first read, before the tab is opened. */
-function useChoices(base: string, ready: boolean): [Choices | null, () => void] {
+/**
+ * The OLT's VLANs, profiles and speeds to choose from. The last copy the portal kept is shown at once, however old; one
+ * older than an hour is checked against the OLT in the background and replaced when the answer comes. Only when nothing
+ * is kept yet does the page read the OLT, after its own first read (one login at a time).
+ */
+function useChoices(base: string, allowed: boolean, ready: boolean): [Choices | null, () => void, boolean] {
     const [choices, setChoices] = useState<Choices | null>(() => kept.choices.get(base) ?? null);
     const [round, setRound] = useState(0);
+    const [missing, setMissing] = useState(false);
+    const [checking, setChecking] = useState(false);
+    const unreachable: Choices = { ok: false, error: 'The portal could not be reached. Reload the page and try again.' };
     useEffect(() => {
-        if (!ready || kept.choices.has(base)) return undefined;
+        if (!allowed || kept.choices.has(base)) return undefined;
+        let alive = true;
+        void (async () => {
+            try {
+                const first = await getJson<Choices>(`${base}/omci-options?quick=1`);
+                if (!alive) return;
+                if (!first.ok && first.missing) { setMissing(true); return; }
+                if (first.ok) kept.choices.set(base, first);
+                setChoices(first);
+                if (!first.ok || (first.age ?? 0) <= (first.checkAfter ?? 3600)) return;
+                setChecking(true);
+                const fresh = await getJson<Choices>(`${base}/omci-options?fresh=1`);
+                // A failed check keeps the copy on screen.
+                if (fresh.ok) { kept.choices.set(base, fresh); if (alive) setChoices(fresh); }
+            } catch {
+                if (alive && !kept.choices.has(base)) setChoices(unreachable);
+            } finally {
+                if (alive) setChecking(false);
+            }
+        })();
+        return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [base, allowed, round]);
+    useEffect(() => {
+        if (!missing || !ready) return undefined;
         let alive = true;
         getJson<Choices>(`${base}/omci-options`)
-            .then((answer) => { if (answer.ok) kept.choices.set(base, answer); if (alive) setChoices(answer); })
-            .catch(() => { if (alive) setChoices({ ok: false, error: 'The portal could not be reached. Reload the page and try again.' }); });
+            .then((answer) => { if (answer.ok) kept.choices.set(base, answer); if (alive) { setChoices(answer); setMissing(false); } })
+            .catch(() => { if (alive) setChoices(unreachable); });
         return () => { alive = false; };
-    }, [base, ready, round]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [base, missing, ready]);
     // Asked for again after something that changes the choices, such as a new speed: the old ones stay until then.
-    return [choices, () => { kept.choices.delete(base); setRound((r) => r + 1); }];
+    return [choices, () => { kept.choices.delete(base); setRound((r) => r + 1); }, checking];
 }
 
-function Configure({ base, live, choices, clients, onDone }: { base: string; live: LiveState; choices: Choices | null; clients: Client[]; onDone: () => void }) {
+function Configure({ base, live, choices, checking, clients, onDone }: { base: string; live: LiveState; choices: Choices | null; checking: boolean; clients: Client[]; onDone: () => void }) {
     const [mode, setMode] = useState<'routing' | 'bridging' | null>(null);
     if (live.enabled && !live.answer) return <Panel><p className="hint" role="status">Reading what the ONU has now.</p></Panel>;
     if (!choices) return <Panel><p className="hint" role="status">Reading the OLT&apos;s VLANs and profiles.</p></Panel>;
@@ -692,6 +724,7 @@ function Configure({ base, live, choices, clients, onDone }: { base: string; liv
     const lanCount = Math.max(data?.lan.length ?? 0, ...Object.keys(state.ports).map(Number), 1);
     return (
         <div className="onu-tab-body">
+            {checking && <p className="hint" role="status"><Icon name="refresh" /> Showing the last read. Checking the OLT for changes; the page updates by itself.</p>}
             <Panel title="ONU mode" actions={<State tone={state.mode === 'none' ? 'warning' : 'info'}>Now: {state.mode === 'routing' ? 'Routing' : state.mode === 'bridging' ? 'Bridging' : 'Not set'}</State>}>
                 <fieldset className="onu-choice onu-choice-2">
                     <legend>How the ONU works</legend>
@@ -732,7 +765,7 @@ export default function OnuPage({ olt, onu, neighbours, clients, disconnections,
     const sections = useRef<HTMLDivElement>(null);
     const live = useLive(base, olt.canRead);
     const data = live.answer?.ok ? live.answer.data : null;
-    const [choices, rereadChoices] = useChoices(base, mayChange && data !== null);
+    const [choices, rereadChoices, checkingChoices] = useChoices(base, mayChange, data !== null);
     // After a change: the OLT is asked again, while the page keeps showing what it has.
     const reread = () => { void live.read(); };
     const [frame, slot, port] = onu.position.split(':')[0].split('/');
@@ -751,7 +784,7 @@ export default function OnuPage({ olt, onu, neighbours, clients, disconnections,
         { key: 'graphs', title: 'Graphs', icon: 'reports', content: <Graphs base={base} ranges={ranges} /> },
         { key: 'ports', title: 'Ports', icon: 'fiber', count: data ? data.lan.length : undefined, content: data ? <Ports live={data} base={base} mayChange={mayChange} onDone={reread} /> : <Waiting live={live} /> },
         { key: 'speed', title: 'Speed profiles', icon: 'activity', count: data ? data.servicePorts.length : undefined, content: data ? <ServicePorts ports={data.servicePorts} tables={choices?.ok ? choices.data.trafficTables : trafficTables} base={base} mayChange={mayChange} onDone={() => { rereadChoices(); reread(); }} /> : <Waiting live={live} /> },
-        ...(mayChange ? [{ key: 'omci', title: 'Configure', icon: 'settings', hint: 'Push settings to the ONU over OMCI', content: <Configure base={base} live={live} choices={choices} clients={clients} onDone={reread} /> }] : []),
+        ...(mayChange ? [{ key: 'omci', title: 'Configure', icon: 'settings', hint: 'Push settings to the ONU over OMCI', content: <Configure base={base} live={live} choices={choices} checking={checkingChoices || (live.busy && live.answer?.ok === true && (live.answer.age ?? 0) > 30)} clients={clients} onDone={reread} /> }] : []),
         ...(olt.canRead ? [{ key: 'status', title: 'Status', icon: 'logs', content: <FullStatus base={base} /> }] : []),
         ...(olt.canRead ? [{ key: 'config', title: 'Running config', icon: 'logs', content: <RunningConfig live={live} /> }] : []),
         { key: 'history', title: 'History', icon: 'activity', count: history.length, content: <Changelog rows={history} oltId={olt.id} forOnu title={`History of ${onu.sn}`} /> },

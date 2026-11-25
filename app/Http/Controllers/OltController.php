@@ -392,7 +392,7 @@ final class OltController extends Controller
             return $this->fail($e->getMessage());
         }
         // The ONU pages offer the OLT's VLANs to choose from.
-        Cache::forget('olt-omci-choices:' . (int) $olt['id']);
+        Cache::forget(OnuController::choicesKey($olt));
         return back()->with('flash', ['type' => 'success', 'message' => $message]);
     }
 
