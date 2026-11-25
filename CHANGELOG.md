@@ -4,6 +4,10 @@ RadiusOne follows [semantic versioning](https://semver.org): **major** for chang
 upgrading, **minor** for new features, **patch** for fixes. The version is in the `VERSION` file and shows in
 the portal's sidebar and under Settings → System information.
 
+## 3.1.6 (2026-11-25)
+
+- Clients: a username is given once, when the client is created, and can never be changed. On an existing client the username, the authentication method and (for DHCP) the MAC address are read-only. To use another username, create a new client and archive the old one.
+
 ## 3.1.5 (2026-11-25)
 
 - Clients: renaming a client moves it, with its history, to the new username: its RADIUS login and settings, sessions, login attempts and daily usage, as well as billing, documents and contracts. Nothing is left under the old username, which is free again. The customer's router must log in with the new username.
