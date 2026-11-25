@@ -36,7 +36,7 @@ final class GrantsTest extends TestCase
         preg_match_all("/\\\$delete\\('(\\w+)'|DELETE (?:\\w+ )?FROM (\\w+)/", $body, $m);
         $tables = array_values(array_unique(array_filter(array_merge($m[1], $m[2]))));
         // The table lists in loops: foreach ([...] as $table) { $delete($table, ...) }.
-        preg_match_all("/foreach \\(\\[([^\\]]+)\\] as \\\$table\\)/", $body, $loops);
+        preg_match_all('/foreach \\(\\[([^\\]]+)\\] as \\$table\\)/', $body, $loops);
         foreach ($loops[1] as $list) {
             preg_match_all("/'(\\w+)'/", $list, $names);
             $tables = array_merge($tables, $names[1]);

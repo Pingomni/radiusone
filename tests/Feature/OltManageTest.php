@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Http\Controllers\OnuController;
 use App\Support\AdminAlerts;
 use App\Support\Db;
 use App\Support\Olt\HuaweiCli;
@@ -15,6 +16,7 @@ use App\Support\Olt\OltMonitor;
 use App\Support\Olt\Olts;
 use App\Support\Olt\OltSync;
 use App\Support\Olt\OltTelnet;
+use Illuminate\Support\Facades\Cache;
 use RuntimeException;
 use Tests\TestCase;
 
@@ -1147,8 +1149,8 @@ final class OltManageTest extends TestCase
         $this->assertSame(2, $logins());
 
         // Two hours later the copy is shown at once with its age; ?fresh=1 is the background check.
-        $key = \App\Http\Controllers\OnuController::choicesKey($olt);
-        \Illuminate\Support\Facades\Cache::put($key, ['at' => time() - 7200] + \Illuminate\Support\Facades\Cache::get($key), 3600);
+        $key = OnuController::choicesKey($olt);
+        Cache::put($key, ['at' => time() - 7200] + Cache::get($key), 3600);
         $this->getJson("$base/omci-options?quick=1")->assertJsonPath('ok', true)->assertJsonPath('data.vlans', [1, 100])->assertJsonPath('age', fn (int $age) => $age >= 7200);
         $this->assertSame(2, $logins());
         $this->getJson("$base/omci-options?fresh=1")->assertJsonPath('ok', true)->assertJsonPath('age', fn (int $age) => $age <= 5);

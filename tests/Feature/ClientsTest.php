@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Support\Currency;
 use App\Support\Db;
 use App\Support\UsageCaps;
 use Illuminate\Http\UploadedFile;
@@ -243,7 +244,7 @@ final class ClientsTest extends TestCase
     public function test_delete_an_archived_client_permanently(): void
     {
         $this->actingAsOperator();
-        \App\Support\Currency::change('EUR');
+        Currency::change('EUR');
         $this->plan();
         $this->post('/clients/save', $this->client());
         $this->post('/clients/save', $this->client(['username' => 'bob', 'email' => 'bob@example.test']));
